@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file>widget-toolbar.svg</file>
+    </qresource>
+</RCC>

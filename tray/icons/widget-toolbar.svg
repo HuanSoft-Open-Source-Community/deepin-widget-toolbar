@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 小组件工具栏入口图标：2x2 小方块网格（象征侧栏中的小组件），黑色填充供主题着色 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <g fill="#000000">
+    <rect x="3" y="3" width="8" height="8" rx="2"/>
+    <rect x="13" y="3" width="8" height="8" rx="2"/>
+    <rect x="3" y="13" width="8" height="8" rx="2"/>
+    <rect x="13" y="13" width="8" height="8" rx="2"/>
+  </g>
+</svg>
