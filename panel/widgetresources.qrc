@@ -1,0 +1,15 @@
+<RCC>
+    <qresource prefix="/widgets">
+        <!-- 内置示例小组件（源文件在 package/widgets/ 下，随插件一并安装） -->
+        <file alias="clock/main.qml">package/widgets/clock/main.qml</file>
+        <file alias="clock/manifest.json">package/widgets/clock/manifest.json</file>
+        <file alias="calendar/main.qml">package/widgets/calendar/main.qml</file>
+        <file alias="calendar/manifest.json">package/widgets/calendar/manifest.json</file>
+        <file alias="systemmonitor/main.qml">package/widgets/systemmonitor/main.qml</file>
+        <file alias="systemmonitor/manifest.json">package/widgets/systemmonitor/manifest.json</file>
+        <file alias="todo/main.qml">package/widgets/todo/main.qml</file>
+        <file alias="todo/manifest.json">package/widgets/todo/manifest.json</file>
+        <file alias="worldtime/main.qml">package/widgets/worldtime/main.qml</file>
+        <file alias="worldtime/manifest.json">package/widgets/worldtime/manifest.json</file>
+    </qresource>
+</RCC>

@@ -40,5 +40,5 @@ qt_add_translations(${PLUGIN_NAME}
     QM_FILES_OUTPUT_VARIABLE widget_toolbar_qm_files
 )
 
-install(TARGETS ${PLUGIN_NAME} LIBRARY DESTINATION lib/dde-dock/plugins)
-install(FILES ${widget_toolbar_qm_files} DESTINATION share/widget-toolbar/translations)
+install(TARGETS ${PLUGIN_NAME} LIBRARY DESTINATION /usr/lib/dde-dock/plugins)
+install(FILES ${widget_toolbar_qm_files} DESTINATION /usr/share/widget-toolbar/translations)

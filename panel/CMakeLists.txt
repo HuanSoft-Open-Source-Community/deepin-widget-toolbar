@@ -2,15 +2,28 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+# DSG 元数据固定安装到系统标准位置（/usr/share/dsg/configs），
+# 与 dde-shell 运行时 DConfig 搜索路径一致；不随 CMAKE_INSTALL_PREFIX 漂移
+set(DSG_DATA_DIR "/usr/share/dsg")
+
 find_package(Dtk6DConfig REQUIRED)
-find_package(Qt6 COMPONENTS LinguistTools REQUIRED)
+find_package(Qt6 COMPONENTS LinguistTools Qml REQUIRED)
 
 add_library(ds-widget-toolbar SHARED
     widgettoolbarpanel.cpp
     widgettoolbarpanel.h
+    widgetmanager.cpp
+    widgetmanager.h
+    widgetmodel.cpp
+    widgetmodel.h
+    fileio.cpp
+    fileio.h
+    systeminfo.cpp
+    systeminfo.h
+    widgetresources.qrc
 )
 
-target_link_libraries(ds-widget-toolbar PRIVATE Dde::Shell)
+target_link_libraries(ds-widget-toolbar PRIVATE Dde::Shell Qt6::Qml)
 
 dtk_add_config_meta_files(APPID "org.deepin.dde.shell" FILES configs/org.deepin.ds.widgettoolbar.json)
 

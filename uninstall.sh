@@ -24,5 +24,6 @@ echo
 echo "==> Done. Restart dde-shell to apply:"
 echo "    systemctl --user restart dde-shell@DDE"
 echo
-echo "Optional: remove user-level DConfig state (visible/pinned):"
-echo "    rm -f ~/.config/deepin/org.deepin.dde.shell/*widgettoolbar*"
+echo "Optional: remove user-level state:"
+echo "    rm -f ~/.config/deepin/org.deepin.dde.shell/*widgettoolbar*   # DConfig (visible/pinned)"
+echo "    rm -rf ~/.local/share/org.deepin.ds.widgettoolbar             # 第三方小组件 + installed.json + 实例数据"
