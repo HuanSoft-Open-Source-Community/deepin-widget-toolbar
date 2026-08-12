@@ -15,6 +15,8 @@ DS_USE_NAMESPACE
 using Dtk::Core::DConfig;
 
 class QQuickWindow;
+class WidgetManager;
+class WidgetListModel;
 
 class WidgetToolbarPanel : public DPanel
 {
@@ -22,6 +24,9 @@ class WidgetToolbarPanel : public DPanel
     Q_CLASSINFO("D-Bus Interface", "org.deepin.dde.widgettoolbar")
     Q_PROPERTY(bool visible READ visible WRITE setVisible NOTIFY visibleChanged FINAL)
     Q_PROPERTY(bool pinned READ pinned WRITE setPinned NOTIFY pinnedChanged FINAL)
+    // 小组件宿主接口：QML 通过 Panel.widgetManager / Panel.widgetListModel 访问
+    Q_PROPERTY(WidgetManager *widgetManager READ widgetManager CONSTANT)
+    Q_PROPERTY(WidgetListModel *widgetListModel READ widgetListModel CONSTANT)
 public:
     explicit WidgetToolbarPanel(QObject *parent = nullptr);
     ~WidgetToolbarPanel() override;
@@ -33,6 +38,9 @@ public:
     void setVisible(bool visible);
     bool pinned() const;
     void setPinned(bool pinned);
+
+    WidgetManager *widgetManager() const;
+    WidgetListModel *widgetListModel() const;
 
 public Q_SLOTS:
     // 供 D-Bus（org.deepin.dde.widgettoolbar）与 QML 调用的显隐控制
@@ -59,4 +67,7 @@ private:
     DConfig *m_config = nullptr;
     bool m_visible = true;
     bool m_pinned = true;
+
+    WidgetManager *m_widgetManager = nullptr;
+    WidgetListModel *m_widgetListModel = nullptr;
 };
