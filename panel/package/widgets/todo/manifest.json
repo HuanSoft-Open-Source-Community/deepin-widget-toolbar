@@ -1,0 +1,15 @@
+{
+    "id": "todo",
+    "name": "Sticky Note",
+    "name[zh_CN]": "便签",
+    "description": "A sticky note widget with per-instance data",
+    "description[zh_CN]": "便签小组件，数据按实例隔离持久化",
+    "version": "1.0.0",
+    "apiVersion": "1.0",
+    "author": "deepin-widget-toolbar",
+    "icon": "edit-paste",
+    "runtime": "qml",
+    "entry": "main.qml",
+    "defaultSize": { "cols": 2, "rows": 2 },
+    "builtin": true
+}

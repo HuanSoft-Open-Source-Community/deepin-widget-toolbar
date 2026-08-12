@@ -40,6 +40,11 @@ Window {
         }
 
         let dockScreen = dockApplet.screenName
+        // root.screen 在窗口创建早期可能为 null：直接判空返回，避免属性访问
+        // 抛 TypeError 导致整个绑定被 QML 禁用（绑定禁用后 margin 永不更新）
+        if (!root.screen) {
+            return 0
+        }
         let screen = root.screen.name
         if (dockScreen !== screen) {
             return 0
@@ -96,26 +101,53 @@ Window {
         return windowMargin(position)
     }
 
-    // 与任务栏之间的额外间距：仅当 dock 与面板同屏且位于该边时生效（X11/Wayland 通用）
-    function dockSpacingFor(position) {
-        let dockApplet = DS.applet("org.deepin.ds.dock")
-        if (!dockApplet) {
-            return 0
-        }
-        if (dockApplet.screenName !== root.screen.name) {
-            return 0
-        }
-        if (dockApplet.position !== position) {
-            return 0
-        }
-        return dockSpacing
+    // 与任务栏之间的间距与其他边缘一致（contentPadding），不再额外追加：
+    // 面板距 dock 的空隙 = 距屏幕其他边缘的空隙，视觉对称。
+    function blendColorAlpha(fallback) {
+        var appearance = DS.applet("org.deepin.ds.dde-appearance")
+        if (!appearance || appearance.opacity < 0)
+            return fallback
+        // 与任务栏（dock）一致：直接使用 dde-appearance 的透明度，不做下限钳制，
+        // 保证面板透明度随任务栏透明度同步变化
+        return appearance.opacity
     }
+
+    // ===== 小组件网格 =====
+
+    // 实例 ID 列表（由 C++ WidgetManager 维护，变化时刷新）
+    property var instanceIds: Panel.widgetManager ? Panel.widgetManager.instanceIds() : []
+    property bool widgetsLoaded: false
+    Connections {
+        target: Panel.widgetManager
+        function onInstancesChanged() {
+            instanceIds = Panel.widgetManager.instanceIds()
+            gridFlickable.contentY = 0
+        }
+    }
+
+    // 网格参数：横向固定 4 列，纵向无限行（滚动）
+    property int gridColumns: 4
+    property int cellSpacing: 8
+    property int cellWidth: Math.floor((gridArea.width - (gridColumns - 1) * cellSpacing) / gridColumns)
+    // 格子为正方形；2×2 小组件占 (2*cellWidth + spacing) 见方
+    property int cellHeight: cellWidth
+
+    // 网格内容总高度（由实例的最大 gridY+rows 决定）
+    function gridContentHeight() {
+        let maxY = 0
+        for (let i = 0; i < instanceIds.length; i++) {
+            let y = Panel.widgetManager.instanceGridY(instanceIds[i])
+            let rows = Panel.widgetManager.instanceRows(instanceIds[i])
+            maxY = Math.max(maxY, y + rows)
+        }
+        return maxY * (cellHeight + cellSpacing) - cellSpacing
+    }
+
+    // ===== 窗口基础配置（与通知中心一致的尺寸与样式） =====
 
     // 与通知中心一致的尺寸：内容宽 360 + 左右各 10 padding
     property int contentPadding: 10
     property int contentWidth: 360
-    // 侧栏与任务栏之间的间距（在 contentPadding 之外额外追加）
-    property int dockSpacing: 20
 
     visible: Panel.visible
     flags: Qt.Tool | Qt.FramelessWindowHint
@@ -133,19 +165,55 @@ Window {
         }
     }
     onVisibleChanged: {
-        if (visible && Qt.platform.pluginName === "xcb") {
+        if (visible) {
             applyLayerFlags()
+            // 每次显示都重建 margin 绑定：dock 数据（DS.applet 返回值）不是
+            // QML 可跟踪依赖，窗口重建后必须重新求值，否则边距保持旧值/0。
+            // 另外延时再刷一次，兜底 dock 代理异步就绪晚于窗口创建的场景。
+            refreshMargins()
+            marginRefreshTimer.restart()
         }
     }
     Component.onCompleted: {
         if (Qt.platform.pluginName === "xcb") {
             applyLayerFlags()
         }
+        refreshMargins()
+        marginRefreshTimer.restart()
     }
     function applyLayerFlags() {
+        // X11 下用 flags 直接表达层级：置顶 = WindowStaysOnTopHint（_NET_WM_STATE_ABOVE，
+        // kwin 置顶），置底 = WindowStaysOnBottomHint（可被普通窗口覆盖）。
+        // 不依赖 X11 LayerShellEmulation 的 layer→窗口类型映射：该映射只在 layerChanged
+        // 信号时应用，窗口 hide/show 重建原生窗口后不会重新执行（QWindow 对象不变时
+        // DLayerShellWindow 与模拟器都不会重建），导致窗口类型/层级丢失。
+        // Wayland 下本函数不调用（合成器按 layer 管理），flags 无副作用。
         root.flags = layerIsBottom
             ? Qt.WindowStaysOnBottomHint | Qt.Tool | Qt.FramelessWindowHint
-            : Qt.Tool | Qt.FramelessWindowHint
+            : Qt.WindowStaysOnTopHint | Qt.Tool | Qt.FramelessWindowHint
+    }
+
+    // 四周统一边距：contentPadding + dock 边补偿（windowMargin）。
+    // dock 边的补偿只覆盖 dock 自身高度，面板距 dock 的空隙 = contentPadding =
+    // 距屏幕其他边缘的空隙，视觉对称。
+    function desiredMargin(position) {
+        return layerShellMargin(position) + contentPadding
+    }
+
+    // 强制重建三条 margin 绑定：DS.applet() 的返回值不是 QML 可跟踪依赖，
+    // 绑定只在创建/重绑时求值一次——若 dock 代理或 frontendWindowRect 晚于
+    // 窗口创建就绪，首次求值得 0 且之后永不更新（边距消失、面板被拉满全高）。
+    // 因此在每次显示与延时兜底时重绑，Qt.binding() 保持绑定语义不破坏。
+    function refreshMargins() {
+        DLayerShellWindow.topMargin = Qt.binding(function() { return desiredMargin(0) })
+        DLayerShellWindow.rightMargin = Qt.binding(function() { return desiredMargin(1) })
+        DLayerShellWindow.bottomMargin = Qt.binding(function() { return desiredMargin(2) })
+    }
+    Timer {
+        id: marginRefreshTimer
+        interval: 800
+        repeat: false
+        onTriggered: refreshMargins()
     }
     width: contentWidth + contentPadding * 2
 
@@ -159,9 +227,9 @@ Window {
     // 图标避让无效。置底时仅保留 LayerButtom 层语义，不再向合成器声明排除区域。
     DLayerShellWindow.anchors: DLayerShellWindow.AnchorRight
         | DLayerShellWindow.AnchorTop | DLayerShellWindow.AnchorBottom
-    DLayerShellWindow.topMargin: layerShellMargin(0) + contentPadding + dockSpacingFor(0)
-    DLayerShellWindow.rightMargin: layerShellMargin(1) + contentPadding + dockSpacingFor(1)
-    DLayerShellWindow.bottomMargin: layerShellMargin(2) + contentPadding + dockSpacingFor(2)
+    DLayerShellWindow.topMargin: desiredMargin(0)
+    DLayerShellWindow.rightMargin: desiredMargin(1)
+    DLayerShellWindow.bottomMargin: desiredMargin(2)
     DLayerShellWindow.keyboardInteractivity: DLayerShellWindow.KeyboardInteractivityOnDemand
 
     palette: DTK.palette
@@ -179,15 +247,6 @@ Window {
     screen: getDockScreen()
     onScreenChanged: {
         root.screen = Qt.binding(function () { return getDockScreen() })
-    }
-
-    function blendColorAlpha(fallback) {
-        var appearance = DS.applet("org.deepin.ds.dde-appearance")
-        if (!appearance || appearance.opacity < 0)
-            return fallback
-        // 与任务栏（dock）一致：直接使用 dde-appearance 的透明度，不做下限钳制，
-        // 保证面板透明度随任务栏透明度同步变化
-        return appearance.opacity
     }
 
     StyledBehindWindowBlur {
@@ -259,13 +318,107 @@ Window {
             }
         }
 
-        // 内容区占位（后续阶段放置小组件）
-        Text {
-            anchors.centerIn: parent
-            text: qsTr("No widgets yet")
-            font: DTK.fontManager.t5
-            color: palette.windowText
-            opacity: 0.6
+        // ===== 内容区：4 列网格 + 纵向滚动 =====
+        Item {
+            id: gridArea
+            anchors {
+                top: header.bottom
+                topMargin: 8
+                left: parent.left
+                right: parent.right
+                bottom: addButton.top
+                bottomMargin: 8
+            }
+
+            Flickable {
+                id: gridFlickable
+                anchors.fill: parent
+                clip: true
+                contentWidth: width
+                contentHeight: Math.max(gridContentHeight(), height)
+
+                // DDE 样式滚动条：不活跃时自动隐藏（org.deepin.dtk ScrollBar）
+                ScrollBar.vertical: ScrollBar {
+                    anchors.right: parent.right
+                }
+
+                // 网格容器：按实例的 gridX/gridY/cols/rows 绝对定位
+                Item {
+                    id: gridCanvas
+                    width: gridFlickable.width
+                    height: gridFlickable.contentHeight
+
+                    Repeater {
+                        model: root.instanceIds
+                        delegate: Item {
+                            id: widgetHost
+                            required property string modelData
+
+                            x: Panel.widgetManager.instanceGridX(modelData) * (cellWidth + cellSpacing)
+                            y: Panel.widgetManager.instanceGridY(modelData) * (cellHeight + cellSpacing)
+                            width: Panel.widgetManager.instanceCols(modelData) * cellWidth
+                                + (Panel.widgetManager.instanceCols(modelData) - 1) * cellSpacing
+                            height: Panel.widgetManager.instanceRows(modelData) * cellHeight
+                                + (Panel.widgetManager.instanceRows(modelData) - 1) * cellSpacing
+
+                            // 小组件渲染入口（qrc 或本地文件），由宿主按 widgetId 解析
+                            Loader {
+                                id: widgetLoader
+                                anchors.fill: parent
+                                source: Panel.widgetManager.entryUrl(Panel.widgetManager.instanceWidgetId(modelData))
+                            }
+
+                            // 注入实例上下文（开放接口的一部分）：
+                            // dataDir 为宿主隔离的实例数据目录，instanceId 标识实例。
+                            // 用 Binding 注入：小组件根对象创建后即生效并持续同步
+                            //（onLoaded 注入晚于小组件 Component.onCompleted，会导致初始读取失效）。
+                            Binding {
+                                target: widgetLoader.item
+                                property: "dataDir"
+                                value: widgetHost.dataDir
+                            }
+                            Binding {
+                                target: widgetLoader.item
+                                property: "instanceId"
+                                value: widgetHost.modelData
+                            }
+
+                            // 小组件实例数据目录（示例：todo 便签持久化）
+                            property string dataDir: Panel.widgetManager.widgetDataDir(
+                                Panel.widgetManager.instanceWidgetId(modelData))
+                        }
+                    }
+
+                    // 空态占位
+                    Text {
+                        anchors.centerIn: parent
+                        visible: root.instanceIds.length === 0
+                        text: qsTr("No widgets yet")
+                        font: DTK.fontManager.t5
+                        color: palette.windowText
+                        opacity: 0.6
+                    }
+                }
+            }
         }
+
+        // ===== 底部右下角"添加"按钮 =====
+        Button {
+            id: addButton
+            anchors {
+                right: parent.right
+                bottom: parent.bottom
+            }
+            width: 88
+            height: 32
+            icon.name: "add"
+            text: qsTr("Add")
+            onClicked: addPopup.open()
+        }
+    }
+
+    // ===== 添加小组件弹出面板（阶段 3 实现） =====
+    AddWidgetPopup {
+        id: addPopup
     }
 }

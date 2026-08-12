@@ -1,0 +1,15 @@
+{
+    "id": "calendar",
+    "name": "Calendar",
+    "name[zh_CN]": "日历",
+    "description": "A monthly calendar widget",
+    "description[zh_CN]": "月历小组件",
+    "version": "1.0.0",
+    "apiVersion": "1.0",
+    "author": "deepin-widget-toolbar",
+    "icon": "x-office-calendar",
+    "runtime": "qml",
+    "entry": "main.qml",
+    "defaultSize": { "cols": 2, "rows": 2 },
+    "builtin": true
+}

@@ -1,0 +1,15 @@
+{
+    "id": "systemmonitor",
+    "name": "System Monitor",
+    "name[zh_CN]": "资源监视仪表",
+    "description": "CPU / memory / disk usage widget",
+    "description[zh_CN]": "CPU / 内存 / 磁盘占用小组件",
+    "version": "1.0.0",
+    "apiVersion": "1.0",
+    "author": "deepin-widget-toolbar",
+    "icon": "utilities-system-monitor",
+    "runtime": "qml",
+    "entry": "main.qml",
+    "defaultSize": { "cols": 2, "rows": 2 },
+    "builtin": true
+}

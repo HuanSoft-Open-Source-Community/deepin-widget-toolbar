@@ -1,0 +1,15 @@
+{
+    "id": "clock",
+    "name": "Clock",
+    "name[zh_CN]": "时钟",
+    "description": "A digital clock widget",
+    "description[zh_CN]": "数字时钟小组件",
+    "version": "1.0.0",
+    "apiVersion": "1.0",
+    "author": "deepin-widget-toolbar",
+    "icon": "appointment-new",
+    "runtime": "qml",
+    "entry": "main.qml",
+    "defaultSize": { "cols": 2, "rows": 2 },
+    "builtin": true
+}

@@ -1,0 +1,15 @@
+{
+    "id": "worldtime",
+    "name": "World Time",
+    "name[zh_CN]": "世界时间",
+    "description": "World clock for multiple cities",
+    "description[zh_CN]": "多城市世界时钟小组件",
+    "version": "1.0.0",
+    "apiVersion": "1.0",
+    "author": "deepin-widget-toolbar",
+    "icon": "preferences-system-time",
+    "runtime": "qml",
+    "entry": "main.qml",
+    "defaultSize": { "cols": 2, "rows": 2 },
+    "builtin": true
+}
