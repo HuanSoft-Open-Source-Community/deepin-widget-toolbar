@@ -1,0 +1,106 @@
+<div align="center">
+
+# 🧩 deepin-widget-toolbar
+
+![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)
+![Platform: Linux](https://img.shields.io/badge/Platform-Linux-green.svg)
+![Qt 6](https://img.shields.io/badge/Qt-6.8+-green.svg)
+![DTK 6](https://img.shields.io/badge/DTK-6.0+-orange.svg)
+![dde-shell](https://img.shields.io/badge/dde--shell-2.0+-blue.svg)
+
+A Vista-style widget toolbar for the deepin desktop, built on the dde-shell plugin system.
+
+</div>
+
+🌐 **Languages**: [English](README.md) | [简体中文](README.zh-Hans.md) | [文言文](README.zh-Pre-Qin.md)
+
+## ✨ Features
+
+- **📐 Side Panel**: A persistent sidebar anchored to the right edge of the screen, same width as the notification center (380 px)
+- **📌 Pin / Unpin**: A DTK pin button in the header toggles between *pinned* (always above other windows, `LayerOverlay`) and *unpinned* (covered by normal windows, `LayerButtom`)
+- **🔘 Dock Trigger Button**: A dde-dock tray plugin toggles the panel visibility — the only way to show or hide it, no auto-hide on focus loss
+- **💾 State Persistence**: `visible` and `pinned` states are persisted via DConfig and restored on restart
+- **🖥️ Multi-screen**: The panel follows the screen where the dock resides
+
+## 🏗️ Architecture
+
+Two plugins communicate over the session bus D-Bus:
+
+```
+dde-shell process                          trayplugin-loader process
+┌────────────────────────────────┐        ┌──────────────────────────────┐
+│ org.deepin.ds.widgettoolbar    │        │ libwidget-toolbar.so         │
+│  · DPanel side panel (380 px)  │◄──────►│  · dock tray trigger button  │
+│  · header + DTK pin button     │ D-Bus  │  · click → toggle visibility │
+│  · LayerOverlay / LayerButtom  │        │  · sync highlight state      │
+│  · DConfig persistence         │        └──────────────────────────────┘
+└────────────────────────────────┘
+```
+
+- **Panel** (`panel/`): a dde-shell `DPanel` plugin (`org.deepin.ds.widgettoolbar`) that registers the D-Bus service `org.deepin.dde.widgettoolbar` with `toggle()` / `show()` / `hide()` methods and `visible` / `pinned` properties.
+- **Tray button** (`tray/`): a dde-tray-loader plugin (`PluginsItemInterfaceV2`, `Type_Tray`) that acts as a D-Bus client, toggling the panel and reflecting its visibility state.
+
+## 📋 Requirements
+
+- deepin / UOS v25 with dde-shell 2.0.52+ (runtime)
+- Qt 6.8+ and DTK 6 development packages
+- `libdde-shell-dev` (2.0.52)
+- dde-tray-loader 2.0.38 (runtime, for the tray plugin)
+
+## 🚀 Building
+
+```bash
+cmake -S . -B build
+cmake --build build -j$(nproc)
+```
+
+## 📦 Installation
+
+```bash
+sudo ./install.sh          # cmake --install build
+systemctl --user restart dde-shell@DDE
+```
+
+## 🖱️ Usage
+
+1. Click the widget-toolbar button in the dock tray area to show or hide the panel.
+2. Click the pin button in the panel header to toggle pinned / unpinned:
+   - **Pinned**: the panel stays above all windows and is never hidden by clicking elsewhere.
+   - **Unpinned**: normal windows can cover the panel.
+3. The visibility and pin states survive a restart.
+
+## ✅ Verification
+
+- Panel appears on the right edge, 380 px wide, with a title and a pin button.
+- The dock tray button toggles the panel; its highlight follows the panel state.
+- Pinned panels are not covered by normal windows; unpinned panels can be.
+- Clicking outside the panel never closes it.
+- States persist across restarts.
+
+## 📁 Directory Layout
+
+```
+deepin-widget-toolbar/
+├── CMakeLists.txt          # top-level build (panel + tray)
+├── install.sh              # system install script
+├── docs/                   # documentation
+│   ├── README.md           # this file (English)
+│   ├── README.zh-Hans.md   # Simplified Chinese
+│   ├── README.zh-Pre-Qin.md# Classical Chinese (Pre-Qin style)
+│   └── LICENSE-GPL-3.0.txt # GNU GPL v3 full text
+├── panel/                  # dde-shell DPanel plugin
+│   ├── widgettoolbarpanel.*# DPanel + D-Bus service
+│   ├── configs/            # DConfig metadata
+│   └── package/            # QML UI (main.qml, PinButton.qml, icons)
+└── tray/                   # dde-tray-loader plugin
+    ├── widgettoolbartrayplugin.*  # PluginsItemInterfaceV2
+    ├── traybutton.*        # dock button + D-Bus client
+    ├── interfaces/         # vendored dde-tray-loader 2.0.38 headers
+    └── icons/              # button icon (QRC)
+```
+
+## 📜 License
+
+This project is licensed under the [GNU General Public License v3.0](LICENSE-GPL-3.0.txt) (or later).
+
+The interface headers under `tray/interfaces/` are from [dde-tray-loader](https://github.com/linuxdeepin/dde-tray-loader), licensed under LGPL-3.0-or-later (see the file headers).
