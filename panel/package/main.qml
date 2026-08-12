@@ -96,9 +96,26 @@ Window {
         return windowMargin(position)
     }
 
+    // 与任务栏之间的额外间距：仅当 dock 与面板同屏且位于该边时生效（X11/Wayland 通用）
+    function dockSpacingFor(position) {
+        let dockApplet = DS.applet("org.deepin.ds.dock")
+        if (!dockApplet) {
+            return 0
+        }
+        if (dockApplet.screenName !== root.screen.name) {
+            return 0
+        }
+        if (dockApplet.position !== position) {
+            return 0
+        }
+        return dockSpacing
+    }
+
     // 与通知中心一致的尺寸：内容宽 360 + 左右各 10 padding
     property int contentPadding: 10
     property int contentWidth: 360
+    // 侧栏与任务栏之间的间距（在 contentPadding 之外额外追加）
+    property int dockSpacing: 20
 
     visible: Panel.visible
     flags: Qt.Tool | Qt.FramelessWindowHint
@@ -139,9 +156,9 @@ Window {
     DLayerShellWindow.exclusionZone: Panel.pinned ? 0 : root.width
     DLayerShellWindow.anchors: DLayerShellWindow.AnchorRight
         | DLayerShellWindow.AnchorTop | DLayerShellWindow.AnchorBottom
-    DLayerShellWindow.topMargin: layerShellMargin(0) + contentPadding
-    DLayerShellWindow.rightMargin: layerShellMargin(1) + contentPadding
-    DLayerShellWindow.bottomMargin: layerShellMargin(2) + contentPadding
+    DLayerShellWindow.topMargin: layerShellMargin(0) + contentPadding + dockSpacingFor(0)
+    DLayerShellWindow.rightMargin: layerShellMargin(1) + contentPadding + dockSpacingFor(1)
+    DLayerShellWindow.bottomMargin: layerShellMargin(2) + contentPadding + dockSpacingFor(2)
     DLayerShellWindow.keyboardInteractivity: DLayerShellWindow.KeyboardInteractivityOnDemand
 
     palette: DTK.palette
