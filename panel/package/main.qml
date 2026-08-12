@@ -121,8 +121,9 @@ Window {
     flags: Qt.Tool | Qt.FramelessWindowHint
     // X11 下 dde-shell 的 LayerShellEmulation 在 LayerButtom 分支会用 setFlags() 整体替换窗口 flags
     // （清掉 Qt.Tool/Qt.FramelessWindowHint），且窗口重建后窗口类型属性丢失，都会让面板回落为
-    // 普通窗口被 kwin 装饰出标题栏与窗口按钮；在 C++ 处理之后按当前 layer 恢复 flags，
-    // 置底时保留 WindowStaysOnBottomHint，收起/展开后同样兜底。
+    // 普通窗口被 kwin 装饰出标题栏与窗口按钮。主兜底在 C++ 端（WidgetToolbarPanel 的事件过滤器
+    // 与 layerChanged 监听，覆盖窗口重建/显示/曝光时机），这里再按 layer/visible 变化与初始化
+    // 时恢复一次作为辅助，置底时保留 WindowStaysOnBottomHint，收起/展开后同样兜底。
     // 注：QWindow::flags 无 NOTIFY 信号，onFlagsChanged 不会被调用，
     // 因此用 layer 变化、visible 变化与 Component.onCompleted 三个触发点恢复 flags。
     property bool layerIsBottom: DLayerShellWindow.layer === DLayerShellWindow.LayerButtom
