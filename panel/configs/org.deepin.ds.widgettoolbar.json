@@ -1,0 +1,28 @@
+{
+    "magic": "dsg.config.meta",
+    "version": "1.0",
+    "contents": {
+        "visible": {
+            "value": true,
+            "serial": 0,
+            "flags": [],
+            "name": "Widget toolbar visible",
+            "name[zh_CN]": "小组件工具栏显示",
+            "description": "Whether the widget toolbar panel is shown",
+            "description[zh_CN]": "小组件工具栏面板是否显示",
+            "permissions": "readwrite",
+            "visibility": "private"
+        },
+        "pinned": {
+            "value": true,
+            "serial": 0,
+            "flags": [],
+            "name": "Widget toolbar pinned",
+            "name[zh_CN]": "小组件工具栏置顶",
+            "description": "Keep the widget toolbar above other windows",
+            "description[zh_CN]": "保持小组件工具栏在其他窗口之上",
+            "permissions": "readwrite",
+            "visibility": "private"
+        }
+    }
+}
