@@ -152,9 +152,11 @@ Window {
     // 置顶：Overlay 层（在所有窗口之上）；置底：Buttom 层（可被普通窗口覆盖）
     DLayerShellWindow.layer: Panel.pinned
         ? DLayerShellWindow.LayerOverlay : DLayerShellWindow.LayerButtom
-    // 置底时收缩桌面工作区一个面板宽度，桌面图标等自动避开面板区域；
-    // strut/exclusive zone 不影响背景层，桌面背景图保持全屏不变
-    DLayerShellWindow.exclusionZone: Panel.pinned ? 0 : root.width
+    // 注意：不再设置 exclusionZone。X11 下它会被 LayerShellEmulation 转成
+    // _NET_WM_STRUT_PARTIAL 压缩整个工作区（导致全屏/最大化窗口被挤出黑边），
+    // Wayland 下也会影响其他 layer-shell 窗口；而 dde-desktop 的桌面图标区域
+    // 只按 dock 的 frontendWindowRect 计算、不读工作区，故 exclusionZone 对
+    // 图标避让无效。置底时仅保留 LayerButtom 层语义，不再向合成器声明排除区域。
     DLayerShellWindow.anchors: DLayerShellWindow.AnchorRight
         | DLayerShellWindow.AnchorTop | DLayerShellWindow.AnchorBottom
     DLayerShellWindow.topMargin: layerShellMargin(0) + contentPadding + dockSpacingFor(0)

@@ -69,6 +69,11 @@ systemctl --user restart dde-shell@DDE
    - **Unpinned**: normal windows can cover the panel.
 3. The visibility and pin states survive a restart.
 
+## ⚠️ Known limitations
+
+- **Unpinned mode no longer reserves work area**: the panel no longer declares an `exclusionZone` when unpinned (which maps to `_NET_WM_STRUT_PARTIAL` on X11, and shrinks the usable area of other layer-shell windows on Wayland). That declaration used to shrink the work area, leaving black bars on the screen edges for fullscreen/maximized windows; with it removed, fullscreen and maximized windows behave normally again, and unpinned mode keeps only its `LayerButtom` "can be covered by normal windows" semantics.
+- **Desktop icons do not dodge the panel**: the deepin desktop icons (dde-desktop) compute their usable area solely as `screen geometry − dock's frontendWindowRect` and never read the work area / strut. So when unpinned, the panel covers the rightmost column of desktop icons, and no plugin-side mechanism can change that. Making the icons dodge the panel requires patching `ScreenQt::availableGeometry()` in dde-file-manager (explicitly out of scope for this plugin).
+
 ## ✅ Verification
 
 - Panel appears on the right edge, 380 px wide, with a title and a pin button.
