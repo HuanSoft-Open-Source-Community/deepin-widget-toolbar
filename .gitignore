@@ -1,0 +1,12 @@
+# Build directories
+/build/
+/CMakeFiles/
+
+# Reasonix tooling artifacts
+/.reasonix/
+
+# Compiled translation files
+*.qm
+
+# Editor / IDE
+*.user
