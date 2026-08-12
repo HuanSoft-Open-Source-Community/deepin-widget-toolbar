@@ -30,6 +30,72 @@ Window {
         return Qt.application.screens[0]
     }
 
+    // 动态跟随任务栏位置：面板与任务栏在 上/右/下 三边保持 contentPadding 间距
+    // （dock 在底部→面板在其上方、顶部→面板在其下方、右侧→面板整体左移；dock 在其它屏幕时不处理）
+    // dock 位置枚举与 dde-shell dock 一致：0=Top 1=Right 2=Bottom 3=Left
+    function windowMargin(position) {
+        let dockApplet = DS.applet("org.deepin.ds.dock")
+        if (!dockApplet) {
+            return 0
+        }
+
+        let dockScreen = dockApplet.screenName
+        let screen = root.screen.name
+        if (dockScreen !== screen) {
+            return 0
+        }
+
+        let dockPosition = dockApplet.position
+        if (dockPosition !== position) {
+            return 0
+        }
+
+        // frontendWindowRect 为物理像素，除以 dpr 得到逻辑尺寸
+        let frontendRect = dockApplet.frontendWindowRect
+        if (!frontendRect) {
+            return 0
+        }
+        let dpr = root.screen.devicePixelRatio
+        let dockGeometry = Qt.rect(
+            frontendRect.x / dpr,
+            frontendRect.y / dpr,
+            frontendRect.width / dpr,
+            frontendRect.height / dpr
+        )
+
+        let screenGeometry = Qt.rect(
+            root.screen.virtualX,
+            root.screen.virtualY,
+            root.screen.width,
+            root.screen.height
+        )
+
+        switch (position) {
+            case 0: { // DOCK_TOP：面板在任务栏下方留间距
+                let visibleHeight = Math.max(0, dockGeometry.y + dockGeometry.height - screenGeometry.y)
+                return Math.min(visibleHeight, dockGeometry.height)
+            }
+            case 1: { // DOCK_RIGHT：面板整体左移
+                let visibleWidth = Math.max(0, screenGeometry.x + screenGeometry.width - dockGeometry.x)
+                return Math.min(visibleWidth, dockGeometry.width)
+            }
+            case 2: { // DOCK_BOTTOM：面板在任务栏上方留间距
+                let visibleHeight = Math.max(0, screenGeometry.y + screenGeometry.height - dockGeometry.y)
+                return Math.min(visibleHeight, dockGeometry.height)
+            }
+        }
+        // dock 在左侧（position=3）或未知位置：面板在屏幕右侧不与任务栏重叠，无需处理
+        return 0
+    }
+
+    // Wayland 下任务栏自身通过 exclusionZone 排布可用区域，与通知中心一致不额外处理
+    function layerShellMargin(position) {
+        if (Qt.platform.pluginName === "wayland") {
+            return 0
+        }
+        return windowMargin(position)
+    }
+
     // 与通知中心一致的尺寸：内容宽 360 + 左右各 10 padding
     property int contentPadding: 10
     property int contentWidth: 360
@@ -68,11 +134,14 @@ Window {
     // 置顶：Overlay 层（在所有窗口之上）；置底：Buttom 层（可被普通窗口覆盖）
     DLayerShellWindow.layer: Panel.pinned
         ? DLayerShellWindow.LayerOverlay : DLayerShellWindow.LayerButtom
+    // 置底时收缩桌面工作区一个面板宽度，桌面图标等自动避开面板区域；
+    // strut/exclusive zone 不影响背景层，桌面背景图保持全屏不变
+    DLayerShellWindow.exclusionZone: Panel.pinned ? 0 : root.width
     DLayerShellWindow.anchors: DLayerShellWindow.AnchorRight
         | DLayerShellWindow.AnchorTop | DLayerShellWindow.AnchorBottom
-    DLayerShellWindow.topMargin: contentPadding
-    DLayerShellWindow.rightMargin: contentPadding
-    DLayerShellWindow.bottomMargin: contentPadding
+    DLayerShellWindow.topMargin: layerShellMargin(0) + contentPadding
+    DLayerShellWindow.rightMargin: layerShellMargin(1) + contentPadding
+    DLayerShellWindow.bottomMargin: layerShellMargin(2) + contentPadding
     DLayerShellWindow.keyboardInteractivity: DLayerShellWindow.KeyboardInteractivityOnDemand
 
     palette: DTK.palette
