@@ -165,7 +165,9 @@ Window {
         var appearance = DS.applet("org.deepin.ds.dde-appearance")
         if (!appearance || appearance.opacity < 0)
             return fallback
-        return Math.max(appearance.opacity, 0.4)
+        // 与任务栏（dock）一致：直接使用 dde-appearance 的透明度，不做下限钳制，
+        // 保证面板透明度随任务栏透明度同步变化
+        return appearance.opacity
     }
 
     StyledBehindWindowBlur {
