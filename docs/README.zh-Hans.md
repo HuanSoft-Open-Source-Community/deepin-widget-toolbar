@@ -26,15 +26,15 @@
 
 两个插件通过会话总线 D-Bus 通信：
 
-```
-dde-shell 进程                            trayplugin-loader 进程
-┌────────────────────────────────┐      ┌──────────────────────────────┐
-│ org.deepin.ds.widgettoolbar    │      │ libwidget-toolbar.so         │
-│  · DPanel 侧栏（380 px）        │◄────►│  · 任务栏托盘触发按钮          │
-│  · 标题栏 + DTK 置顶按钮        │ D-Bus │  · 点击切换面板显隐            │
-│  · LayerOverlay / LayerButtom  │      │  · 同步高亮状态               │
-│  · DConfig 持久化              │      └──────────────────────────────┘
-└────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph Shell["dde-shell 进程"]
+        Panel["org.deepin.ds.widgettoolbar<br/>DPanel 侧栏（380 px）<br/>标题栏 + DTK 置顶按钮<br/>LayerOverlay / LayerButtom<br/>DConfig 持久化"]
+    end
+    subgraph Tray["trayplugin-loader 进程"]
+        Button["libwidget-toolbar.so<br/>任务栏托盘触发按钮<br/>点击切换面板显隐<br/>同步高亮状态"]
+    end
+    Panel <-->|"D-Bus · org.deepin.dde.widgettoolbar"| Button
 ```
 
 - **面板**（`panel/`）：dde-shell `DPanel` 插件（`org.deepin.ds.widgettoolbar`），注册 D-Bus 服务 `org.deepin.dde.widgettoolbar`，提供 `toggle()` / `show()` / `hide()` 方法与 `visible` / `pinned` 属性。
@@ -83,11 +83,11 @@ systemctl --user restart dde-shell@DDE
 deepin-widget-toolbar/
 ├── CMakeLists.txt          # 顶层构建（panel + tray）
 ├── install.sh              # 系统安装脚本
+├── LICENSE                 # GNU GPL v3 全文
 ├── docs/                   # 文档
-│   ├── README.md           # 本文件（英文）
+│   ├── README.md           # 英文
 │   ├── README.zh-Hans.md   # 简体中文
-│   ├── README.zh-Pre-Qin.md# 文言文（先秦文风）
-│   └── LICENSE-GPL-3.0.txt # GNU GPL v3 全文
+│   └── README.zh-Pre-Qin.md# 文言文（先秦文风）
 ├── panel/                  # dde-shell DPanel 插件
 │   ├── widgettoolbarpanel.*# DPanel + D-Bus 服务
 │   ├── configs/            # DConfig 元数据
@@ -101,6 +101,6 @@ deepin-widget-toolbar/
 
 ## 📜 许可证
 
-本项目采用 [GNU 通用公共许可证 v3.0](LICENSE-GPL-3.0.txt)（或更高版本）。
+本项目采用 [GNU 通用公共许可证 v3.0](../LICENSE)（或更高版本）。
 
 `tray/interfaces/` 下的接口头文件来自 [dde-tray-loader](https://github.com/linuxdeepin/dde-tray-loader)，采用 LGPL-3.0-or-later 许可（见文件头）。

@@ -44,4 +44,4 @@ systemctl --user restart dde-shell@DDE
 
 ## 律
 
-此器行 GNU GPL v3.0 之律，全文見 [LICENSE-GPL-3.0.txt](LICENSE-GPL-3.0.txt)。`tray/interfaces/` 之頭文件出自 [dde-tray-loader](https://github.com/linuxdeepin/dde-tray-loader)，行 LGPL-3.0-or-later 之律，詳見文件之首。
+此器行 GNU GPL v3.0 之律，全文見 [LICENSE](../LICENSE)。`tray/interfaces/` 之頭文件出自 [dde-tray-loader](https://github.com/linuxdeepin/dde-tray-loader)，行 LGPL-3.0-or-later 之律，詳見文件之首。

@@ -26,15 +26,15 @@ A Vista-style widget toolbar for the deepin desktop, built on the dde-shell plug
 
 Two plugins communicate over the session bus D-Bus:
 
-```
-dde-shell process                          trayplugin-loader process
-┌────────────────────────────────┐        ┌──────────────────────────────┐
-│ org.deepin.ds.widgettoolbar    │        │ libwidget-toolbar.so         │
-│  · DPanel side panel (380 px)  │◄──────►│  · dock tray trigger button  │
-│  · header + DTK pin button     │ D-Bus  │  · click → toggle visibility │
-│  · LayerOverlay / LayerButtom  │        │  · sync highlight state      │
-│  · DConfig persistence         │        └──────────────────────────────┘
-└────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph Shell["dde-shell process"]
+        Panel["org.deepin.ds.widgettoolbar<br/>DPanel side panel (380 px)<br/>header + DTK pin button<br/>LayerOverlay / LayerButtom<br/>DConfig persistence"]
+    end
+    subgraph Tray["trayplugin-loader process"]
+        Button["libwidget-toolbar.so<br/>dock tray trigger button<br/>click → toggle visibility<br/>sync highlight state"]
+    end
+    Panel <-->|"D-Bus · org.deepin.dde.widgettoolbar"| Button
 ```
 
 - **Panel** (`panel/`): a dde-shell `DPanel` plugin (`org.deepin.ds.widgettoolbar`) that registers the D-Bus service `org.deepin.dde.widgettoolbar` with `toggle()` / `show()` / `hide()` methods and `visible` / `pinned` properties.
@@ -83,11 +83,11 @@ systemctl --user restart dde-shell@DDE
 deepin-widget-toolbar/
 ├── CMakeLists.txt          # top-level build (panel + tray)
 ├── install.sh              # system install script
+├── LICENSE                 # GNU GPL v3 full text
 ├── docs/                   # documentation
 │   ├── README.md           # this file (English)
 │   ├── README.zh-Hans.md   # Simplified Chinese
-│   ├── README.zh-Pre-Qin.md# Classical Chinese (Pre-Qin style)
-│   └── LICENSE-GPL-3.0.txt # GNU GPL v3 full text
+│   └── README.zh-Pre-Qin.md# Classical Chinese (Pre-Qin style)
 ├── panel/                  # dde-shell DPanel plugin
 │   ├── widgettoolbarpanel.*# DPanel + D-Bus service
 │   ├── configs/            # DConfig metadata
@@ -101,6 +101,6 @@ deepin-widget-toolbar/
 
 ## 📜 License
 
-This project is licensed under the [GNU General Public License v3.0](LICENSE-GPL-3.0.txt) (or later).
+This project is licensed under the [GNU General Public License v3.0](../LICENSE) (or later).
 
 The interface headers under `tray/interfaces/` are from [dde-tray-loader](https://github.com/linuxdeepin/dde-tray-loader), licensed under LGPL-3.0-or-later (see the file headers).
