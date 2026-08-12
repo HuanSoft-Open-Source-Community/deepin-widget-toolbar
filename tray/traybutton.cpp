@@ -4,11 +4,15 @@
 
 #include "traybutton.h"
 
+#include <DGuiApplicationHelper>
+
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusServiceWatcher>
 #include <QMouseEvent>
 #include <QPainter>
+
+DGUI_USE_NAMESPACE
 
 // 与面板（org.deepin.ds.widgettoolbar DPanel）对应的 D-Bus 服务
 static const QString kDBusService = QStringLiteral("org.deepin.dde.widgettoolbar");
@@ -17,10 +21,23 @@ static const QString kDBusInterface = QStringLiteral("org.deepin.dde.widgettoolb
 
 TrayButton::TrayButton(QWidget *parent)
     : QWidget(parent)
-    , m_icon(QIcon(QStringLiteral(":/icons/widget-toolbar.svg")))
 {
     setAccessibleName(QStringLiteral("WidgetToolbarButton"));
     setToolTip(tr("Widget Toolbar"));
+
+    // 按系统主题选择图标：亮主题用深色图标（-dark），暗主题用浅色图标
+    updateIcon();
+    connect(DGuiApplicationHelper::instance(), &DGuiApplicationHelper::themeTypeChanged,
+            this, [this]() { updateIcon(); });
+}
+
+void TrayButton::updateIcon()
+{
+    const bool darkTheme = DGuiApplicationHelper::instance()->themeType()
+        == DGuiApplicationHelper::DarkType;
+    m_icon = QIcon(darkTheme ? QStringLiteral(":/icons/widget-toolbar.svg")
+                             : QStringLiteral(":/icons/widget-toolbar-dark.svg"));
+    update();
 }
 
 void TrayButton::initDbus()
@@ -63,7 +80,7 @@ void TrayButton::paintEvent(QPaintEvent *event)
         p.drawRoundedRect(rect(), 6, 6);
     }
 
-    // 图标：SVG 黑色填充，经 CompositionMode_SourceIn 按主题前景色着色
+    // 图标：SVG 自带主题适配色（亮主题深色 / 暗主题浅色）
     const qreal dpr = devicePixelRatioF();
     const QSize pmSize = rect().size() * dpr;
     QPixmap pm(pmSize);
@@ -71,8 +88,6 @@ void TrayButton::paintEvent(QPaintEvent *event)
     pm.fill(Qt::transparent);
     QPainter pp(&pm);
     m_icon.paint(&pp, QRect(QPoint(0, 0), rect().size()));
-    pp.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    pp.fillRect(pm.rect(), palette().windowText());
     pp.end();
     p.drawPixmap(rect(), pm);
 }

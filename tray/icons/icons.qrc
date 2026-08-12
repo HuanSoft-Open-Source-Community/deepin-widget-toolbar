@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/icons">
         <file>widget-toolbar.svg</file>
+        <file>widget-toolbar-dark.svg</file>
     </qresource>
 </RCC>

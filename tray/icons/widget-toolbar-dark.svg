@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- 小组件工具栏入口图标（浅色版，用于暗色主题） -->
+<!-- 小组件工具栏入口图标（深色版，用于亮色主题；-dark 后缀遵循 dde-dock 图标约定） -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <g fill="#ffffff">
+  <g fill="#000000">
     <rect x="3" y="3" width="8" height="8" rx="2"/>
     <rect x="13" y="3" width="8" height="8" rx="2"/>
     <rect x="3" y="13" width="8" height="8" rx="2"/>

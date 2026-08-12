@@ -33,6 +33,7 @@ private Q_SLOTS:
 private:
     void togglePanel();
     void updateAvailability();
+    void updateIcon();
 
     QIcon m_icon;
     bool m_hover = false;
