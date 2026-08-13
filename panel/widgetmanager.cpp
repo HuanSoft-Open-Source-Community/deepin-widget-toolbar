@@ -20,6 +20,7 @@
 #include <QTemporaryDir>
 #include <QUuid>
 #include <QUrl>
+#include <QVariantMap>
 
 #include <algorithm>
 
@@ -54,6 +55,8 @@ void WidgetManager::init()
 
     scanWidgets();
     loadInstances();
+    // 一次性规范化旧数据：越界/重叠位置修复，不做持续补位
+    normalizeLayout();
 }
 
 QList<WidgetManager::WidgetInfo> WidgetManager::availableWidgets() const
@@ -162,6 +165,83 @@ int WidgetManager::instanceGridY(const QString &instanceId) const
     return inst ? inst->gridY : -1;
 }
 
+bool WidgetManager::canDrop(const QString &instanceId, int gridX, int gridY) const
+{
+    const Instance *inst = findInstance(instanceId);
+    if (!inst)
+        return false;
+
+    if (gridX < 0 || gridY < 0)
+        return false;
+
+    return gridX + qBound(1, inst->cols, kGridColumns) <= kGridColumns;
+}
+
+bool WidgetManager::moveInstance(const QString &instanceId, int gridX, int gridY)
+{
+    Instance *inst = findInstance(instanceId);
+    if (!inst || !canDrop(instanceId, gridX, gridY))
+        return false;
+
+    const QList<Instance> backup = m_instances;
+    // 双向联动避让：计算避让布局后把拖拽实例落位到目标格
+    QList<Instance> newLayout = computeAvoidance(m_instances, instanceId, gridX, gridY);
+    for (Instance &entry : newLayout) {
+        if (entry.instanceId == instanceId) {
+            entry.gridX = gridX;
+            entry.gridY = gridY;
+            break;
+        }
+    }
+    m_instances = newLayout;
+    if (!saveInstances()) {
+        m_instances = backup;
+        qWarning() << "moveInstance: failed to save, rolled back";
+        return false;
+    }
+
+    Q_EMIT layoutChanged();
+    return true;
+}
+
+QVariantList WidgetManager::previewMove(const QString &instanceId, int gridX, int gridY)
+{
+    if (!canDrop(instanceId, gridX, gridY))
+        return QVariantList();
+
+    // 纯计算：不改动 m_instances，返回避让后的完整布局供 QML 实时预览
+    const QList<Instance> layout = computeAvoidance(m_instances, instanceId, gridX, gridY);
+    QVariantList result;
+    result.reserve(layout.size());
+    for (const Instance &inst : layout) {
+        result.append(QVariantMap{
+            {"instanceId", inst.instanceId},
+            {"gridX", inst.gridX},
+            {"gridY", inst.gridY},
+        });
+    }
+    return result;
+}
+
+void WidgetManager::autoArrangeAll()
+{
+    const QList<Instance> backup = m_instances;
+    QList<Instance> packed;
+    for (const Instance &inst : m_instances) {
+        Instance copy = inst;
+        placeFirstFree(copy, packed);
+        packed.append(copy);
+    }
+    m_instances = packed;
+    if (!saveInstances()) {
+        m_instances = backup;
+        qWarning() << "autoArrangeAll: failed to save, rolled back";
+        return;
+    }
+
+    Q_EMIT layoutChanged();
+}
+
 bool WidgetManager::addWidget(const QString &widgetId)
 {
     if (findWidget(widgetId) == nullptr) {
@@ -180,11 +260,8 @@ bool WidgetManager::addWidget(const QString &widgetId)
     inst.cols = w->defaultSize.width();
     inst.rows = w->defaultSize.height();
 
-    if (!assignGridSlot(inst)) {
-        qWarning() << "addWidget: no free grid slot for" << widgetId;
-        return false;
-    }
-
+    // 放入首个空闲格，不移动现有实例
+    placeFirstFree(inst, m_instances);
     m_instances.append(inst);
     if (!saveInstances()) {
         m_instances.removeLast();
@@ -515,21 +592,44 @@ bool WidgetManager::saveInstances() const
     return QFile::rename(tmpFile, m_instancesFile);
 }
 
-bool WidgetManager::assignGridSlot(Instance &inst) const
+QRect WidgetManager::instanceRect(const Instance &inst)
 {
-    // 钳制尺寸边界：cols ∈ [1,4]，rows ≥ 1
+    return QRect(inst.gridX, inst.gridY,
+                 qBound(1, inst.cols, kGridColumns),
+                 qMax(1, inst.rows));
+}
+
+bool WidgetManager::layoutEquals(const QList<Instance> &a, const QList<Instance> &b)
+{
+    if (a.size() != b.size())
+        return false;
+    for (int i = 0; i < a.size(); ++i) {
+        const Instance &x = a.at(i);
+        const Instance &y = b.at(i);
+        if (x.instanceId != y.instanceId || x.gridX != y.gridX
+            || x.gridY != y.gridY || x.cols != y.cols || x.rows != y.rows)
+            return false;
+    }
+    return true;
+}
+
+void WidgetManager::placeFirstFree(Instance &inst, const QList<Instance> &others) const
+{
     inst.cols = qBound(1, inst.cols, kGridColumns);
     inst.rows = qMax(1, inst.rows);
 
-    // 逐行扫描 4 列网格，寻找能容纳 (cols, rows) 的空闲矩形
-    const int maxY = 256;
-    for (int y = 0; y < maxY; ++y) {
-        for (int x = 0; x <= kGridColumns - inst.cols; ++x) {
+    // 纵向不限行：扫描上界 = 现有内容最底行 + 待放置行数 + 1，保证一定能放下
+    int maxBottom = 0;
+    for (const Instance &other : others)
+        maxBottom = qMax(maxBottom, other.gridY + qMax(1, other.rows));
+    const int scanLimit = maxBottom + inst.rows + 1;
+
+    for (int y = 0; y <= scanLimit; ++y) {
+        for (int x = 0; x + inst.cols <= kGridColumns; ++x) {
+            const QRect candidate(x, y, inst.cols, inst.rows);
             bool free = true;
-            for (const Instance &other : m_instances) {
-                const QRect otherRect(other.gridX, other.gridY, other.cols, other.rows);
-                const QRect candidate(x, y, inst.cols, inst.rows);
-                if (otherRect.intersects(candidate)) {
+            for (const Instance &other : others) {
+                if (instanceRect(other).intersects(candidate)) {
                     free = false;
                     break;
                 }
@@ -537,11 +637,167 @@ bool WidgetManager::assignGridSlot(Instance &inst) const
             if (free) {
                 inst.gridX = x;
                 inst.gridY = y;
-                return true;
+                return;
             }
         }
     }
-    return false;
+
+    // 兜底：追加到现有内容最底行下方
+    inst.gridX = 0;
+    inst.gridY = maxBottom;
+}
+
+QList<WidgetManager::Instance> WidgetManager::computeAvoidance(
+    const QList<Instance> &instances, const QString &fixedId, int targetX, int targetY)
+{
+    QList<Instance> result = instances;
+    int fixedIndex = -1;
+    for (int i = 0; i < result.size(); ++i) {
+        if (result.at(i).instanceId == fixedId) {
+            fixedIndex = i;
+            break;
+        }
+    }
+    if (fixedIndex < 0)
+        return instances;
+
+    // 固定实例（拖拽源）在返回布局中保持原位置，落位前不移动自身；
+    // 避让冲突按目标矩形计算，其原占位视为可让出的空间（预览时表现为被让开的洞）。
+    const Instance &fixedInst = result.at(fixedIndex);
+    const QRect fixedRect(targetX, targetY,
+                          qBound(1, fixedInst.cols, kGridColumns),
+                          qMax(1, fixedInst.rows));
+
+    int maxBottom = 0;
+    for (const Instance &inst : result)
+        maxBottom = qMax(maxBottom, inst.gridY + qMax(1, inst.rows));
+    // 扫描上限覆盖现有内容与固定目标矩形：保证任何冲突实例都能在界内找到向下候选
+    const int scanLimit = qMax(maxBottom, fixedRect.y() + fixedRect.height())
+        + result.size() + 2;
+
+    // 是否与固定目标或其它实例（不含固定实例自身）冲突
+    auto hasConflict = [&](int index) {
+        const QRect cur = instanceRect(result.at(index));
+        if (cur.intersects(fixedRect))
+            return true;
+        for (int j = 0; j < result.size(); ++j) {
+            if (j == index || j == fixedIndex)
+                continue;
+            if (cur.intersects(instanceRect(result.at(j))))
+                return true;
+        }
+        return false;
+    };
+
+    // 最近空闲行：同距离优先偏好方向（中心在目标中心上方→上，否则→下）
+    auto findFreeY = [&](int selfIndex, bool preferredUp) {
+        const Instance &inst = result.at(selfIndex);
+        const int rows = qMax(1, inst.rows);
+        const int cols = qBound(1, inst.cols, kGridColumns);
+        for (int dy = 1; dy <= scanLimit; ++dy) {
+            for (int dir = 0; dir < 2; ++dir) {
+                const bool up = dir == 0 ? preferredUp : !preferredUp;
+                const int candidateY = up ? inst.gridY - dy : inst.gridY + dy;
+                if (candidateY < 0 || candidateY > scanLimit)
+                    continue;
+                const QRect candidate(inst.gridX, candidateY, cols, rows);
+                if (candidate.intersects(fixedRect))
+                    continue;
+                bool free = true;
+                for (int j = 0; j < result.size() && free; ++j) {
+                    if (j == selfIndex || j == fixedIndex)
+                        continue;
+                    free = !candidate.intersects(instanceRect(result.at(j)));
+                }
+                if (free)
+                    return candidateY;
+            }
+        }
+        return -1;
+    };
+
+    // 迭代松弛：所有冲突实例在同一轮同步找最近空闲行，直到无冲突
+    const int maxPasses = 2 * result.size() + 1;
+    for (int pass = 0; pass < maxPasses; ++pass) {
+        bool changed = false;
+        for (int i = 0; i < result.size(); ++i) {
+            if (i == fixedIndex || !hasConflict(i))
+                continue;
+            const bool preferredUp =
+                instanceRect(result.at(i)).center().y() < fixedRect.center().y();
+            const int newY = findFreeY(i, preferredUp);
+            if (newY >= 0 && newY != result.at(i).gridY) {
+                result[i].gridY = newY;
+                changed = true;
+            }
+        }
+        if (!changed)
+            return result;
+    }
+
+    // 兜底：仍冲突的实例依次堆到当前最底行下方（保证无冲突）
+    int bottom = 0;
+    for (const Instance &inst : result)
+        bottom = qMax(bottom, inst.gridY + qMax(1, inst.rows));
+    bottom = qMax(bottom, fixedRect.y() + fixedRect.height());
+    for (int pass = 0; pass < maxPasses; ++pass) {
+        bool changed = false;
+        for (int i = 0; i < result.size(); ++i) {
+            if (i == fixedIndex || !hasConflict(i))
+                continue;
+            result[i].gridY = bottom;
+            bottom += qMax(1, result.at(i).rows);
+            changed = true;
+        }
+        if (!changed)
+            return result;
+    }
+    return result;
+}
+
+void WidgetManager::normalizeLayout()
+{
+    const QList<Instance> before = m_instances;
+
+    // 一次性数据修复：越界/负坐标实例重新放入首个空闲格（不移动其它实例）
+    QList<Instance> fixed;
+    for (const Instance &inst : m_instances) {
+        Instance copy = inst;
+        const QRect rect = instanceRect(copy);
+        if (copy.gridX < 0 || copy.gridY < 0
+            || copy.gridX + rect.width() > kGridColumns) {
+            placeFirstFree(copy, fixed);
+        }
+        fixed.append(copy);
+    }
+    m_instances = fixed;
+
+    // 持久化数据中残留的重叠：按列表顺序固定靠前者，让其它实例双向避让
+    const int maxPasses = m_instances.size() + 1;
+    for (int pass = 0; pass < maxPasses; ++pass) {
+        bool overlap = false;
+        QString anchorId;
+        int anchorX = 0;
+        int anchorY = 0;
+        for (int i = 0; i < m_instances.size() && !overlap; ++i) {
+            const QRect a = instanceRect(m_instances.at(i));
+            for (int j = i + 1; j < m_instances.size(); ++j) {
+                if (a.intersects(instanceRect(m_instances.at(j)))) {
+                    anchorId = m_instances.at(i).instanceId;
+                    anchorX = m_instances.at(i).gridX;
+                    anchorY = m_instances.at(i).gridY;
+                    overlap = true;
+                    break;
+                }
+            }
+        }
+        if (!overlap)
+            break;
+        m_instances = computeAvoidance(m_instances, anchorId, anchorX, anchorY);
+    }
+
+    if (!layoutEquals(before, m_instances))
+        saveInstances();
 }
 
 WidgetManager::Instance WidgetManager::instanceFromJson(const QJsonObject &obj)

@@ -18,6 +18,7 @@ A Vista-style widget toolbar for the deepin desktop, built on the dde-shell plug
 
 - **📐 Side Panel**: A persistent sidebar anchored to the right edge of the screen, same width as the notification center (380 px)
 - **🧩 Widget Grid**: 4-column grid layout with unlimited vertical scrolling (DDE-styled scrollbar, auto-hidden when idle); widgets occupy `cols × rows` cells
+- **🖱️ Drag & Arrange**: long-press to drag a widget to any cell (including off the first column); positions persist with no forced reflow; while dragging, occupied widgets move aside live in both directions (multiple widgets coordinated, animated), snapping back on cancel; the bottom-left Arrange button packs widgets to the top-left
 - **➕ Add Panel**: The "Add" button at the bottom opens a popup (translucent blur, system corner radius, round close button, no title bar) listing built-in and added widgets, with `.dwpkg` (tar.xz) import and third-party uninstall
 - **🕐 Built-in Widgets**: Clock, Calendar, System Monitor, Sticky Note (per-instance persisted data), World Time, and a full-width Ter-Music Lyrics widget
 - **🔌 Open API**: manifest + instance context injection (`dataDir`/`instanceId`) + host capability proxies (`FileIO`/`SystemInfo`/`Lyrics`); spec in [widget-api.md](widget-api.md)

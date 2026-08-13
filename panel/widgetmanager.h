@@ -7,8 +7,10 @@
 #include <QJsonObject>
 #include <QList>
 #include <QObject>
+#include <QRect>
 #include <QSize>
 #include <QStringList>
+#include <QVariant>
 
 // 小组件宿主（Panel）侧的管理器：
 //  - 扫描内置（qrc:/widgets/）与第三方（~/.local/share/org.deepin.ds.widgettoolbar/widgets/）小组件
@@ -73,12 +75,20 @@ public:
     Q_INVOKABLE int instanceRows(const QString &instanceId) const;
     Q_INVOKABLE int instanceGridX(const QString &instanceId) const;
     Q_INVOKABLE int instanceGridY(const QString &instanceId) const;
+    // 拖放目标是否可用：仅校验网格边界（占用格允许落位，冲突由避让解决）
+    Q_INVOKABLE bool canDrop(const QString &instanceId, int gridX, int gridY) const;
+    // 拖拽中实时预览：计算并返回避让后的完整布局（不修改持久状态）；越界返回空列表
+    Q_INVOKABLE QVariantList previewMove(const QString &instanceId, int gridX, int gridY);
+    // 拖放落位：成功则触发沿列下推避让并持久化
+    Q_INVOKABLE bool moveInstance(const QString &instanceId, int gridX, int gridY);
+    // 一键自动排列：全部实例按列表顺序左上优先压实
+    Q_INVOKABLE void autoArrangeAll();
 
-    // 添加一个小组件实例（自动分配网格槽）
+    // 添加一个小组件实例（放入首个空闲格，不移动其它实例）
     Q_INVOKABLE bool addWidget(const QString &widgetId);
-    // 移除一个实例
+    // 移除一个实例（其余实例保持原位，留洞）
     Q_INVOKABLE bool removeInstance(const QString &instanceId);
-    // 卸载第三方小组件（删除其目录；内置拒绝）
+    // 卸载第三方小组件（删除其目录；内置拒绝），其余实例保持原位
     Q_INVOKABLE bool uninstallWidget(const QString &widgetId);
     // 从 .dwpkg（tar.xz）导入第三方小组件
     Q_INVOKABLE bool installFromFile(const QString &packagePath);
@@ -92,14 +102,27 @@ public:
 
 Q_SIGNALS:
     void widgetsChanged();
+    // 实例集合变化（添加/移除/卸载）：QML 需重建模型
     void instancesChanged();
+    // 仅位置变化（拖放落位/一键整理）：QML 只更新位置映射以保留动画
+    void layoutChanged();
 
 private:
     void scanWidgets();
     WidgetInfo readManifest(const QString &dir, bool builtin) const;
     bool loadInstances();
     bool saveInstances() const;
-    bool assignGridSlot(Instance &inst) const;
+    // 把 inst 放入首个空闲矩形（不移动其它实例），放不下时追加到最底行下方
+    void placeFirstFree(Instance &inst, const QList<Instance> &others) const;
+    // 双向联动避让：返回避让后的实例列表；fixedId 实例保持原位置（预览用），
+    // 其它实例保持 gridX，只调 gridY，向最近空闲行移动（中心在上→优先向上，否则向下）
+    static QList<Instance> computeAvoidance(const QList<Instance> &instances,
+                                            const QString &fixedId,
+                                            int targetX, int targetY);
+    // 加载后一次性规范化（越界/重叠修复），仅在布局变化时写回
+    void normalizeLayout();
+    static QRect instanceRect(const Instance &inst);
+    static bool layoutEquals(const QList<Instance> &a, const QList<Instance> &b);
     const WidgetInfo *findWidget(const QString &widgetId) const;
     WidgetInfo *findWidget(const QString &widgetId);
     const Instance *findInstance(const QString &instanceId) const;

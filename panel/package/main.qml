@@ -145,12 +145,44 @@ Window {
 
     // 实例 ID 列表（由 C++ WidgetManager 维护，变化时刷新）
     property var instanceIds: Panel.widgetManager ? Panel.widgetManager.instanceIds() : []
+    // 位置映射（instanceId → Qt.point）：仅位置变化时刷新，避免重建 Repeater 以保留动画
+    property var gridPositions: ({})
+    // 布局版本：位置变化时递增，驱动内容高度等绑定重新求值
+    property int layoutVersion: 0
     property bool widgetsLoaded: false
+
+    // 从 C++ 读取全部实例位置并刷新映射
+    function updateGridPositions() {
+        let positions = {}
+        for (let i = 0; i < root.instanceIds.length; i++) {
+            let id = root.instanceIds[i]
+            positions[id] = Qt.point(
+                Panel.widgetManager.instanceGridX(id),
+                Panel.widgetManager.instanceGridY(id))
+        }
+        root.gridPositions = positions
+        root.layoutVersion++
+    }
+
+    // 实例左上角像素坐标；位置映射未就绪时回退到 C++ 直接读取
+    function cellX(instanceId) {
+        let p = root.gridPositions[instanceId]
+        return (p ? p.x : Panel.widgetManager.instanceGridX(instanceId)) * (cellWidth + cellSpacing)
+    }
+    function cellY(instanceId) {
+        let p = root.gridPositions[instanceId]
+        return (p ? p.y : Panel.widgetManager.instanceGridY(instanceId)) * (cellHeight + cellSpacing)
+    }
+
     Connections {
         target: Panel.widgetManager
         function onInstancesChanged() {
             instanceIds = Panel.widgetManager.instanceIds()
+            updateGridPositions()
             gridFlickable.contentY = 0
+        }
+        function onLayoutChanged() {
+            updateGridPositions()
         }
     }
 
@@ -164,12 +196,111 @@ Window {
     // 网格内容总高度（由实例的最大 gridY+rows 决定）
     function gridContentHeight() {
         let maxY = 0
+        let version = root.layoutVersion
         for (let i = 0; i < instanceIds.length; i++) {
             let y = Panel.widgetManager.instanceGridY(instanceIds[i])
             let rows = Panel.widgetManager.instanceRows(instanceIds[i])
             maxY = Math.max(maxY, y + rows)
         }
         return maxY * (cellHeight + cellSpacing) - cellSpacing
+    }
+
+    // ===== 拖放状态 =====
+    property bool dragging: false
+    property string dragInstanceId: ""
+    property int dragCols: 1
+    property int dragRows: 1
+    property int dragTargetX: -1
+    property int dragTargetY: -1
+    property bool dragTargetValid: false
+    // 拖拽开始时的已提交布局快照：取消/失败时回弹用
+    property var committedPositions: ({})
+
+    // 把 C++ previewMove 返回的避让布局写入位置映射
+    function applyPreviewLayout(layout) {
+        if (!layout || layout.length === 0)
+            return
+        let positions = {}
+        for (let i = 0; i < layout.length; i++) {
+            let item = layout[i]
+            positions[item.instanceId] = Qt.point(item.gridX, item.gridY)
+        }
+        root.gridPositions = positions
+        root.layoutVersion++
+    }
+
+    // 长按组件开始拖拽：host 为网格实例容器，指针坐标已换算到 gridCanvas
+    function startDrag(host, pointerX, pointerY) {
+        if (root.dragging)
+            return
+        root.dragging = true
+        root.dragInstanceId = host.modelData
+        root.dragCols = Panel.widgetManager.instanceCols(host.modelData)
+        root.dragRows = Panel.widgetManager.instanceRows(host.modelData)
+        // 快照拖拽前的已提交布局，供取消/失败时动画回弹
+        root.committedPositions = {}
+        for (let key in root.gridPositions)
+            root.committedPositions[key] = root.gridPositions[key]
+        gridFlickable.interactive = false
+        dragPreviewImage.source = ""
+        dragPreview.visible = true
+        // 抓取组件快照作为拖放预览（失败则仅显示占位框）
+        host.grabToImage(function(result) {
+            if (result && result.url.toString().length > 0)
+                dragPreviewImage.source = result.url
+        }, Qt.size(host.width, host.height))
+        root.updateDrag(pointerX, pointerY)
+    }
+
+    // 按指针吸附到网格并更新预览
+    function updateDrag(pointerX, pointerY) {
+        if (!root.dragging)
+            return
+        let cellX = Math.floor(pointerX / (cellWidth + cellSpacing))
+        let cellY = Math.floor(pointerY / (cellHeight + cellSpacing))
+        root.dragTargetX = cellX
+        root.dragTargetY = cellY
+        root.dragTargetValid = Panel.widgetManager.canDrop(root.dragInstanceId, cellX, cellY)
+        // 预览显示位置：越界时吸附回网格内，边框仍按实际目标显示有效/无效
+        let previewX = Math.max(0, Math.min(cellX, gridColumns - root.dragCols))
+        let previewY = Math.max(0, cellY)
+        dragPreview.x = previewX * (cellWidth + cellSpacing)
+        dragPreview.y = previewY * (cellHeight + cellSpacing)
+        if (root.dragTargetValid) {
+            // 实时避让：目标格被占用时，被占组件立即动画让位（双向联动）
+            let layout = Panel.widgetManager.previewMove(
+                root.dragInstanceId, root.dragTargetX, root.dragTargetY)
+            if (layout && layout.length > 0) {
+                root.applyPreviewLayout(layout)
+            } else {
+                root.gridPositions = root.committedPositions
+                root.layoutVersion++
+            }
+        } else {
+            // 越界：回弹到拖拽前布局
+            root.gridPositions = root.committedPositions
+            root.layoutVersion++
+        }
+    }
+
+    // 结束拖拽：目标合法则提交 moveInstance；失败/取消则恢复拖拽前布局（动画回弹）
+    function endDrag() {
+        if (!root.dragging)
+            return
+        root.dragging = false
+        gridFlickable.interactive = true
+        dragPreview.visible = false
+        dragPreviewImage.source = ""
+        let committed = root.dragTargetValid
+            && Panel.widgetManager.moveInstance(root.dragInstanceId, root.dragTargetX, root.dragTargetY)
+        if (!committed) {
+            root.gridPositions = root.committedPositions
+            root.layoutVersion++
+        }
+        root.dragInstanceId = ""
+        root.dragTargetX = -1
+        root.dragTargetY = -1
+        root.dragTargetValid = false
     }
 
     // ===== 窗口基础配置（与通知中心一致的尺寸与样式） =====
@@ -207,8 +338,9 @@ Window {
         if (Qt.platform.pluginName === "xcb") {
             applyLayerFlags()
         }
+        updateGridPositions()
         refreshMargins()
-        marginRefreshTimer.restart()
+        restartMarginRefresh()
     }
     function applyLayerFlags() {
         // X11 下用 flags 直接表达层级：置顶 = WindowStaysOnTopHint（_NET_WM_STATE_ABOVE，
@@ -405,18 +537,50 @@ Window {
                             id: widgetHost
                             required property string modelData
 
-                            x: Panel.widgetManager.instanceGridX(modelData) * (cellWidth + cellSpacing)
-                            y: Panel.widgetManager.instanceGridY(modelData) * (cellHeight + cellSpacing)
+                            x: root.cellX(modelData)
+                            y: root.cellY(modelData)
                             width: Panel.widgetManager.instanceCols(modelData) * cellWidth
                                 + (Panel.widgetManager.instanceCols(modelData) - 1) * cellSpacing
                             height: Panel.widgetManager.instanceRows(modelData) * cellHeight
                                 + (Panel.widgetManager.instanceRows(modelData) - 1) * cellSpacing
+                            // 拖拽中淡化原实例，预览快照随指针移动
+                            opacity: root.dragging && modelData === root.dragInstanceId ? 0.35 : 1.0
+                            // 位置变化动画：拖拽中其它实例实时让位、松手落位、整理、回弹都走这里
+                            Behavior on x {
+                                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                            }
+                            Behavior on y {
+                                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                            }
 
                             // 小组件渲染入口（qrc 或本地文件），由宿主按 widgetId 解析
                             Loader {
                                 id: widgetLoader
                                 anchors.fill: parent
                                 source: Panel.widgetManager.entryUrl(Panel.widgetManager.instanceWidgetId(modelData))
+                            }
+
+                            // 拖放层：普通点击透传给组件内容，长按进入拖拽
+                            MouseArea {
+                                id: widgetDragArea
+                                anchors.fill: parent
+                                z: widgetLoader.z + 1
+                                hoverEnabled: true
+                                acceptedButtons: Qt.LeftButton
+                                propagateComposedEvents: true
+                                pressAndHoldInterval: 500
+                                onPressAndHold: function(mouse) {
+                                    var p = widgetDragArea.mapToItem(gridCanvas, mouse.x, mouse.y)
+                                    root.startDrag(widgetHost, p.x, p.y)
+                                }
+                                onPositionChanged: function(mouse) {
+                                    if (!root.dragging)
+                                        return
+                                    var p = widgetDragArea.mapToItem(gridCanvas, mouse.x, mouse.y)
+                                    root.updateDrag(p.x, p.y)
+                                }
+                                onReleased: if (root.dragging) root.endDrag()
+                                onCanceled: if (root.dragging) root.endDrag()
                             }
 
                             // 注入实例上下文（开放接口的一部分）：
@@ -440,6 +604,33 @@ Window {
                         }
                     }
 
+                    // 拖放预览：跟随指针的组件快照 + 有效/无效边框
+                    Item {
+                        id: dragPreview
+                        visible: false
+                        z: 10
+                        width: root.dragCols * cellWidth + (root.dragCols - 1) * cellSpacing
+                        height: root.dragRows * cellHeight + (root.dragRows - 1) * cellSpacing
+
+                        Image {
+                            id: dragPreviewImage
+                            anchors.fill: parent
+                            anchors.margins: 3
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: DTK.platformTheme.windowRadius
+                            color: Qt.rgba(0.35, 0.6, 1.0, 0.12)
+                            border.width: 2
+                            border.color: root.dragTargetValid
+                                ? Qt.rgba(0.35, 0.78, 0.42, 1)
+                                : Qt.rgba(0.95, 0.35, 0.35, 1)
+                        }
+                    }
+
                     // 空态占位
                     Text {
                         anchors.centerIn: parent
@@ -450,6 +641,22 @@ Window {
                         opacity: 0.6
                     }
                 }
+            }
+        }
+
+        // ===== 底部左下角"整理"按钮 =====
+        Button {
+            id: arrangeButton
+            anchors {
+                left: parent.left
+                bottom: parent.bottom
+            }
+            width: 88
+            height: 32
+            text: qsTr("Auto arrange")
+            onClicked: {
+                Panel.widgetManager.autoArrangeAll()
+                gridFlickable.contentY = 0
             }
         }
 

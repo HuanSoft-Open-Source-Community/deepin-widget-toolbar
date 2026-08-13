@@ -98,6 +98,11 @@
         <translation>添加</translation>
     </message>
     <message>
+        <location filename="../package/main.qml" line="620" />
+        <source>Auto arrange</source>
+        <translation>一键自动排列</translation>
+    </message>
+    <message>
         <location filename="../package/widgets/systemmonitor/main.qml" line="28" />
         <source>System Monitor</source>
         <translation>系统监视器</translation>
