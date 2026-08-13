@@ -19,8 +19,8 @@ A Vista-style widget toolbar for the deepin desktop, built on the dde-shell plug
 - **📐 Side Panel**: A persistent sidebar anchored to the right edge of the screen, same width as the notification center (380 px)
 - **🧩 Widget Grid**: 4-column grid layout with unlimited vertical scrolling (DDE-styled scrollbar, auto-hidden when idle); widgets occupy `cols × rows` cells
 - **➕ Add Panel**: The "Add" button at the bottom opens a popup (translucent blur, system corner radius, round close button, no title bar) listing built-in and added widgets, with `.dwpkg` (tar.xz) import and third-party uninstall
-- **🕐 Built-in Widgets**: Clock, Calendar, System Monitor, Sticky Note (per-instance persisted data), World Time — all 2×2 by default
-- **🔌 Open API**: manifest + instance context injection (`dataDir`/`instanceId`) + host capability proxies (`FileIO`/`SystemInfo`); spec in [widget-api.md](widget-api.md)
+- **🕐 Built-in Widgets**: Clock, Calendar, System Monitor, Sticky Note (per-instance persisted data), World Time, and a full-width Ter-Music Lyrics widget
+- **🔌 Open API**: manifest + instance context injection (`dataDir`/`instanceId`) + host capability proxies (`FileIO`/`SystemInfo`/`Lyrics`); spec in [widget-api.md](widget-api.md)
 - **📌 Pin / Unpin**: A DTK pin button in the header toggles between *pinned* (always above other windows, `LayerOverlay`) and *unpinned* (covered by normal windows, `LayerButtom`)
 - **🔘 Dock Trigger Button**: A dde-dock tray plugin toggles the panel visibility — the only way to show or hide it, no auto-hide on focus loss
 - **💾 State Persistence**: `visible` and `pinned` states are persisted via DConfig and restored on restart; widget instances are stored in `~/.local/share/org.deepin.ds.widgettoolbar/installed.json`
@@ -105,13 +105,14 @@ deepin-widget-toolbar/
 │   ├── widgetmodel.*       # widget list model (add panel)
 │   ├── fileio.*            # host capability proxy: file I/O (QML singleton)
 │   ├── systeminfo.*        # host capability proxy: CPU/mem/disk (QML singleton)
+│   ├── lyricssource.*      # host capability proxy: Ter-Music lyrics via D-Bus (QML singleton)
 │   ├── widgetresources.qrc # built-in widget resource registration
 │   ├── configs/            # DConfig metadata
 │   └── package/            # QML UI
 │       ├── main.qml        # sidebar: 4-column grid + scrollbar + add button
 │       ├── AddWidgetPopup.qml  # add-widget popup panel
 │       ├── PinButton.qml   # pin button
-│       └── widgets/        # built-in widgets (clock/calendar/systemmonitor/todo/worldtime)
+│       └── widgets/        # built-in widgets (clock/calendar/systemmonitor/todo/worldtime/lyrics)
 └── tray/                   # dde-tray-loader plugin
     ├── widgettoolbartrayplugin.*  # PluginsItemInterfaceV2
     ├── traybutton.*        # dock button + D-Bus client

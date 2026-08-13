@@ -34,7 +34,7 @@
 | `description` | string | 否 | 一句话描述 |
 | `icon` | string | 否 | 主题图标名（如 `appointment-new`），面板列表中显示 |
 | `version` | string | 是 | 语义化版本号，如 `1.0.0` |
-| `apiVersion` | string | 是 | 所需接口版本，当前为 `1.0`；不兼容则宿主拒绝加载 |
+| `apiVersion` | string | 是 | 所需接口版本，当前为 `1.1`；不兼容则宿主拒绝加载 |
 | `author` | string | 否 | 作者 |
 | `runtime` | string | 否 | 渲染运行时，当前仅支持 `qml`（默认值） |
 | `entry` | string | 是 | 入口文件（相对小组件目录），如 `main.qml` |
@@ -81,6 +81,27 @@
 
 信号：`refreshed()`（默认每秒刷新；可用 `setRefreshInterval(ms)` 调整，下限 200ms）。
 
+### Lyrics（端闱乐部歌词数据）
+
+> **系统 D-Bus 能力代理**：小组件不允许直接访问系统 D-Bus，歌词数据统一由宿主
+> 代理 `org.mpris.MediaPlayer2.ter_music` 会话总线名上的
+> `org.yxzl.ter_music.Lyrics` 接口（`GetLyrics` / `LyricsChanged`），
+> 解析 A/B 双缓冲歌词快照后暴露。播放器未运行时自动降级为未连接状态；
+> 接口契约详见 Ter-Music 的 `docs/API_LYRICS_en_US.md`。
+
+| 属性 | 类型 | 说明 |
+|---|---|---|
+| `connected` | bool | 端闱乐部是否持有 MPRIS 总线名（进程正在运行） |
+| `hasTrack` | bool | 是否有曲目在播放（`track_id` 非空） |
+| `hasLyrics` | bool | 当前曲目是否加载了歌词 |
+| `hasTimestamps` | bool | 歌词是否带 LRC 时间戳 |
+| `activeText` | string | 当前句文本（`active_line` 指向的槽位） |
+| `nextText` | string | 下一句文本（另一槽位） |
+| `trackId` | string | 当前曲目的 `mpris:trackid` |
+
+信号：`connectedChanged()`（总线上线/下线）、`lyricsChanged()`（快照内容变化，
+重复/过期快照已按 payload 去重）。方法：`refresh()` 主动拉取一次快照。
+
 ## 7. 面板 API（预留）
 
 以下接口为本规范预留，v0.1 尚未实现，未来版本按此契约提供：
@@ -105,8 +126,8 @@
 ## 9. 版本兼容策略
 
 - 小组件声明 `apiVersion`；宿主加载时校验，不兼容则拒绝加载并提示，不静默失败。
-- 宿主新增接口走次版本递增，不破坏既有小组件。
-- 当前宿主实现：`apiVersion = "1.0"`。
+- 宿主新增接口走次版本递增，不破坏既有小组件（1.0 小组件仍可加载）。
+- 当前宿主实现：`apiVersion = "1.1"`（v1.1 新增 `Lyrics` 歌词能力代理）。
 
 ## 10. 生命周期（v0.1 范围）
 
@@ -119,5 +140,6 @@
 
 - 网格暂不支持拖拽调整位置与尺寸（占位固定为 manifest 的 `defaultSize`）。
 - 小组件设置页（`getSettingsSchema` 自动生成）未实现。
-- 网络请求与系统 DBus 访问未开放（权限模型未实现）。
+- 网络请求未开放；小组件不允许直接访问系统 D-Bus，只能使用宿主能力代理
+  （`FileIO` / `SystemInfo` / `Lyrics`）。
 - 小组件间事件总线（`bus.emit/on`）未实现。

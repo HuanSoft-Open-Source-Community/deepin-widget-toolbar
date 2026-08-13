@@ -192,5 +192,25 @@
         <source>yyyy MMMM</source>
         <translation>yyyy 年 M 月</translation>
     </message>
+    <message>
+        <location filename="../package/widgets/lyrics/main.qml" line="20" />
+        <source>Start Ter-Music and play a song to show lyrics</source>
+        <translation>打开端闱乐部并播放歌曲后显示歌词</translation>
+    </message>
+    <message>
+        <location filename="../package/widgets/lyrics/main.qml" line="22" />
+        <source>Ter-Music is not playing</source>
+        <translation>端闱乐部未在播放</translation>
+    </message>
+    <message>
+        <location filename="../package/widgets/lyrics/main.qml" line="24" />
+        <source>This track has no lyrics</source>
+        <translation>当前歌曲没有歌词</translation>
+    </message>
+    <message>
+        <location filename="../package/widgets/lyrics/main.qml" line="55" />
+        <source>Ter-Music Lyrics</source>
+        <translation>端闱乐部歌词</translation>
+    </message>
 </context>
 </TS>

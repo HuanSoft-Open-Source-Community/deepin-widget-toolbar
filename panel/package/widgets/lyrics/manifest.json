@@ -1,0 +1,15 @@
+{
+    "id": "lyrics",
+    "name": "Ter-Music Lyrics",
+    "name[zh_CN]": "端闱乐部歌词",
+    "description": "Shows the current and next lyric line from Ter-Music",
+    "description[zh_CN]": "显示端闱乐部当前及下一句歌词",
+    "version": "1.0.0",
+    "apiVersion": "1.1",
+    "author": "deepin-widget-toolbar",
+    "icon": "media-player",
+    "runtime": "qml",
+    "entry": "main.qml",
+    "defaultSize": { "cols": 4, "rows": 2 },
+    "builtin": true
+}

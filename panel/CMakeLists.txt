@@ -7,7 +7,7 @@
 set(DSG_DATA_DIR "/usr/share/dsg")
 
 find_package(Dtk6DConfig REQUIRED)
-find_package(Qt6 COMPONENTS LinguistTools Qml REQUIRED)
+find_package(Qt6 COMPONENTS LinguistTools Qml DBus REQUIRED)
 
 add_library(ds-widget-toolbar SHARED
     widgettoolbarpanel.cpp
@@ -18,12 +18,14 @@ add_library(ds-widget-toolbar SHARED
     widgetmodel.h
     fileio.cpp
     fileio.h
+    lyricssource.cpp
+    lyricssource.h
     systeminfo.cpp
     systeminfo.h
     widgetresources.qrc
 )
 
-target_link_libraries(ds-widget-toolbar PRIVATE Dde::Shell Qt6::Qml)
+target_link_libraries(ds-widget-toolbar PRIVATE Dde::Shell Qt6::Qml Qt6::DBus)
 
 dtk_add_config_meta_files(APPID "org.deepin.dde.shell" FILES configs/org.deepin.ds.widgettoolbar.json)
 

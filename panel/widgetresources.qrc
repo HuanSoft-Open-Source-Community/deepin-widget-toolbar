@@ -11,5 +11,7 @@
         <file alias="todo/manifest.json">package/widgets/todo/manifest.json</file>
         <file alias="worldtime/main.qml">package/widgets/worldtime/main.qml</file>
         <file alias="worldtime/manifest.json">package/widgets/worldtime/manifest.json</file>
+        <file alias="lyrics/main.qml">package/widgets/lyrics/main.qml</file>
+        <file alias="lyrics/manifest.json">package/widgets/lyrics/manifest.json</file>
     </qresource>
 </RCC>

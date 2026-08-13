@@ -5,6 +5,7 @@
 #include "widgettoolbarpanel.h"
 
 #include "fileio.h"
+#include "lyricssource.h"
 #include "systeminfo.h"
 #include "widgetmanager.h"
 #include "widgetmodel.h"
@@ -53,11 +54,13 @@ bool WidgetToolbarPanel::init()
     m_widgetListModel->refresh();
 
     // 宿主能力代理（开放接口的一部分）：注册 QML 单例，小组件通过
-    // import org.deepin.widgettoolbar 1.0 使用 FileIO / SystemInfo
+    // import org.deepin.widgettoolbar 1.0 使用 FileIO / SystemInfo / Lyrics
     auto *fileIO = new FileIO(this);
     fileIO->setAllowedRoot(m_widgetManager->widgetsDataRoot());
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "FileIO", fileIO);
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "SystemInfo", new SystemInfo(this));
+    // 端闱乐部歌词代理：唯一的系统 D-Bus 能力，小组件通过它读取歌词
+    qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "Lyrics", new LyricsSource(this));
 
     // 读取持久化状态（默认显示 + 默认置顶，Vista 侧栏风格）
     m_config = DConfig::create("org.deepin.dde.shell", "org.deepin.ds.widgettoolbar");

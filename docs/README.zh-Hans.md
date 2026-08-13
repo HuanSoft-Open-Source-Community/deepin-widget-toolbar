@@ -19,8 +19,8 @@
 - **📐 侧栏面板**：常驻于屏幕右侧的侧栏，宽度与通知中心一致（380 px）
 - **🧩 小组件网格**：4 列网格布局，纵向无限滚动（DDE 样式滚动条，不活跃自动隐藏）；小组件按 `cols × rows` 占格
 - **➕ 添加面板**：底部"添加"按钮弹出面板（透明毛玻璃、系统圆角、圆形叉号关闭、无标题栏），陈列内置与已添加小组件，支持 `.dwpkg`（tar.xz）导入与第三方卸载
-- **🕐 内置小组件**：时钟、日历、资源监视仪表、便签（按实例隔离持久化）、世界时间，默认 2×2
-- **🔌 开放接口**：manifest 清单 + 实例上下文注入（`dataDir`/`instanceId`）+ 宿主能力代理（`FileIO`/`SystemInfo`），规范见 [widget-api.md](widget-api.md)
+- **🕐 内置小组件**：时钟、日历、资源监视仪表、便签（按实例隔离持久化）、世界时间，以及占满一行的端闱乐部歌词小组件
+- **🔌 开放接口**：manifest 清单 + 实例上下文注入（`dataDir`/`instanceId`）+ 宿主能力代理（`FileIO`/`SystemInfo`/`Lyrics`），规范见 [widget-api.md](widget-api.md)
 - **📌 置顶/置底**：标题栏的 DTK 图钉按钮在*置顶*（始终在其他窗口之上，`LayerOverlay`）与*置底*（可被普通窗口覆盖，`LayerButtom`）之间切换
 - **🔘 任务栏触发按钮**：dde-dock 托盘插件控制面板显隐——这是显示/隐藏的唯一途径，失焦不会自动关闭
 - **💾 状态持久化**：`visible` 与 `pinned` 状态经 DConfig 持久化，重启后恢复；小组件实例清单存于 `~/.local/share/org.deepin.ds.widgettoolbar/installed.json`
@@ -105,13 +105,14 @@ deepin-widget-toolbar/
 │   ├── widgetmodel.*       # 小组件列表模型（添加面板）
 │   ├── fileio.*            # 宿主能力代理：文件读写（QML 单例）
 │   ├── systeminfo.*        # 宿主能力代理：CPU/内存/磁盘（QML 单例）
+│   ├── lyricssource.*      # 宿主能力代理：端闱乐部歌词（D-Bus，QML 单例）
 │   ├── widgetresources.qrc # 内置小组件资源注册
 │   ├── configs/            # DConfig 元数据
 │   └── package/            # QML 界面
 │       ├── main.qml        # 侧栏：4 列网格 + 滚动条 + 添加按钮
 │       ├── AddWidgetPopup.qml  # 添加小组件弹出面板
 │       ├── PinButton.qml   # 置顶按钮
-│       └── widgets/        # 内置小组件（clock/calendar/systemmonitor/todo/worldtime）
+│       └── widgets/        # 内置小组件（clock/calendar/systemmonitor/todo/worldtime/lyrics）
 └── tray/                   # dde-tray-loader 插件
     ├── widgettoolbartrayplugin.*  # PluginsItemInterfaceV2
     ├── traybutton.*        # 任务栏按钮 + D-Bus 客户端
