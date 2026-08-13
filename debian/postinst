@@ -1,0 +1,47 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2025 UnionTech Software Technology Co., Ltd.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -e
+
+# 安装/升级完成后重启用户级 dde-shell，使面板与托盘插件立即生效。
+# dpkg 以 root 运行：优先用 SUDO_USER 定位用户会话，失败仅提示、不中断安装。
+restart_dde() {
+    uid=""
+    if [ -n "${SUDO_USER:-}" ]; then
+        uid="$(id -u "${SUDO_USER}" 2>/dev/null || true)"
+    fi
+    if [ -z "$uid" ] && [ "$(id -u)" != "0" ]; then
+        uid="$(id -u)"
+    fi
+    if [ -z "$uid" ]; then
+        echo "deepin-widget-toolbar: cannot locate user session; run: systemctl --user restart dde-shell@DDE"
+        return 0
+    fi
+
+    XDG_RUNTIME_DIR="/run/user/${uid}"
+    export XDG_RUNTIME_DIR
+    if [ ! -S "${XDG_RUNTIME_DIR}/systemd/private" ]; then
+        echo "deepin-widget-toolbar: user systemd not reachable; run: systemctl --user restart dde-shell@DDE"
+        return 0
+    fi
+    if ! systemctl --user list-unit-files 'dde-shell@DDE.service' 2>/dev/null | grep -q 'dde-shell@DDE.service'; then
+        echo "deepin-widget-toolbar: dde-shell@DDE.service not found; skip restart"
+        return 0
+    fi
+    if systemctl --user restart 'dde-shell@DDE.service' >/dev/null 2>&1; then
+        echo "deepin-widget-toolbar: dde-shell@DDE restarted"
+    else
+        echo "deepin-widget-toolbar: restart failed; run: systemctl --user restart dde-shell@DDE"
+    fi
+}
+
+case "$1" in
+    configure)
+        restart_dde
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+esac
+
+exit 0

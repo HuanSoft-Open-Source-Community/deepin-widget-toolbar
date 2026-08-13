@@ -1,0 +1,77 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2025 UnionTech Software Technology Co., Ltd.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -e
+
+# 卸载/清除后重启用户级 dde-shell（托盘插件为其子进程，一并释放）。
+restart_dde() {
+    uid=""
+    if [ -n "${SUDO_USER:-}" ]; then
+        uid="$(id -u "${SUDO_USER}" 2>/dev/null || true)"
+    fi
+    if [ -z "$uid" ] && [ "$(id -u)" != "0" ]; then
+        uid="$(id -u)"
+    fi
+    if [ -z "$uid" ]; then
+        echo "deepin-widget-toolbar: cannot locate user session; run: systemctl --user restart dde-shell@DDE"
+        return 0
+    fi
+
+    XDG_RUNTIME_DIR="/run/user/${uid}"
+    export XDG_RUNTIME_DIR
+    if [ ! -S "${XDG_RUNTIME_DIR}/systemd/private" ]; then
+        echo "deepin-widget-toolbar: user systemd not reachable; run: systemctl --user restart dde-shell@DDE"
+        return 0
+    fi
+    if ! systemctl --user list-unit-files 'dde-shell@DDE.service' 2>/dev/null | grep -q 'dde-shell@DDE.service'; then
+        echo "deepin-widget-toolbar: dde-shell@DDE.service not found; skip restart"
+        return 0
+    fi
+    if systemctl --user restart 'dde-shell@DDE.service' >/dev/null 2>&1; then
+        echo "deepin-widget-toolbar: dde-shell@DDE restarted"
+    else
+        echo "deepin-widget-toolbar: restart failed; run: systemctl --user restart dde-shell@DDE"
+    fi
+}
+
+# purge：与 uninstall.sh 的可选清理一致，删除用户级小组件数据与 DConfig 状态。
+purge_user_data() {
+    user=""
+    if [ -n "${SUDO_USER:-}" ]; then
+        user="${SUDO_USER}"
+    fi
+    if [ -z "$user" ] && [ "$(id -u)" != "0" ]; then
+        user="$(id -un)"
+    fi
+    if [ -z "$user" ]; then
+        echo "deepin-widget-toolbar: cannot locate user home; user data left in place"
+        return 0
+    fi
+
+    home="$(getent passwd "$user" 2>/dev/null | cut -d: -f6)"
+    if [ -z "$home" ] || [ ! -d "$home" ]; then
+        echo "deepin-widget-toolbar: cannot locate home for '$user'; user data left in place"
+        return 0
+    fi
+
+    rm -rf "${home}/.local/share/org.deepin.ds.widgettoolbar"
+    find "${home}/.config/deepin/org.deepin.dde.shell" -maxdepth 1 \
+        -name '*widgettoolbar*' -delete 2>/dev/null || true
+    echo "deepin-widget-toolbar: purged user data for '$user'"
+}
+
+case "$1" in
+    remove|purge)
+        restart_dde
+        ;;
+    upgrade)
+        # 升级由新版本 postinst 统一重启
+        ;;
+esac
+
+if [ "$1" = "purge" ]; then
+    purge_user_data
+fi
+
+exit 0

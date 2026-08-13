@@ -1,0 +1,25 @@
+Source: deepin-widget-toolbar
+Section: utils
+Priority: optional
+Maintainer: 燕戏竹林 <yxzl666xx@outlook.com>
+Build-Depends: debhelper-compat (= 13),
+               cmake (>= 3.13),
+               dpkg-dev,
+               qt6-base-dev,
+               qt6-declarative-dev,
+               qt6-l10n-tools,
+               libdde-shell-dev (>= 2.0.52),
+               libdtk6core-dev,
+               libdtk6gui-dev,
+               libdtk6widget-dev
+Standards-Version: 4.6.2
+
+Package: deepin-widget-toolbar
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         dde-shell (>= 2.0.52),
+         dde-tray-loader (>= 2.0.38)
+Description: Vista-style widget toolbar for the deepin desktop
+ Sidebar panel plugin for dde-shell hosting widgets on a 4-column grid,
+ together with a dde-tray-loader dock tray button that toggles the panel.

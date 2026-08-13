@@ -1,0 +1,14 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: deepin-widget-toolbar
+
+Files: *
+Copyright: 2025-2026 UnionTech Software Technology Co., Ltd.
+License: GPL-3.0-or-later
+ The full text of the GNU General Public License version 3 is available
+ in /usr/share/common-licenses/GPL-3 and in the repository LICENSE file.
+
+Files: tray/interfaces/*
+Copyright: 2011-2023 UnionTech Technology Co., Ltd.
+License: LGPL-3.0-or-later
+ The full text of the GNU Lesser General Public License version 3 is
+ available in /usr/share/common-licenses/LGPL-3.

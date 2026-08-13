@@ -1,0 +1,8 @@
+deepin-widget-toolbar (0.1.0-1) unstable; urgency=medium
+
+  * Initial Debian packaging: dde-shell sidebar panel plugin and
+    dde-tray-loader dock tray button.
+  * postinst/postrm restart dde-shell@DDE on install/remove;
+    purge clears user-level widget data and DConfig state.
+
+ -- 燕戏竹林 <yxzl666xx@outlook.com>  Fri, 14 Aug 2026 00:31:27 +0800
