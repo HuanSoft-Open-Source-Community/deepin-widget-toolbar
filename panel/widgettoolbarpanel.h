@@ -10,6 +10,7 @@
 
 #include <QEvent>
 #include <QPointer>
+#include <QTimer>
 
 DS_USE_NAMESPACE
 using Dtk::Core::DConfig;
@@ -61,6 +62,10 @@ protected:
 
 private:
     void enforceFrameless();
+    // X11 下按当前边距短轮询校准窗口几何，覆盖 hide/show 重建、screen 迟到等
+    // 事件错位场景（约 5s 后自动停止）；Wayland 不启动。
+    QTimer m_geometryTimer;
+    int m_geometryTicks = 0;
     // QPointer：窗口可能在 hide/show 或屏幕变更时被重建销毁，避免裸指针悬垂
     QPointer<QQuickWindow> m_window;
 

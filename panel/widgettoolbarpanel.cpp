@@ -82,6 +82,20 @@ bool WidgetToolbarPanel::init()
                                | QDBusConnection::ExportAllProperties);
     }
 
+    // X11 下短轮询校准窗口几何：边距/屏幕数据就绪时机不稳定，事件钩子可能错过，
+    // 按当前边距重算期望几何，与实际不符即修正（约 5s 后自动停止）。
+    m_geometryTimer.setInterval(250);
+    m_geometryTimer.setSingleShot(false);
+    connect(&m_geometryTimer, &QTimer::timeout, this, [this]() {
+        if (QGuiApplication::platformName() != "xcb") {
+            m_geometryTimer.stop();
+            return;
+        }
+        enforceFrameless();
+        if (++m_geometryTicks > 20)
+            m_geometryTimer.stop();
+    });
+
     // X11 下标题栏兜底：QML Window 根创建后监听其事件与 layer 变化，
     // 强制恢复 frameless flags（详见 enforceFrameless 注释）
     connect(this, &DApplet::rootObjectChanged, this, [this]() {
@@ -96,8 +110,13 @@ bool WidgetToolbarPanel::init()
         m_window->installEventFilter(this);
         if (auto *shell = DLayerShellWindow::get(m_window)) {
             connect(shell, &DLayerShellWindow::layerChanged, this, &WidgetToolbarPanel::enforceFrameless);
+            // X11 下边距由 0 变为正确值后，模拟层可能不按最新边距重放窗口几何，
+            // 这里监听边距变化直接重算锚定几何（enforceFrameless 内部仅 xcb 生效）。
+            connect(shell, &DLayerShellWindow::marginsChanged, this, &WidgetToolbarPanel::enforceFrameless);
         }
         enforceFrameless();
+        m_geometryTicks = 0;
+        m_geometryTimer.start();
     });
 
     return true;
@@ -131,6 +150,11 @@ void WidgetToolbarPanel::enforceFrameless()
             const int y = sg.top() + shell->topMargin();
             const QRect target(x, y, w, h);
             if (m_window->geometry() != target) {
+                qWarning().noquote() << "widgettoolbar: correcting X11 geometry"
+                    << m_window->geometry() << "->" << target
+                    << "margins(top/right/bottom):" << shell->topMargin()
+                    << shell->rightMargin() << shell->bottomMargin()
+                    << "screen:" << sg;
                 m_window->setGeometry(target);
             }
         }
@@ -145,6 +169,15 @@ bool WidgetToolbarPanel::eventFilter(QObject *watched, QEvent *event)
         // 都是 LayerShellEmulation 可能替换 flags 或丢失窗口类型属性的时机，
         // 延迟到事件处理完成后统一恢复，避免在事件派发中递归修改窗口状态。
         case QEvent::Show:
+            if (auto *shell = DLayerShellWindow::get(m_window)) {
+                qWarning().noquote() << "widgettoolbar: window shown, margins(top/right/bottom):"
+                    << shell->topMargin() << shell->rightMargin() << shell->bottomMargin()
+                    << "geometry:" << m_window->geometry();
+            }
+            m_geometryTicks = 0;
+            m_geometryTimer.start();
+            QTimer::singleShot(0, this, &WidgetToolbarPanel::enforceFrameless);
+            break;
         case QEvent::Expose:
             QTimer::singleShot(0, this, &WidgetToolbarPanel::enforceFrameless);
             break;

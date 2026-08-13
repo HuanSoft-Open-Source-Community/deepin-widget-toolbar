@@ -39,25 +39,32 @@ Window {
             return 0
         }
 
+        // dock 代理属性可能晚于窗口创建就绪（值为 undefined/null）：
+        // 全部判空后返回 0，避免任何属性访问抛 TypeError 导致绑定被禁用
+        // （绑定禁用后 margin 永不更新、面板被拉满全高）。
         let dockScreen = dockApplet.screenName
-        // root.screen 在窗口创建早期可能为 null：直接判空返回，避免属性访问
-        // 抛 TypeError 导致整个绑定被 QML 禁用（绑定禁用后 margin 永不更新）
+        if (typeof dockScreen !== "string" || dockScreen.length === 0) {
+            return 0
+        }
         if (!root.screen) {
             return 0
         }
-        let screen = root.screen.name
-        if (dockScreen !== screen) {
+        if (dockScreen !== root.screen.name) {
             return 0
         }
 
         let dockPosition = dockApplet.position
-        if (dockPosition !== position) {
+        if (typeof dockPosition !== "number" || dockPosition !== position) {
             return 0
         }
 
         // frontendWindowRect 为物理像素，除以 dpr 得到逻辑尺寸
         let frontendRect = dockApplet.frontendWindowRect
-        if (!frontendRect) {
+        if (!frontendRect
+            || typeof frontendRect.x !== "number"
+            || typeof frontendRect.y !== "number"
+            || typeof frontendRect.width !== "number"
+            || typeof frontendRect.height !== "number") {
             return 0
         }
         let dpr = root.screen.devicePixelRatio
@@ -99,6 +106,28 @@ Window {
             return 0
         }
         return windowMargin(position)
+    }
+
+    // dock 数据是否已可用于边距计算。DS.applet() 的返回值不是 QML 可跟踪依赖，
+    // 只能靠轮询重绑感知就绪时机；dock 在其它屏幕时也算就绪（无需继续等待）。
+    function dockDataReady() {
+        let dockApplet = DS.applet("org.deepin.ds.dock")
+        if (!dockApplet || typeof dockApplet.screenName !== "string"
+            || dockApplet.screenName.length === 0 || !root.screen) {
+            return false
+        }
+        if (dockApplet.screenName !== root.screen.name) {
+            return true
+        }
+        let frontendRect = dockApplet.frontendWindowRect
+        if (!frontendRect
+            || typeof frontendRect.x !== "number"
+            || typeof frontendRect.y !== "number"
+            || typeof frontendRect.width !== "number"
+            || typeof frontendRect.height !== "number") {
+            return false
+        }
+        return true
     }
 
     // 与任务栏之间的间距与其他边缘一致（contentPadding），不再额外追加：
@@ -169,9 +198,9 @@ Window {
             applyLayerFlags()
             // 每次显示都重建 margin 绑定：dock 数据（DS.applet 返回值）不是
             // QML 可跟踪依赖，窗口重建后必须重新求值，否则边距保持旧值/0。
-            // 另外延时再刷一次，兜底 dock 代理异步就绪晚于窗口创建的场景。
+            // 同时启动轮询，兜底 dock 代理异步就绪晚于窗口创建的场景。
             refreshMargins()
-            marginRefreshTimer.restart()
+            restartMarginRefresh()
         }
     }
     Component.onCompleted: {
@@ -200,20 +229,42 @@ Window {
         return layerShellMargin(position) + contentPadding
     }
 
-    // 强制重建三条 margin 绑定：DS.applet() 的返回值不是 QML 可跟踪依赖，
-    // 绑定只在创建/重绑时求值一次——若 dock 代理或 frontendWindowRect 晚于
-    // 窗口创建就绪，首次求值得 0 且之后永不更新（边距消失、面板被拉满全高）。
-    // 因此在每次显示与延时兜底时重绑，Qt.binding() 保持绑定语义不破坏。
+    // 直接赋值三条 margin：DS.applet() 的返回值不是 QML 可跟踪依赖，
+    // 因此由轮询定时重算赋值（值不变时 setter 无操作，变化时触发 marginsChanged），
+    // 避免 Qt.binding 重绑在 dock 数据迟到时失效导致边距保持旧值。
     function refreshMargins() {
-        DLayerShellWindow.topMargin = Qt.binding(function() { return desiredMargin(0) })
-        DLayerShellWindow.rightMargin = Qt.binding(function() { return desiredMargin(1) })
-        DLayerShellWindow.bottomMargin = Qt.binding(function() { return desiredMargin(2) })
+        DLayerShellWindow.topMargin = desiredMargin(0)
+        DLayerShellWindow.rightMargin = desiredMargin(1)
+        DLayerShellWindow.bottomMargin = desiredMargin(2)
+    }
+    // 轮询刷新直到 dock 数据就绪且边距连续两次稳定，避免一次性延时错过
+    // dock 插件晚于面板加载的窗口期（最多约 10s，之后静默保留当前边距）。
+    property int marginRefreshTicks: 0
+    function restartMarginRefresh() {
+        marginRefreshTicks = 0
+        marginRefreshTimer.restart()
     }
     Timer {
         id: marginRefreshTimer
-        interval: 800
-        repeat: false
-        onTriggered: refreshMargins()
+        interval: 250
+        repeat: true
+        onTriggered: {
+            marginRefreshTicks++
+            if (marginRefreshTicks > 40) {
+                stop()
+                return
+            }
+            const beforeTop = DLayerShellWindow.topMargin
+            const beforeRight = DLayerShellWindow.rightMargin
+            const beforeBottom = DLayerShellWindow.bottomMargin
+            refreshMargins()
+            if (dockDataReady()
+                && DLayerShellWindow.topMargin === beforeTop
+                && DLayerShellWindow.rightMargin === beforeRight
+                && DLayerShellWindow.bottomMargin === beforeBottom) {
+                stop()
+            }
+        }
     }
     width: contentWidth + contentPadding * 2
 
