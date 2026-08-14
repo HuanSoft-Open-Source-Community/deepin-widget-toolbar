@@ -115,6 +115,10 @@
         <source>This widget has no configurable options</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>Add</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>main</name>
@@ -140,22 +144,6 @@
     </message>
     <message>
         <source>Write something…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Beijing</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Tokyo</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>London</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>New York</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -279,11 +267,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>UTC+</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>UTC</source>
+        <source>No dials yet. Add timezones in widget settings.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

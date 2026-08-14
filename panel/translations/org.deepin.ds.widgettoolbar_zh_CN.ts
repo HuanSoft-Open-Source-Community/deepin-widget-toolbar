@@ -115,6 +115,10 @@
         <source>This widget has no configurable options</source>
         <translation>该小组件没有可配置选项</translation>
     </message>
+    <message>
+        <source>Add</source>
+        <translation type="unfinished">添加</translation>
+    </message>
 </context>
 <context>
     <name>main</name>
@@ -157,22 +161,6 @@
     <message>
         <source>Write something…</source>
         <translation>写点什么…</translation>
-    </message>
-    <message>
-        <source>Beijing</source>
-        <translation>北京</translation>
-    </message>
-    <message>
-        <source>Tokyo</source>
-        <translation>东京</translation>
-    </message>
-    <message>
-        <source>London</source>
-        <translation>伦敦</translation>
-    </message>
-    <message>
-        <source>New York</source>
-        <translation>纽约</translation>
     </message>
     <message>
         <source>World Time</source>
@@ -279,12 +267,8 @@
         <translation>未启用任何指标</translation>
     </message>
     <message>
-        <source>UTC+</source>
-        <translation>UTC+</translation>
-    </message>
-    <message>
-        <source>UTC</source>
-        <translation>UTC</translation>
+        <source>No dials yet. Add timezones in widget settings.</source>
+        <translation>暂无表盘，请在小组件设置中添加时区。</translation>
     </message>
 </context>
 </TS>
