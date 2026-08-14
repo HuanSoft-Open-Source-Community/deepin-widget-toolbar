@@ -48,10 +48,20 @@ public Q_SLOTS:
     void toggle();
     void show();
     void hide();
+    // 右键菜单动作：托盘插件经 D-Bus 调用，QML 监听对应信号执行 UI
+    void openSettings();
+    void showAbout();
+    void openAddWidget();
+    void autoArrange();
 
 Q_SIGNALS:
     void visibleChanged(bool visible);
     void pinnedChanged(bool pinned);
+    // 菜单动作信号（D-Bus ExportAllSignals 导出，QML Connections 监听）
+    void settingsRequested();
+    void aboutRequested();
+    void addWidgetRequested();
+    void autoArrangeRequested();
 
 protected:
     // X11 下 LayerShellEmulation 的 LayerButtom 分支会用 setFlags() 整体替换窗口 flags

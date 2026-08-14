@@ -313,6 +313,31 @@ Window {
         root.dragGrabOffsetY = 0
     }
 
+    // 一键自动整理：压实布局并回到顶部（整理按钮与右键菜单共用）
+    function autoArrangeNow() {
+        Panel.widgetManager.autoArrangeAll()
+        gridFlickable.contentY = 0
+    }
+
+    // 弹出面板互斥：添加/设置/关于同时只允许打开一个。
+    // 打开目标前先关闭另外两个；目标已打开则关闭（切换语义）
+    function openPanelPopup(target) {
+        if (target === addPopup) {
+            settingsDialog.close()
+            aboutDialog.close()
+        } else if (target === settingsDialog) {
+            addPopup.close()
+            aboutDialog.close()
+        } else if (target === aboutDialog) {
+            addPopup.close()
+            settingsDialog.close()
+        }
+        if (target.visible)
+            target.close()
+        else
+            target.open()
+    }
+
     // ===== 窗口基础配置（与通知中心一致的尺寸与样式） =====
 
     // 与通知中心一致的尺寸：内容宽 360 + 左右各 10 padding
@@ -523,6 +548,16 @@ Window {
                 bottomMargin: 8
             }
 
+            // 空白处右键菜单：只接受右键，不影响组件左键长按拖拽
+            MouseArea {
+                anchors.fill: parent
+                z: 0
+                acceptedButtons: Qt.RightButton
+                onClicked: function(mouse) {
+                    contextMenu.popup()
+                }
+            }
+
             Flickable {
                 id: gridFlickable
                 anchors.fill: parent
@@ -664,10 +699,7 @@ Window {
             width: 88
             height: 32
             text: qsTr("Auto arrange")
-            onClicked: {
-                Panel.widgetManager.autoArrangeAll()
-                gridFlickable.contentY = 0
-            }
+            onClicked: autoArrangeNow()
         }
 
         // ===== 底部右下角"添加"按钮 =====
@@ -685,7 +717,55 @@ Window {
         }
     }
 
-    // ===== 添加小组件弹出面板（阶段 3 实现） =====
+    // ===== 右键菜单（面板空白处） =====
+    Menu {
+        id: contextMenu
+
+        MenuItem {
+            text: qsTr("Add widget")
+            onTriggered: openPanelPopup(addPopup)
+        }
+        MenuItem {
+            text: qsTr("Auto arrange")
+            onTriggered: autoArrangeNow()
+        }
+        MenuSeparator { }
+        MenuItem {
+            text: qsTr("Settings")
+            onTriggered: openPanelPopup(settingsDialog)
+        }
+        MenuItem {
+            text: qsTr("About")
+            onTriggered: openPanelPopup(aboutDialog)
+        }
+    }
+
+    // ===== 设置与关于对话框 =====
+    SettingsDialog {
+        id: settingsDialog
+    }
+    AboutPopup {
+        id: aboutDialog
+    }
+
+    // 托盘右键菜单经 D-Bus 触发的动作统一在这里执行
+    Connections {
+        target: Panel
+        function onSettingsRequested() {
+            openPanelPopup(settingsDialog)
+        }
+        function onAboutRequested() {
+            openPanelPopup(aboutDialog)
+        }
+        function onAddWidgetRequested() {
+            openPanelPopup(addPopup)
+        }
+        function onAutoArrangeRequested() {
+            autoArrangeNow()
+        }
+    }
+
+    // ===== 添加小组件弹出面板 =====
     AddWidgetPopup {
         id: addPopup
     }

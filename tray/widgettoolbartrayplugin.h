@@ -28,6 +28,9 @@ public:
     QWidget *itemTipsWidget(const QString &itemKey) override;
     QWidget *itemPopupApplet(const QString &itemKey) override;
     Dock::PluginFlags flags() const override;
+    // 右键菜单：设置 / 关于 / 添加组件 / 一键自动整理（JSON 协议）
+    const QString itemContextMenu(const QString &itemKey) override;
+    void invokedMenuItem(const QString &itemKey, const QString &menuId, const bool checked) override;
 
 private:
     void loadTranslator();

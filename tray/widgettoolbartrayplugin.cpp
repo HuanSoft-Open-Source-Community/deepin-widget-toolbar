@@ -7,9 +7,18 @@
 #include "traybutton.h"
 
 #include <QCoreApplication>
+#include <QDBusInterface>
 #include <QDebug>
+#include <QJsonDocument>
 #include <QLocale>
 #include <QTranslator>
+
+namespace {
+// 与 TrayButton 保持一致的面板 D-Bus 服务
+const QString kPanelService = QStringLiteral("org.deepin.dde.widgettoolbar");
+const QString kPanelPath = QStringLiteral("/org/deepin/dde/widgettoolbar");
+const QString kPanelInterface = QStringLiteral("org.deepin.dde.widgettoolbar");
+}
 
 WidgetToolbarTrayPlugin::WidgetToolbarTrayPlugin(QObject *parent)
     : QObject(parent)
@@ -68,6 +77,59 @@ Dock::PluginFlags WidgetToolbarTrayPlugin::flags() const
 {
     // 基础托盘插件：不附加拖拽/控制中心设置等无关能力
     return Dock::Type_Tray;
+}
+
+const QString WidgetToolbarTrayPlugin::itemContextMenu(const QString &itemKey)
+{
+    Q_UNUSED(itemKey)
+
+    QList<QVariant> items;
+    const auto makeItem = [](const QString &itemId, const QString &itemText) {
+        QVariantMap action;
+        action.insert("itemId", itemId);
+        action.insert("itemText", itemText);
+        action.insert("isCheckable", false);
+        action.insert("isActive", true);
+        return QVariant(action);
+    };
+    items.append(makeItem("open-settings", tr("Settings")));
+    items.append(makeItem("show-about", tr("About")));
+    items.append(makeItem("add-widget", tr("Add widget")));
+    items.append(makeItem("auto-arrange", tr("Auto arrange")));
+
+    QVariantMap menu;
+    menu.insert("items", items);
+    menu.insert("checkableMenu", false);
+    menu.insert("singleCheck", false);
+    return QString::fromUtf8(QJsonDocument::fromVariant(menu).toJson(QJsonDocument::Compact));
+}
+
+void WidgetToolbarTrayPlugin::invokedMenuItem(const QString &itemKey, const QString &menuId, const bool checked)
+{
+    Q_UNUSED(itemKey)
+    Q_UNUSED(checked)
+
+    QString method;
+    if (menuId == QLatin1String("open-settings"))
+        method = QStringLiteral("openSettings");
+    else if (menuId == QLatin1String("show-about"))
+        method = QStringLiteral("showAbout");
+    else if (menuId == QLatin1String("add-widget"))
+        method = QStringLiteral("openAddWidget");
+    else if (menuId == QLatin1String("auto-arrange"))
+        method = QStringLiteral("autoArrange");
+
+    if (method.isEmpty()) {
+        qWarning() << "widget-toolbar: unknown menu item" << menuId;
+        return;
+    }
+
+    QDBusInterface iface(kPanelService, kPanelPath, kPanelInterface);
+    if (!iface.isValid()) {
+        qWarning() << "widget-toolbar D-Bus interface invalid";
+        return;
+    }
+    iface.call(method);
 }
 
 void WidgetToolbarTrayPlugin::loadTranslator()

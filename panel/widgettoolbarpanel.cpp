@@ -254,5 +254,27 @@ void WidgetToolbarPanel::hide()
     setVisible(false);
 }
 
+void WidgetToolbarPanel::openSettings()
+{
+    Q_EMIT settingsRequested();
+}
+
+void WidgetToolbarPanel::showAbout()
+{
+    Q_EMIT aboutRequested();
+}
+
+void WidgetToolbarPanel::openAddWidget()
+{
+    Q_EMIT addWidgetRequested();
+}
+
+void WidgetToolbarPanel::autoArrange()
+{
+    if (m_widgetManager)
+        m_widgetManager->autoArrangeAll();
+    Q_EMIT autoArrangeRequested();
+}
+
 D_APPLET_CLASS(WidgetToolbarPanel)
 #include "widgettoolbarpanel.moc"
