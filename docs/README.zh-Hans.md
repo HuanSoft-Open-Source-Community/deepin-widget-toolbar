@@ -94,31 +94,47 @@ systemctl --user restart dde-shell@DDE
 deepin-widget-toolbar/
 ├── CMakeLists.txt          # 顶层构建（panel + tray）
 ├── install.sh              # 系统安装脚本
+├── uninstall.sh            # 卸载脚本（与 install.sh 配套）
+├── build-deb.sh            # Debian 打包脚本（临时副本 dpkg-buildpackage → dist/）
 ├── LICENSE                 # GNU GPL v3 全文
+├── debian/                 # Debian 打包配置（control/rules/postinst/postrm）
 ├── docs/                   # 文档
 │   ├── README.md           # 英文
 │   ├── README.zh-Hans.md   # 简体中文
 │   ├── README.zh-Pre-Qin.md# 文言文（先秦文风）
 │   └── widget-api.md       # 小组件开放接口规范（v0.1）
 ├── panel/                  # dde-shell DPanel 插件
-│   ├── widgettoolbarpanel.*# DPanel + D-Bus 服务 + 小组件宿主
+│   ├── CMakeLists.txt      # 面板构建（Dde::Shell + 翻译 + 安装）
+│   ├── widgettoolbarpanel.*# DPanel + D-Bus 服务（显隐/置顶/菜单动作）+ 小组件宿主
 │   ├── widgetmanager.*     # 小组件扫描 / installed.json / 网格槽 / .dwpkg 导入
 │   ├── widgetmodel.*       # 小组件列表模型（添加面板）
 │   ├── fileio.*            # 宿主能力代理：文件读写（QML 单例）
 │   ├── systeminfo.*        # 宿主能力代理：CPU/内存/磁盘（QML 单例）
-│   ├── lyricssource.*      # 宿主能力代理：端闱乐部歌词（D-Bus，QML 单例）
+│   ├── lyricssource.*      # 宿主能力代理：端闱乐部歌词（A/B 双缓冲，QML 单例）
 │   ├── widgetresources.qrc # 内置小组件资源注册
 │   ├── configs/            # DConfig 元数据
+│   ├── translations/       # 面板翻译（23 种语言 .ts）
 │   └── package/            # QML 界面
-│       ├── main.qml        # 侧栏：4 列网格 + 滚动条 + 添加按钮
-│       ├── AddWidgetPopup.qml  # 添加小组件弹出面板
+│       ├── metadata.json   # 面板插件元数据（dde-shell）
+│       ├── main.qml        # 侧栏：4 列网格 + 拖放 + 滚动 + 右键菜单 + 互斥弹出面板
+│       ├── AddWidgetPopup.qml  # 添加小组件弹出面板（PanelPopup 框架）
+│       ├── SettingsDialog.qml  # 设置弹出面板（显示面板/置顶）
+│       ├── AboutPopup.qml  # 关于弹出面板（开发团队/仓库/官网链接）
 │       ├── PinButton.qml   # 置顶按钮
+│       ├── icons/          # 置顶/取消置顶图钉图标
 │       └── widgets/        # 内置小组件（clock/calendar/systemmonitor/todo/worldtime/lyrics）
 └── tray/                   # dde-tray-loader 插件
-    ├── widgettoolbartrayplugin.*  # PluginsItemInterfaceV2
+    ├── CMakeLists.txt      # 托盘插件构建（Qt6 + DTK6 + 翻译 + 安装）
+    ├── metadata.json       # 插件元数据（api 2.0.0）
+    ├── widgettoolbartrayplugin.*  # PluginsItemInterfaceV2 + 右键菜单 + 控制中心插件区域入口
     ├── traybutton.*        # 任务栏按钮 + D-Bus 客户端
     ├── interfaces/         # vendored dde-tray-loader 2.0.38 头文件
-    └── icons/              # 按钮图标（QRC）
+    ├── translations/       # 托盘插件翻译（en/zh_CN .ts）
+    └── icons/              # 图标资产
+        ├── widget-toolbar.svg         # 白色版图标（深色主题）
+        ├── widget-toolbar-dark.svg    # 黑色版图标（浅色主题）
+        ├── widget-toolbar-icons.qrc   # QRC 注册（前缀 /widget-toolbar，避免与 DTK 符号冲突）
+        └── dcc-widget-toolbar.dci     # 控制中心插件区域图标（DCI 容器，明暗双主题）
 ```
 
 ## 📜 许可证

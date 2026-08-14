@@ -18,9 +18,48 @@ deepin 桌面之側欄也，仿 Vista 之制，依 dde-shell 插件之體。
 
 此器者，小组件欄也。居屏之右，廣三百八十素，與通知中心同寬。欄首有題，其右有圖釘之鈕，可按而置頂置底：置頂則恆居萬窗之上，置底則凡窗皆可覆之。任務欄復有鈕焉，按之則欄顯，再按之則欄隱，此外無他途可闔。故雖點欄外之空處，欄終不閉。顯隱之態與置頂之態，皆記之於 DConfig，重啟而復焉。屏之多者，欄隨任務欄所居之屏而徙。
 
+## 能
+
+- **側欄**：常居屏右，廣三百八十素，與通知中心同寬
+- **網格**：四列之格，縱向無窮可滾（DDE 樣式滾條，閒則自隱）；組件以 `cols × rows` 占格
+- **拖放與整理**：長按可移組件至任意格（含非首列）；位既存，不強行補位；拖曳時所占者實時避讓，或上或下、數件聯動而動畫，移開或止則復位；左下"整理"之鈕，按左上優先壓實
+- **加添**：下方"添加"之鈕，彈出面板（毛玻璃、系統圓角、圓叉而闔、無題無欄），列內置與已加者，可入 `.dwpkg`（tar.xz）之包，可卸第三方之件
+- **內置**：時鐘、曆、系統之監、便箋（每例各存其文）、世界之時，及通欄一行之端闔樂部歌詞
+- **開宗**：manifest 清單 + 例之上下文（`dataDir`/`instanceId`）+ 宿主之能（`FileIO`/`SystemInfo`/`Lyrics`），詳見 [widget-api.md](widget-api.md)
+- **置頂/置底**：欄首 DTK 圖釘之鈕，置頂則恆居萬窗上（`LayerOverlay`），置底則凡窗可覆（`LayerButtom`）
+- **任務欄鈕**：dde-dock 托盤插件，按之顯隱——此為顯隱唯一之途，失焦不自閉
+- **存**：`visible` 與 `pinned` 記於 DConfig，重啟而復；組件之單存於 `~/.local/share/org.deepin.ds.widgettoolbar/installed.json`
+- **諸文**：QML 皆用 `qsTr`，廿三種語言之 `.ts`（簡體已譯）
+- **多屏**：欄隨任務欄所在之屏
+
+## 架
+
+二插件以會話總線 D-Bus 相通信：
+
+```mermaid
+flowchart LR
+    subgraph Shell["dde-shell 之程"]
+        Panel["org.deepin.ds.widgettoolbar<br/>DPanel 側欄（380 px）<br/>題首 + DTK 圖釘<br/>LayerOverlay / LayerButtom<br/>DConfig 存之"]
+    end
+    subgraph Tray["trayplugin-loader 之程"]
+        Button["libwidget-toolbar.so<br/>任務欄托盤觸發鈕<br/>按而切顯隱<br/>同步高亮之態"]
+    end
+    Panel <-->|"D-Bus · org.deepin.dde.widgettoolbar"| Button
+```
+
+- **欄**（`panel/`）：dde-shell `DPanel` 插件（`org.deepin.ds.widgettoolbar`），登 D-Bus 之務 `org.deepin.dde.widgettoolbar`，具 `toggle()` / `show()` / `hide()` 之法及 `visible` / `pinned` 之性。
+- **托盤鈕**（`tray/`）：dde-tray-loader 插件（`PluginsItemInterfaceV2`，`Type_Tray`），為 D-Bus 之客，切欄顯隱而應其態。
+
+## 需
+
+- deepin / UOS v25，dde-shell 2.0.52+（運行時）
+- Qt 6.8+ 與 DTK 6 開發之包
+- `libdde-shell-dev`（2.0.52）
+- dde-tray-loader 2.0.38（運行時，托盤插件所須）
+
 ## 構
 
-先備 Qt6、DTK6、libdde-shell-dev 之屬，然後：
+先備上之所須，然後：
 
 ```bash
 cmake -S . -B build
@@ -30,17 +69,83 @@ cmake --build build -j$(nproc)
 ## 裝
 
 ```bash
-sudo ./install.sh
+sudo ./install.sh          # cmake --install build
 systemctl --user restart dde-shell@DDE
 ```
 
 ## 用
 
-點任務欄之鈕，欄或顯或隱。點欄首之圖釘，欄或置頂或置底。二態既記，重啟不失。
+1. 點任務欄托盤區之鈕，欄或顯或隱。
+2. 點欄首之圖釘，欄或置頂或置底：
+   - **置頂**：恆居萬窗之上，點欄外之空處亦不閉。
+   - **置底**：凡窗皆可覆之。
+3. 顯隱與置頂之態，重啟不失。
+
+## 限
+
+- **置底不復縮工作區**：置底時欄不再向合成器稱 `exclusionZone`（X11 則為 `_NET_WM_STRUT_PARTIAL`，Wayland 則狹他人 layer-shell 窗之域）。昔者工作區為縮，全屏/最大化之窗緣露黑邊；今去之，則復其常，置底唯存"可為凡窗所覆"之義。
+- **桌面圖標不避欄**：dde-desktop 之可用域唯以「屏幾何 − dock 之 frontendWindowRect」計，不讀工作區/strut。故置底時欄覆屏右一列之圖標，插件側無術可改——欲使避讓，必改 dde-file-manager 之 `ScreenQt::availableGeometry()`（本插件明言不為此變）。
+
+## 驗
+
+- 欄現於屏右，廣三百八十素，有題與圖釘。
+- 任務欄之鈕切欄顯隱，其高亮隨欄之態。
+- 置頂則凡窗不覆；置底則可覆。
+- 點欄外之空處不閉。
+- 重啟而態存。
+
+## 目
+
+```
+deepin-widget-toolbar/
+├── CMakeLists.txt          # 頂層構建（panel 與 tray）
+├── install.sh              # 系統安裝之文
+├── uninstall.sh            # 卸載之文（與 install.sh 相配）
+├── build-deb.sh            # Debian 打包之文（臨副本 dpkg-buildpackage → dist/）
+├── LICENSE                 # GNU GPL v3 全文
+├── debian/                 # Debian 打包之設（control/rules/postinst/postrm）
+├── docs/                   # 文檔
+│   ├── README.md           # 英文
+│   ├── README.zh-Hans.md   # 簡體中文
+│   ├── README.zh-Pre-Qin.md# 文言（先秦文風）
+│   └── widget-api.md       # 小組件開放接口之範（v0.1）
+├── panel/                  # dde-shell DPanel 插件
+│   ├── CMakeLists.txt      # 欄之構建（Dde::Shell + 翻譯 + 安裝）
+│   ├── widgettoolbarpanel.*# DPanel + D-Bus 之務（顯隱/置頂/菜單之動）+ 組件之宿主
+│   ├── widgetmanager.*     # 組件之掃 / installed.json / 網格槽 / .dwpkg 之入
+│   ├── widgetmodel.*       # 組件清單之模（添加面板）
+│   ├── fileio.*            # 宿主之能：文之讀寫（QML 單例）
+│   ├── systeminfo.*        # 宿主之能：CPU/內存/磁盤（QML 單例）
+│   ├── lyricssource.*      # 宿主之能：端闔樂部歌詞（A/B 雙緩，QML 單例）
+│   ├── widgetresources.qrc # 內置組件資源之註
+│   ├── configs/            # DConfig 元數據
+│   ├── translations/       # 欄之翻譯（廿三語 .ts）
+│   └── package/            # QML 之面
+│       ├── metadata.json   # 欄插件元數據（dde-shell）
+│       ├── main.qml        # 側欄：四列網格 + 拖放 + 滾動 + 右鍵菜單 + 互斥彈出
+│       ├── AddWidgetPopup.qml  # 添加組件彈出之面（PanelPopup 之體）
+│       ├── SettingsDialog.qml  # 設置彈出之面（顯欄/置頂）
+│       ├── AboutPopup.qml  # 關於彈出之面（團隊/倉庫/官網之鏈）
+│       ├── PinButton.qml   # 置頂之鈕
+│       ├── icons/          # 置頂/置底圖釘之圖
+│       └── widgets/        # 內置組件（clock/calendar/systemmonitor/todo/worldtime/lyrics）
+└── tray/                   # dde-tray-loader 插件
+    ├── CMakeLists.txt      # 托盤插件構建（Qt6 + DTK6 + 翻譯 + 安裝）
+    ├── metadata.json       # 插件元數據（api 2.0.0）
+    ├── widgettoolbartrayplugin.*  # PluginsItemInterfaceV2 + 右鍵菜單 + 控制中心插件區之門
+    ├── traybutton.*        # 任務欄鈕 + D-Bus 之客
+    ├── interfaces/         # vendored dde-tray-loader 2.0.38 頭文件
+    ├── translations/       # 托盤插件翻譯（en/zh_CN .ts）
+    └── icons/              # 圖之資產
+        ├── widget-toolbar.svg         # 白圖（暗主題）
+        ├── widget-toolbar-dark.svg    # 黑圖（明主題）
+        ├── widget-toolbar-icons.qrc   # QRC 之註（前綴 /widget-toolbar，避 DTK 符號之爭）
+        └── dcc-widget-toolbar.dci     # 控制中心插件區之圖（DCI 之器，明暗雙題）
+```
 
 ## 文
 
-斯文有三：英文為正，簡體為輔，此文以先秦文言述之，三文互為援引，覽者擇其宜焉。
+斯文有三：英文為正，簡體為輔，此文以先秦文言述之，三文互為援引，所載並同，覽者擇其宜焉。
 
 ## 律
 

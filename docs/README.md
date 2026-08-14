@@ -94,31 +94,47 @@ systemctl --user restart dde-shell@DDE
 deepin-widget-toolbar/
 ├── CMakeLists.txt          # top-level build (panel + tray)
 ├── install.sh              # system install script
+├── uninstall.sh            # uninstall script (paired with install.sh)
+├── build-deb.sh            # Debian packaging script (temp copy dpkg-buildpackage → dist/)
 ├── LICENSE                 # GNU GPL v3 full text
+├── debian/                 # Debian packaging config (control/rules/postinst/postrm)
 ├── docs/                   # documentation
 │   ├── README.md           # this file (English)
 │   ├── README.zh-Hans.md   # Simplified Chinese
 │   ├── README.zh-Pre-Qin.md# Classical Chinese (Pre-Qin style)
 │   └── widget-api.md       # widget open API spec (v0.1)
 ├── panel/                  # dde-shell DPanel plugin
-│   ├── widgettoolbarpanel.*# DPanel + D-Bus service + widget host
+│   ├── CMakeLists.txt      # panel build (Dde::Shell + translations + install)
+│   ├── widgettoolbarpanel.*# DPanel + D-Bus service (visibility/pin/menu actions) + widget host
 │   ├── widgetmanager.*     # widget scanning / installed.json / grid slot / .dwpkg import
 │   ├── widgetmodel.*       # widget list model (add panel)
 │   ├── fileio.*            # host capability proxy: file I/O (QML singleton)
 │   ├── systeminfo.*        # host capability proxy: CPU/mem/disk (QML singleton)
-│   ├── lyricssource.*      # host capability proxy: Ter-Music lyrics via D-Bus (QML singleton)
+│   ├── lyricssource.*      # host capability proxy: Ter-Music lyrics A/B buffer (QML singleton)
 │   ├── widgetresources.qrc # built-in widget resource registration
 │   ├── configs/            # DConfig metadata
+│   ├── translations/       # panel translations (23 languages .ts)
 │   └── package/            # QML UI
-│       ├── main.qml        # sidebar: 4-column grid + scrollbar + add button
-│       ├── AddWidgetPopup.qml  # add-widget popup panel
+│       ├── metadata.json   # panel plugin metadata (dde-shell)
+│       ├── main.qml        # sidebar: 4-column grid + drag & drop + scroll + context menu + exclusive popups
+│       ├── AddWidgetPopup.qml  # add-widget popup panel (PanelPopup framework)
+│       ├── SettingsDialog.qml  # settings popup (show panel / pin to top)
+│       ├── AboutPopup.qml  # about popup (team / repository / website links)
 │       ├── PinButton.qml   # pin button
+│       ├── icons/          # pin/unpin icon assets
 │       └── widgets/        # built-in widgets (clock/calendar/systemmonitor/todo/worldtime/lyrics)
 └── tray/                   # dde-tray-loader plugin
-    ├── widgettoolbartrayplugin.*  # PluginsItemInterfaceV2
+    ├── CMakeLists.txt      # tray plugin build (Qt6 + DTK6 + translations + install)
+    ├── metadata.json       # plugin metadata (api 2.0.0)
+    ├── widgettoolbartrayplugin.*  # PluginsItemInterfaceV2 + context menu + control-center plugin area entry
     ├── traybutton.*        # dock button + D-Bus client
     ├── interfaces/         # vendored dde-tray-loader 2.0.38 headers
-    └── icons/              # button icon (QRC)
+    ├── translations/       # tray plugin translations (en/zh_CN .ts)
+    └── icons/              # icon assets
+        ├── widget-toolbar.svg         # white glyph (dark theme)
+        ├── widget-toolbar-dark.svg    # black glyph (light theme)
+        ├── widget-toolbar-icons.qrc   # QRC registration (prefix /widget-toolbar, avoids DTK symbol clash)
+        └── dcc-widget-toolbar.dci     # control-center plugin area icon (DCI container, light/dark)
 ```
 
 ## 📜 License
