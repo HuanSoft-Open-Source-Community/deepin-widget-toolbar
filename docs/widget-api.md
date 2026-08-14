@@ -1,8 +1,7 @@
-# 小组件接口规范（v0.1）
+# 小组件接口规范（v1.2）
 
 > 本文档定义 deepin-widget-toolbar 面板（宿主）与小组件之间的开放接口契约。
-> 版本：0.1（对应接口规划草案的核心子集：清单 + 布局 + 渲染 + 实例上下文）。
-> 完整演进草案见 `.tmp/todo/千问给的小组件接口规划.txt`。
+> 当前宿主接口版本：1.2；同时兼容 1.0/1.1 小组件。
 
 ## 1. 架构
 
@@ -34,12 +33,26 @@
 | `description` | string | 否 | 一句话描述 |
 | `icon` | string | 否 | 主题图标名（如 `appointment-new`），面板列表中显示 |
 | `version` | string | 是 | 语义化版本号，如 `1.0.0` |
-| `apiVersion` | string | 是 | 所需接口版本，当前为 `1.1`；不兼容则宿主拒绝加载 |
+| `apiVersion` | string | 是 | 所需接口版本，当前为 `1.2`；宿主兼容所有 `1.x`，不兼容则拒绝加载 |
 | `author` | string | 否 | 作者 |
 | `runtime` | string | 否 | 渲染运行时，当前仅支持 `qml`（默认值） |
 | `entry` | string | 是 | 入口文件（相对小组件目录），如 `main.qml` |
 | `defaultSize` | object | 是 | 默认占位 `{ "cols": 2, "rows": 2 }`；`cols ∈ [1,4]`，`rows ≥ 1` |
+| `sizes` | array | 否 | 可选尺寸数组，元素为 `{ "cols": 1, "rows": 1 }`；缺失时只允许 `defaultSize`，且 `defaultSize` 必须包含在其中 |
+| `settings` | array | 否 | 配置项声明，供宿主生成右键“配置…”面板；元素字段见下文 |
 | `builtin` | bool | 内置专用 | 内置小组件标记（第三方包的 manifest 中应省略或为 false） |
+
+配置 schema 元素字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `key` | string | 配置键，不能为空 |
+| `type` | string | `boolean` / `enum` / `color` / `font` / `string` / `integer` |
+| `label` / `label[locale]` | string | 显示名称及本地化名称 |
+| `default` | 任意 | 默认值 |
+| `options` | array | `enum`/`color` 的候选项，元素含 `value`、`label`、`label[locale]`；`font` 的候选由宿主从 `Qt.fontFamilies()` 生成 |
+
+内置组件示例：clock 允许 `1×1 / 2×2 / 4×2 / 4×4` 并声明 `clockMode` 配置；lyrics 声明 `lyricsFont` 与 `lyricsColor`。
 
 ## 4. 布局模型
 
@@ -57,6 +70,7 @@
 |---|---|---|
 | `instanceId` | string | 实例唯一标识（UUID），同一小组件可添加多个实例 |
 | `dataDir` | string | 宿主隔离的实例数据目录：`~/.local/share/org.deepin.ds.widgettoolbar/widgets/<id>/data/`。持久化数据写入 `dataDir/<instanceId>.txt`（或自建子目录），按实例隔离 |
+| `widgetConfig` | object | 该实例的配置对象（由 `settings` schema 默认值与已保存配置合并），配置面板保存后宿主刷新该属性 |
 
 ## 6. 宿主能力代理（QML 模块 `org.deepin.widgettoolbar 1.0`）
 
@@ -79,7 +93,12 @@
 |---|---|---|
 | `cpuUsage` | real | CPU 使用率 0~1（读 `/proc/stat` 差值） |
 | `memUsedPercent` | real | 内存使用率 0~1（读 `/proc/meminfo`） |
-| `diskUsedPercent` | real | 根分区占用率 0~1（`QStorageInfo`） |
+| `diskUsedPercent` | real | 兼容旧接口：根分区空间占用率 0~1（`QStorageInfo`），新组件请使用 `diskBusyPercent` |
+| `diskBusyPercent` | real | 磁盘 IO 忙时利用率 0~1（iostat `%util`，聚合非 loop/非分区物理设备） |
+| `gpuUsage` / `gpuAvailable` | real / bool | 当前 GPU 占用与可读状态；不可用时 `gpuAvailable=false` 且 `gpuUsage=0` |
+| `npuUsage` / `npuAvailable` | real / bool | 当前 NPU 占用与可读状态；不可用时 `npuAvailable=false` 且 `npuUsage=0` |
+
+指标口径、sysfs/NVML 数据源与降级策略详见 [system-monitor.md](system-monitor.md)。
 
 信号：`refreshed()`（默认每秒刷新；可用 `setRefreshInterval(ms)` 调整，下限 200ms）。
 
@@ -109,7 +128,7 @@
 
 ## 7. 面板 API（预留）
 
-以下接口为本规范预留，v0.1 尚未实现，未来版本按此契约提供：
+以下接口为本规范预留，尚未实现，未来版本按此契约提供：
 
 | 接口 | 说明 |
 |---|---|
@@ -117,7 +136,7 @@
 | `requestResize(cols, rows)` | 小组件请求变更占位尺寸 |
 | `showToast(message)` | 在面板层显示轻量提示 |
 | `openUrl(url)` | 用系统默认浏览器/应用打开链接 |
-| `getSettingsSchema()` / `onSettingsChanged(key, value)` | 配置项声明与变更回调（宿主自动生成设置 UI） |
+| `getSettingsSchema()` / `onSettingsChanged(key, value)` | 兼容旧规范名称；1.2 起配置已通过 manifest `settings` 与 `widgetConfig` 提供 |
 
 ## 8. .dwpkg 包格式（第三方分发）
 
@@ -132,9 +151,9 @@
 
 - 小组件声明 `apiVersion`；宿主加载时校验，不兼容则拒绝加载并提示，不静默失败。
 - 宿主新增接口走次版本递增，不破坏既有小组件（1.0 小组件仍可加载）。
-- 当前宿主实现：`apiVersion = "1.1"`（v1.1 新增 `Lyrics` 歌词能力代理）。
+- 当前宿主实现：`apiVersion = "1.2"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控）。
 
-## 10. 生命周期（v0.1 范围）
+## 10. 生命周期（当前范围）
 
 已实现：加载（添加 → 注入上下文 → 渲染）、移除实例、卸载（第三方）、数据持久化。
 
@@ -143,8 +162,8 @@
 
 ## 11. 已知限制
 
-- 网格支持长按拖放调整位置（拖拽中双向联动避让）；暂不支持拖拽调整尺寸（占位固定为 manifest 的 `defaultSize`）。
-- 小组件设置页（`getSettingsSchema` 自动生成）未实现。
+- 网格支持长按拖放调整位置；右键菜单可切换 `sizes` 声明的占位尺寸，切换时冲突实例联动避让并持久化。
+- 小组件设置页由 manifest `settings` schema 自动生成，仅支持列出的六种基础类型。
 - 网络请求未开放；小组件不允许直接访问系统 D-Bus，只能使用宿主能力代理
   （`FileIO` / `SystemInfo` / `Lyrics`）。
 - 小组件间事件总线（`bus.emit/on`）未实现。

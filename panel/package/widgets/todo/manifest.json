@@ -5,11 +5,42 @@
     "description": "A sticky note widget with per-instance data",
     "description[zh_CN]": "便签小组件，数据按实例隔离持久化",
     "version": "1.0.0",
-    "apiVersion": "1.0",
+    "apiVersion": "1.2",
     "author": "deepin-widget-toolbar",
     "icon": "edit-paste",
     "runtime": "qml",
     "entry": "main.qml",
     "defaultSize": { "cols": 2, "rows": 2 },
+    "sizes": [
+        { "cols": 2, "rows": 2 },
+        { "cols": 4, "rows": 2 },
+        { "cols": 4, "rows": 4 }
+    ],
+    "settings": [
+        {
+            "key": "noteFontScale",
+            "type": "enum",
+            "label": "Note font size",
+            "label[zh_CN]": "便签字号",
+            "default": "medium",
+            "options": [
+                { "value": "small", "label": "Small", "label[zh_CN]": "小" },
+                { "value": "medium", "label": "Medium", "label[zh_CN]": "中" },
+                { "value": "large", "label": "Large", "label[zh_CN]": "大" }
+            ]
+        },
+        {
+            "key": "autoSaveInterval",
+            "type": "enum",
+            "label": "Auto-save interval",
+            "label[zh_CN]": "自动保存间隔",
+            "default": 5000,
+            "options": [
+                { "value": 2000, "label": "2 s", "label[zh_CN]": "2 秒" },
+                { "value": 5000, "label": "5 s", "label[zh_CN]": "5 秒" },
+                { "value": 10000, "label": "10 s", "label[zh_CN]": "10 秒" }
+            ]
+        }
+    ],
     "builtin": true
 }

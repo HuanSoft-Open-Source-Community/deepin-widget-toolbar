@@ -24,11 +24,12 @@ deepin 桌面之側欄也，仿 Vista 之制，依 dde-shell 插件之體。
 - **網格**：四列之格，縱向無窮可滾（DDE 樣式滾條，閒則自隱）；組件以 `cols × rows` 占格
 - **拖放與整理**：長按可移組件至任意格（含非首列）；位既存，不強行補位；拖曳時所占者實時避讓，或上或下、數件聯動而動畫，移開或止則復位；左下"整理"之鈕，按左上優先壓實
 - **加添**：下方"添加"之鈕，彈出面板（毛玻璃、系統圓角、圓叉而闔、無題無欄），列內置與已加者，可入 `.dwpkg`（tar.xz）之包，可卸第三方之件
-- **內置**：時鐘、曆、系統之監、便箋（每例各存其文）、世界之時，及通欄一行之端闔樂部歌詞
-- **開宗**：manifest 清單 + 例之上下文（`dataDir`/`instanceId`）+ 宿主之能（`FileIO`/`SystemInfo`/`Lyrics`），詳見 [widget-api.md](widget-api.md)
+- **右鍵**：組件之上右鍵，可改尺寸（`1×1` / `2×2` / `4×2` / `4×4`）、開其例之設、去其顯示
+- **內置**：時鐘（數字/指針）、曆、系統之監（可擇 CPU/內存/磁盤 IO/GPU/NPU 之顯示與刷新）、便箋（每例各存其文）、世界之時（數字或隨尺寸而變之指針表盤網格），及可擇字體顏色之端闈樂部歌詞
+- **開宗**：manifest（`sizes` + `settings`）+ 例之上下文（`dataDir`/`instanceId`/`widgetConfig`）+ 宿主之能（`FileIO`/`SystemInfo`/`Lyrics`），詳見 [widget-api.md](widget-api.md)
 - **置頂/置底**：欄首 DTK 圖釘之鈕，置頂則恆居萬窗上（`LayerOverlay`），置底則凡窗可覆（`LayerButtom`）
 - **任務欄鈕**：dde-dock 托盤插件，按之顯隱——此為顯隱唯一之途，失焦不自閉
-- **存**：`visible` 與 `pinned` 記於 DConfig，重啟而復；組件之單存於 `~/.local/share/org.deepin.ds.widgettoolbar/installed.json`
+- **存**：`visible` 與 `pinned` 記於 DConfig，重啟而復；組件之單存於 `~/.local/share/org.deepin.ds.widgettoolbar/installed.json`，每例之設另存於其數據之目
 - **諸文**：QML 皆用 `qsTr`，廿三種語言之 `.ts`（簡體已譯）
 - **多屏**：欄隨任務欄所在之屏
 
@@ -93,6 +94,7 @@ systemctl --user restart dde-shell@DDE
 - 置頂則凡窗不覆；置底則可覆。
 - 點欄外之空處不閉。
 - 重啟而態存。
+- 右鍵組件，唯現其 manifest 所允之尺寸；改之則存而不失，他件避讓不疊；"取消顯示"則去其例。
 
 ## 目
 
@@ -108,15 +110,16 @@ deepin-widget-toolbar/
 │   ├── README.md           # 英文
 │   ├── README.zh-Hans.md   # 簡體中文
 │   ├── README.zh-Pre-Qin.md# 文言（先秦文風）
-│   └── widget-api.md       # 小組件開放接口之範（v0.1）
+│   ├── widget-api.md       # 小組件開放接口之範（v1.2）
+│   └── system-monitor.md   # CPU/內存/磁盤/GPU/NPU 之源與算法
 ├── panel/                  # dde-shell DPanel 插件
 │   ├── CMakeLists.txt      # 欄之構建（Dde::Shell + 翻譯 + 安裝）
 │   ├── widgettoolbarpanel.*# DPanel + D-Bus 之務（顯隱/置頂/菜單之動）+ 組件之宿主
 │   ├── widgetmanager.*     # 組件之掃 / installed.json / 網格槽 / .dwpkg 之入
 │   ├── widgetmodel.*       # 組件清單之模（添加面板）
 │   ├── fileio.*            # 宿主之能：文之讀寫（QML 單例）
-│   ├── systeminfo.*        # 宿主之能：CPU/內存/磁盤（QML 單例）
-│   ├── lyricssource.*      # 宿主之能：端闔樂部歌詞（A/B 雙緩，QML 單例）
+│   ├── systeminfo.*        # 宿主之能：CPU/內存/磁盤 IO/GPU/NPU（QML 單例）
+│   ├── lyricssource.*      # 宿主之能：端闈樂部歌詞（A/B 雙緩，QML 單例）
 │   ├── widgetresources.qrc # 內置組件資源之註
 │   ├── configs/            # DConfig 元數據
 │   ├── translations/       # 欄之翻譯（廿三語 .ts）
@@ -126,9 +129,11 @@ deepin-widget-toolbar/
 │       ├── AddWidgetPopup.qml  # 添加組件彈出之面（PanelPopup 之體）
 │       ├── SettingsDialog.qml  # 設置彈出之面（顯欄/置頂）
 │       ├── AboutPopup.qml  # 關於彈出之面（團隊/倉庫/官網之鏈）
+│       ├── WidgetSettingsPopup.qml # 依 manifest schema 而生成之例設面板
+│       ├── PopupHeader.qml  # 面板共用之題欄
 │       ├── PinButton.qml   # 置頂之鈕
 │       ├── icons/          # 置頂/置底圖釘之圖
-│       └── widgets/        # 內置組件（clock/calendar/systemmonitor/todo/worldtime/lyrics）
+│       └── widgets/        # 內置組件與共用 WidgetCard 之卡
 └── tray/                   # dde-tray-loader 插件
     ├── CMakeLists.txt      # 托盤插件構建（Qt6 + DTK6 + 翻譯 + 安裝）
     ├── metadata.json       # 插件元數據（api 2.0.0）

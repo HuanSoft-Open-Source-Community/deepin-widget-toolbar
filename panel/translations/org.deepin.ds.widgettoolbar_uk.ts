@@ -106,6 +106,17 @@
     </message>
 </context>
 <context>
+    <name>WidgetSettingsPopup</name>
+    <message>
+        <source>Widget settings</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>This widget has no configurable options</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>main</name>
     <message>
         <source>System Monitor</source>
@@ -225,6 +236,54 @@
     </message>
     <message>
         <source>Ter-Music Lyrics</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Small</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Medium</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wide</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Large</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Settings…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>GPU</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>N/A</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NPU</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>No metrics enabled</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>UTC+</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>UTC</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

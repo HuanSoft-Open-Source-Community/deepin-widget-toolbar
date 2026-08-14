@@ -5,11 +5,36 @@
     "description": "A monthly calendar widget",
     "description[zh_CN]": "月历小组件",
     "version": "1.0.0",
-    "apiVersion": "1.0",
+    "apiVersion": "1.2",
     "author": "deepin-widget-toolbar",
     "icon": "x-office-calendar",
     "runtime": "qml",
     "entry": "main.qml",
     "defaultSize": { "cols": 2, "rows": 2 },
+    "sizes": [
+        { "cols": 2, "rows": 2 },
+        { "cols": 4, "rows": 2 },
+        { "cols": 4, "rows": 4 }
+    ],
+    "settings": [
+        {
+            "key": "weekStartsOn",
+            "type": "enum",
+            "label": "Week starts on",
+            "label[zh_CN]": "一周起始日",
+            "default": "sunday",
+            "options": [
+                { "value": "sunday", "label": "Sunday", "label[zh_CN]": "周日" },
+                { "value": "monday", "label": "Monday", "label[zh_CN]": "周一" }
+            ]
+        },
+        {
+            "key": "highlightToday",
+            "type": "boolean",
+            "label": "Highlight today",
+            "label[zh_CN]": "高亮今天",
+            "default": true
+        }
+    ],
     "builtin": true
 }

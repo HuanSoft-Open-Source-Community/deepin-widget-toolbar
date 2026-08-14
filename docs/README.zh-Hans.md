@@ -20,11 +20,12 @@
 - **🧩 小组件网格**：4 列网格布局，纵向无限滚动（DDE 样式滚动条，不活跃自动隐藏）；小组件按 `cols × rows` 占格
 - **🖱️ 拖放与整理**：长按可把小组件拖到任意格子（含每行非首列）；位置持久保持、不做强制补位；拖拽过程中被占用的小组件会实时双向让位（多个组件联动、带动画），移开或取消则回弹；左下角"整理"按钮按左上优先压实
 - **➕ 添加面板**：底部"添加"按钮弹出面板（透明毛玻璃、系统圆角、圆形叉号关闭、无标题栏），陈列内置与已添加小组件，支持 `.dwpkg`（tar.xz）导入与第三方卸载
-- **🕐 内置小组件**：时钟、日历、资源监视仪表、便签（按实例隔离持久化）、世界时间，以及占满一行的端闱乐部歌词小组件
-- **🔌 开放接口**：manifest 清单 + 实例上下文注入（`dataDir`/`instanceId`）+ 宿主能力代理（`FileIO`/`SystemInfo`/`Lyrics`），规范见 [widget-api.md](widget-api.md)
+- **🖱️ 组件右键菜单**：右键任意小组件可切换 manifest 声明的尺寸（`1×1` / `2×2` / `4×2` / `4×4`）、打开按实例保存的配置面板或取消显示
+- **🕐 内置小组件**：时钟（数字/指针）、日历、资源监视仪表（可配置 CPU/内存/磁盘 IO/GPU/NPU 显示与刷新间隔）、便签（按实例隔离持久化）、世界时间（数字列表或随尺寸变化的指针表盘网格），以及可配置字体与颜色的端闱乐部歌词小组件
+- **🔌 开放接口**：manifest（`sizes` + `settings`）+ 实例上下文注入（`dataDir`/`instanceId`/`widgetConfig`）+ 宿主能力代理（`FileIO`/`SystemInfo`/`Lyrics`），规范见 [widget-api.md](widget-api.md)
 - **📌 置顶/置底**：标题栏的 DTK 图钉按钮在*置顶*（始终在其他窗口之上，`LayerOverlay`）与*置底*（可被普通窗口覆盖，`LayerButtom`）之间切换
 - **🔘 任务栏触发按钮**：dde-dock 托盘插件控制面板显隐——这是显示/隐藏的唯一途径，失焦不会自动关闭
-- **💾 状态持久化**：`visible` 与 `pinned` 状态经 DConfig 持久化，重启后恢复；小组件实例清单存于 `~/.local/share/org.deepin.ds.widgettoolbar/installed.json`
+- **💾 状态持久化**：`visible` 与 `pinned` 状态经 DConfig 持久化，重启后恢复；小组件实例清单存于 `~/.local/share/org.deepin.ds.widgettoolbar/installed.json`，按实例配置存于对应小组件数据目录
 - **🌐 国际化**：QML 全量 `qsTr`，23 种语言 `.ts`（简体中文已翻译）
 - **🖥️ 多屏支持**：面板跟随任务栏所在的屏幕
 
@@ -86,6 +87,8 @@ systemctl --user restart dde-shell@DDE
 - 任务栏按钮切换面板，其高亮跟随面板状态。
 - 置顶时面板不被普通窗口覆盖；置底时可以被覆盖。
 - 点击面板外空白处不会关闭面板。
+- 右键小组件只显示其 manifest 声明的尺寸；调整尺寸后位置持久化且与其它组件不重叠；"取消显示"删除该实例。
+- 时钟与歌词的实例配置修改后立即生效，重启后保留。
 - 重启后状态保持。
 
 ## 📁 目录结构
@@ -102,14 +105,15 @@ deepin-widget-toolbar/
 │   ├── README.md           # 英文
 │   ├── README.zh-Hans.md   # 简体中文
 │   ├── README.zh-Pre-Qin.md# 文言文（先秦文风）
-│   └── widget-api.md       # 小组件开放接口规范（v0.1）
+│   ├── widget-api.md       # 小组件开放接口规范（v1.2）
+│   └── system-monitor.md   # CPU/内存/磁盘/GPU/NPU 指标来源与公式
 ├── panel/                  # dde-shell DPanel 插件
 │   ├── CMakeLists.txt      # 面板构建（Dde::Shell + 翻译 + 安装）
 │   ├── widgettoolbarpanel.*# DPanel + D-Bus 服务（显隐/置顶/菜单动作）+ 小组件宿主
 │   ├── widgetmanager.*     # 小组件扫描 / installed.json / 网格槽 / .dwpkg 导入
 │   ├── widgetmodel.*       # 小组件列表模型（添加面板）
 │   ├── fileio.*            # 宿主能力代理：文件读写（QML 单例）
-│   ├── systeminfo.*        # 宿主能力代理：CPU/内存/磁盘（QML 单例）
+│   ├── systeminfo.*        # 宿主能力代理：CPU/内存/磁盘 IO/GPU/NPU（QML 单例）
 │   ├── lyricssource.*      # 宿主能力代理：端闱乐部歌词（A/B 双缓冲，QML 单例）
 │   ├── widgetresources.qrc # 内置小组件资源注册
 │   ├── configs/            # DConfig 元数据
@@ -120,9 +124,11 @@ deepin-widget-toolbar/
 │       ├── AddWidgetPopup.qml  # 添加小组件弹出面板（PanelPopup 框架）
 │       ├── SettingsDialog.qml  # 设置弹出面板（显示面板/置顶）
 │       ├── AboutPopup.qml  # 关于弹出面板（开发团队/仓库/官网链接）
+│       ├── WidgetSettingsPopup.qml # schema 驱动的组件实例配置面板
+│       ├── PopupHeader.qml  # 弹出面板共用标题栏
 │       ├── PinButton.qml   # 置顶按钮
 │       ├── icons/          # 置顶/取消置顶图钉图标
-│       └── widgets/        # 内置小组件（clock/calendar/systemmonitor/todo/worldtime/lyrics）
+│       └── widgets/        # 内置小组件与共用 WidgetCard 卡片
 └── tray/                   # dde-tray-loader 插件
     ├── CMakeLists.txt      # 托盘插件构建（Qt6 + DTK6 + 翻译 + 安装）
     ├── metadata.json       # 插件元数据（api 2.0.0）

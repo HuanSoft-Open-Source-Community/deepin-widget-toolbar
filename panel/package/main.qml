@@ -325,17 +325,37 @@ Window {
         if (target === addPopup) {
             settingsDialog.close()
             aboutDialog.close()
+            widgetSettingsDialog.close()
         } else if (target === settingsDialog) {
             addPopup.close()
             aboutDialog.close()
+            widgetSettingsDialog.close()
         } else if (target === aboutDialog) {
             addPopup.close()
             settingsDialog.close()
+            widgetSettingsDialog.close()
+        } else if (target === widgetSettingsDialog) {
+            addPopup.close()
+            settingsDialog.close()
+            aboutDialog.close()
         }
         if (target.visible)
             target.close()
         else
             target.open()
+    }
+
+    function openWidgetSettings(instanceId) {
+        addPopup.close()
+        settingsDialog.close()
+        aboutDialog.close()
+        widgetSettingsDialog.openFor(instanceId)
+    }
+
+    function openWidgetMenu(instanceId) {
+        widgetContextMenu.currentInstanceId = instanceId
+        widgetContextMenu.currentWidgetId = Panel.widgetManager.instanceWidgetId(instanceId)
+        widgetContextMenu.popup()
     }
 
     // ===== 窗口基础配置（与通知中心一致的尺寸与样式） =====
@@ -584,10 +604,16 @@ Window {
 
                             x: root.cellX(modelData)
                             y: root.cellY(modelData)
-                            width: Panel.widgetManager.instanceCols(modelData) * cellWidth
-                                + (Panel.widgetManager.instanceCols(modelData) - 1) * cellSpacing
-                            height: Panel.widgetManager.instanceRows(modelData) * cellHeight
-                                + (Panel.widgetManager.instanceRows(modelData) - 1) * cellSpacing
+                            width: {
+                                let version = root.layoutVersion
+                                return Panel.widgetManager.instanceCols(modelData) * cellWidth
+                                    + (Panel.widgetManager.instanceCols(modelData) - 1) * cellSpacing
+                            }
+                            height: {
+                                let version = root.layoutVersion
+                                return Panel.widgetManager.instanceRows(modelData) * cellHeight
+                                    + (Panel.widgetManager.instanceRows(modelData) - 1) * cellSpacing
+                            }
                             // 拖拽中淡化原实例，预览快照随指针移动
                             opacity: root.dragging && modelData === root.dragInstanceId ? 0.35 : 1.0
                             // 位置变化动画：拖拽中其它实例实时让位、松手落位、整理、回弹都走这里
@@ -628,6 +654,38 @@ Window {
                                 onCanceled: if (root.dragging) root.endDrag()
                             }
 
+                            // 右键菜单层：只接收右键，不影响左键点击与长按拖拽
+                            MouseArea {
+                                id: widgetContextArea
+                                anchors.fill: parent
+                                z: widgetDragArea.z + 1
+                                acceptedButtons: Qt.RightButton
+                                onClicked: function(mouse) {
+                                    root.openWidgetMenu(widgetHost.modelData)
+                                }
+                            }
+
+                            // 实例配置对象：初始加载时注入，保存后由 Connections 刷新
+                            property var widgetConfig: Panel.widgetManager.instanceConfig(widgetHost.modelData)
+                            property int hostCols: {
+                                let version = root.layoutVersion
+                                return Panel.widgetManager.instanceCols(widgetHost.modelData)
+                            }
+                            property int hostRows: {
+                                let version = root.layoutVersion
+                                return Panel.widgetManager.instanceRows(widgetHost.modelData)
+                            }
+
+                            Connections {
+                                target: Panel.widgetManager
+                                function onInstanceConfigChanged(instanceId) {
+                                    if (instanceId === widgetHost.modelData) {
+                                        widgetHost.widgetConfig =
+                                            Panel.widgetManager.instanceConfig(instanceId)
+                                    }
+                                }
+                            }
+
                             // 注入实例上下文（开放接口的一部分）：
                             // dataDir 为宿主隔离的实例数据目录，instanceId 标识实例。
                             // 用 Binding 注入：小组件根对象创建后即生效并持续同步
@@ -641,6 +699,21 @@ Window {
                                 target: widgetLoader.item
                                 property: "instanceId"
                                 value: widgetHost.modelData
+                            }
+                            Binding {
+                                target: widgetLoader.item
+                                property: "widgetConfig"
+                                value: widgetHost.widgetConfig
+                            }
+                            Binding {
+                                target: widgetLoader.item
+                                property: "hostCols"
+                                value: widgetHost.hostCols
+                            }
+                            Binding {
+                                target: widgetLoader.item
+                                property: "hostRows"
+                                value: widgetHost.hostRows
                             }
 
                             // 小组件实例数据目录（示例：todo 便签持久化）
@@ -740,12 +813,55 @@ Window {
         }
     }
 
+    // ===== 单个小组件的右键菜单 =====
+    Menu {
+        id: widgetContextMenu
+
+        property string currentInstanceId: ""
+        property string currentWidgetId: ""
+
+        MenuItem {
+            text: qsTr("Small") + " 1×1"
+            visible: Panel.widgetManager.isSizeSupported(widgetContextMenu.currentWidgetId, 1, 1)
+            onTriggered: Panel.widgetManager.setInstanceSize(widgetContextMenu.currentInstanceId, 1, 1)
+        }
+        MenuItem {
+            text: qsTr("Medium") + " 2×2"
+            visible: Panel.widgetManager.isSizeSupported(widgetContextMenu.currentWidgetId, 2, 2)
+            onTriggered: Panel.widgetManager.setInstanceSize(widgetContextMenu.currentInstanceId, 2, 2)
+        }
+        MenuItem {
+            text: qsTr("Wide") + " 4×2"
+            visible: Panel.widgetManager.isSizeSupported(widgetContextMenu.currentWidgetId, 4, 2)
+            onTriggered: Panel.widgetManager.setInstanceSize(widgetContextMenu.currentInstanceId, 4, 2)
+        }
+        MenuItem {
+            text: qsTr("Large") + " 4×4"
+            visible: Panel.widgetManager.isSizeSupported(widgetContextMenu.currentWidgetId, 4, 4)
+            onTriggered: Panel.widgetManager.setInstanceSize(widgetContextMenu.currentInstanceId, 4, 4)
+        }
+        MenuSeparator { }
+        MenuItem {
+            text: qsTr("Settings…")
+            visible: Panel.widgetManager.widgetSettingsSchema(widgetContextMenu.currentWidgetId).length > 0
+            onTriggered: root.openWidgetSettings(widgetContextMenu.currentInstanceId)
+        }
+        MenuItem {
+            text: qsTr("Remove")
+            onTriggered: Panel.widgetManager.removeInstance(widgetContextMenu.currentInstanceId)
+        }
+    }
+
     // ===== 设置与关于对话框 =====
     SettingsDialog {
         id: settingsDialog
     }
     AboutPopup {
         id: aboutDialog
+    }
+
+    WidgetSettingsPopup {
+        id: widgetSettingsDialog
     }
 
     // 托盘右键菜单经 D-Bus 触发的动作统一在这里执行

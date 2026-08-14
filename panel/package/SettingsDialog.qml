@@ -35,42 +35,9 @@ PanelPopup {
             spacing: 12
 
             // ===== 标题栏：标题 + 圆形叉号 =====
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-                Text {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 6
-                    text: qsTr("Settings")
-                    font: DTK.fontManager.t4
-                    elide: Text.ElideRight
-                    color: palette.windowText
-                }
-
-                Rectangle {
-                    id: closeBtn
-                    Layout.preferredWidth: 28
-                    Layout.preferredHeight: 28
-                    radius: width / 2
-                    color: closeBtnArea.pressed
-                        ? Qt.rgba(0, 0, 0, 0.15)
-                        : closeBtnArea.containsMouse ? Qt.rgba(0, 0, 0, 0.1) : "transparent"
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "✕"
-                        font.pixelSize: 12
-                        color: palette.windowText
-                    }
-
-                    MouseArea {
-                        id: closeBtnArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: control.close()
-                    }
-                }
+            PopupHeader {
+                title: qsTr("Settings")
+                onCloseRequested: control.close()
             }
 
             // ===== 设置项 =====

@@ -6,20 +6,33 @@ import QtQuick
 import QtQuick.Controls
 import org.deepin.dtk 1.0
 import org.deepin.widgettoolbar 1.0
+import "../components" as Components
 
 // 内置示例小组件：便签（默认 2×2）
 // 实例数据持久化演示：写入 dataDir/<instanceId>.txt（宿主隔离的实例数据目录）
-Item {
+Components.WidgetCard {
     id: root
 
-    // 由宿主 Loader 注入的实例上下文
+    property var widgetConfig: ({})
     property string dataDir: ""
     property string instanceId: ""
 
     property string notePath: dataDir.length > 0 && instanceId.length > 0
         ? dataDir + "/" + instanceId + ".txt" : ""
+    property int titlePixelSize: Math.max(10, Math.min(20, Math.round(content.width * 0.04)))
+    property real noteFontScale: {
+        var mode = widgetConfig && widgetConfig.noteFontScale ? widgetConfig.noteFontScale : "medium"
+        if (mode === "small")
+            return 0.85
+        if (mode === "large")
+            return 1.2
+        return 1.0
+    }
+    property int notePixelSize: Math.max(9, Math.min(20,
+        Math.round(content.height * 0.09 * noteFontScale)))
+    property int autoSaveInterval: widgetConfig && widgetConfig.autoSaveInterval
+        ? Number(widgetConfig.autoSaveInterval) : 5000
 
-    // 注入属性就绪（notePath 变化）后加载已保存内容
     onNotePathChanged: {
         Qt.callLater(function () {
             if (noteArea)
@@ -27,21 +40,14 @@ Item {
         })
     }
 
-    Rectangle {
-        anchors.fill: parent
-        radius: DTK.platformTheme.windowRadius
-        color: DTK.themeType === ApplicationHelper.DarkType
-            ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.05)
-    }
-
     Column {
+        id: content
         anchors.fill: parent
-        anchors.margins: 8
         spacing: 4
 
         Text {
             text: qsTr("Sticky Note")
-            font: DTK.fontManager.t6
+            font.pixelSize: root.titlePixelSize
             color: palette.windowText
         }
 
@@ -49,7 +55,7 @@ Item {
             id: noteArea
             width: parent.width
             height: parent.height - 30
-            font: DTK.fontManager.t7
+            font.pixelSize: root.notePixelSize
             color: palette.windowText
             placeholderText: qsTr("Write something…")
             background: Rectangle {
@@ -57,8 +63,6 @@ Item {
                 color: "transparent"
             }
 
-            // 注入的 dataDir/instanceId 变化时加载（晚于 Component.onCompleted，
-            // 因此不能依赖 onCompleted 读取）
             function loadNote() {
                 if (root.notePath.length > 0 && FileIO.exists(root.notePath))
                     noteArea.text = FileIO.readTextFile(root.notePath)
@@ -68,17 +72,15 @@ Item {
                     FileIO.writeTextFile(root.notePath, text)
             }
 
-            // 失焦与销毁时保存（销毁时保存可避免实例被移除/重建导致输入丢失）
             onActiveFocusChanged: {
                 if (!activeFocus)
                     saveNote()
             }
             Component.onDestruction: saveNote()
 
-            // 定时兜底保存（防长时间未失焦导致数据丢失）
             Timer {
                 id: autoSaveTimer
-                interval: 5000
+                interval: root.autoSaveInterval
                 repeat: true
                 running: noteArea.activeFocus
                 onTriggered: noteArea.saveNote()

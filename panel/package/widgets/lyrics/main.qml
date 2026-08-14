@@ -6,16 +6,24 @@ import QtQuick
 import QtQuick.Layouts
 import org.deepin.dtk 1.0
 import org.deepin.widgettoolbar 1.0
+import "../components" as Components
 
 // 内置小组件：端闱乐部歌词（默认 4×2，占满一行）
-// 数据来自宿主能力代理 Lyrics（org.deepin.widgettoolbar）：
-// 会话 D-Bus 订阅 org.mpris.MediaPlayer2.ter_music 的 A/B 双缓冲歌词快照，
-// 按槽位固定布局：A 槽居左、B 槽居右，随 active_line 交替高亮，
-// 并处理未启动/未播放/无歌词三种状态。
-Item {
+// 支持按实例配置字体族与基础颜色；数据仍由宿主 Lyrics 代理提供。
+Components.WidgetCard {
     id: root
 
-    // 空态/降级提示：仅当无需展示歌词时非空
+    property var widgetConfig: ({})
+    property string lyricFontFamily: widgetConfig && widgetConfig.lyricsFont
+        ? widgetConfig.lyricsFont : DTK.fontManager.t4.family
+    property string lyricColor: widgetConfig && widgetConfig.lyricsColor
+        ? widgetConfig.lyricsColor : "auto"
+    property int contentHeight: Math.max(1, height - margin * 2)
+    property int activePixelSize: Math.max(13, Math.min(42,
+        Math.round(contentHeight * 0.105)))
+    property int inactivePixelSize: Math.max(11, Math.min(32,
+        Math.round(contentHeight * 0.078)))
+
     property string statusText: {
         if (!Lyrics.connected)
             return qsTr("Start Ter-Music and play a song to show lyrics")
@@ -26,11 +34,10 @@ Item {
         return ""
     }
 
-    Rectangle {
-        anchors.fill: parent
-        radius: DTK.platformTheme.windowRadius
-        color: DTK.themeType === ApplicationHelper.DarkType
-            ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.05)
+    function textColor(active) {
+        if (root.lyricColor !== "auto")
+            return root.lyricColor
+        return active ? palette.highlight : palette.windowText
     }
 
     // 标题行：应用图标 + 标题 + 连接状态圆点
@@ -39,9 +46,9 @@ Item {
             top: parent.top
             left: parent.left
             right: parent.right
-            topMargin: 10
-            leftMargin: 12
-            rightMargin: 12
+            topMargin: 2
+            leftMargin: 2
+            rightMargin: 2
         }
         spacing: 6
 
@@ -71,22 +78,20 @@ Item {
         }
     }
 
-    // 两行歌词：A 槽居左、B 槽居右，活动槽高亮、另一槽弱化，体现 A/B 双缓冲
     ColumnLayout {
         anchors {
             top: parent.top
-            topMargin: 34
+            topMargin: 26
             left: parent.left
-            leftMargin: 12
+            leftMargin: 2
             right: parent.right
-            rightMargin: 12
+            rightMargin: 2
             bottom: parent.bottom
-            bottomMargin: 10
+            bottomMargin: 2
         }
         spacing: 8
         visible: Lyrics.connected && Lyrics.hasTrack && Lyrics.hasLyrics
 
-        // A 槽（居左）：active_line 为 A 时高亮
         Text {
             id: slotA
             Layout.fillWidth: true
@@ -94,8 +99,10 @@ Item {
             horizontalAlignment: Text.AlignLeft
             verticalAlignment: Text.AlignVCenter
             text: Lyrics.lineAText.length > 0 ? Lyrics.lineAText : "· · ·"
-            font: Lyrics.activeLineA ? DTK.fontManager.t4 : DTK.fontManager.t6
-            color: Lyrics.activeLineA ? palette.highlight : palette.windowText
+            font.family: root.lyricFontFamily
+            font.pixelSize: Lyrics.activeLineA
+                ? root.activePixelSize : root.inactivePixelSize
+            color: root.textColor(Lyrics.activeLineA)
             opacity: Lyrics.activeLineA ? 1.0 : 0.55
             wrapMode: Text.Wrap
             elide: Text.ElideRight
@@ -104,7 +111,6 @@ Item {
             Behavior on opacity { NumberAnimation { duration: 200 } }
         }
 
-        // B 槽（居右）：active_line 为 B 时高亮
         Text {
             id: slotB
             Layout.fillWidth: true
@@ -112,8 +118,10 @@ Item {
             horizontalAlignment: Text.AlignRight
             verticalAlignment: Text.AlignVCenter
             text: Lyrics.lineBText.length > 0 ? Lyrics.lineBText : "· · ·"
-            font: Lyrics.activeLineA ? DTK.fontManager.t6 : DTK.fontManager.t4
-            color: Lyrics.activeLineA ? palette.windowText : palette.highlight
+            font.family: root.lyricFontFamily
+            font.pixelSize: Lyrics.activeLineA
+                ? root.inactivePixelSize : root.activePixelSize
+            color: root.textColor(!Lyrics.activeLineA)
             opacity: Lyrics.activeLineA ? 0.55 : 1.0
             wrapMode: Text.Wrap
             elide: Text.ElideRight
@@ -121,20 +129,18 @@ Item {
             Behavior on color { ColorAnimation { duration: 200 } }
             Behavior on opacity { NumberAnimation { duration: 200 } }
         }
-
     }
 
-    // 空态提示：未启动 / 未播放 / 无歌词（独立于歌词列，避免随歌词列隐藏）
     Text {
         anchors {
             top: parent.top
-            topMargin: 34
+            topMargin: 26
             left: parent.left
-            leftMargin: 12
+            leftMargin: 2
             right: parent.right
-            rightMargin: 12
+            rightMargin: 2
             bottom: parent.bottom
-            bottomMargin: 10
+            bottomMargin: 2
         }
         verticalAlignment: Text.AlignVCenter
         horizontalAlignment: Text.AlignHCenter

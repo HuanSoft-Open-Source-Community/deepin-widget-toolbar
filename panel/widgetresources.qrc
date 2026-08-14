@@ -1,6 +1,9 @@
 <RCC>
     <qresource prefix="/widgets">
         <!-- 内置示例小组件（源文件在 package/widgets/ 下，随插件一并安装） -->
+        <file alias="components/WidgetCard.qml">package/widgets/components/WidgetCard.qml</file>
+        <file alias="components/AnalogClock.qml">package/widgets/components/AnalogClock.qml</file>
+        <file alias="components/qmldir">package/widgets/components/qmldir</file>
         <file alias="clock/main.qml">package/widgets/clock/main.qml</file>
         <file alias="clock/manifest.json">package/widgets/clock/manifest.json</file>
         <file alias="calendar/main.qml">package/widgets/calendar/main.qml</file>

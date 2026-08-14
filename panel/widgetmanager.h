@@ -11,6 +11,7 @@
 #include <QSize>
 #include <QStringList>
 #include <QVariant>
+#include <QVariantMap>
 
 // 小组件宿主（Panel）侧的管理器：
 //  - 扫描内置（qrc:/widgets/）与第三方（~/.local/share/org.deepin.ds.widgettoolbar/widgets/）小组件
@@ -32,7 +33,9 @@ public:
         QString author;
         QString runtime;   // "qml"
         QString entry;     // 相对 widget 目录的入口，如 "main.qml"
-        QSize defaultSize; // 格数 {cols, rows}
+        QSize defaultSize;            // 格数 {cols, rows}
+        QList<QSize> supportedSizes;  // manifest 允许的占位尺寸（至少含 defaultSize）
+        QVariantList settingsSchema;  // manifest 声明的配置项 schema（供配置面板渲染）
         bool builtin = false;
         QString dir;       // 绝对路径或 qrc 前缀（如 ":/widgets/clock"）
 
@@ -83,6 +86,15 @@ public:
     Q_INVOKABLE bool moveInstance(const QString &instanceId, int gridX, int gridY);
     // 一键自动排列：全部实例按列表顺序左上优先压实
     Q_INVOKABLE void autoArrangeAll();
+    // 组件允许的尺寸预设（QVariantList of {"cols":n,"rows":m}）
+    Q_INVOKABLE QVariantList supportedSizes(const QString &widgetId) const;
+    Q_INVOKABLE bool isSizeSupported(const QString &widgetId, int cols, int rows) const;
+    // 修改实例占位尺寸：保持左上角偏好位置，冲突时联动避让并持久化
+    Q_INVOKABLE bool setInstanceSize(const QString &instanceId, int cols, int rows);
+    // 实例配置面板：schema + 当前值 + 保存（按实例持久化）
+    Q_INVOKABLE QVariantList widgetSettingsSchema(const QString &widgetId) const;
+    Q_INVOKABLE QVariantMap instanceConfig(const QString &instanceId) const;
+    Q_INVOKABLE bool saveInstanceConfig(const QString &instanceId, const QVariantMap &values);
 
     // 添加一个小组件实例（放入首个空闲格，不移动其它实例）
     Q_INVOKABLE bool addWidget(const QString &widgetId);
@@ -106,6 +118,8 @@ Q_SIGNALS:
     void instancesChanged();
     // 仅位置变化（拖放落位/一键整理）：QML 只更新位置映射以保留动画
     void layoutChanged();
+    // 某个实例的配置已保存（QML 需刷新注入的 widgetConfig）
+    void instanceConfigChanged(const QString &instanceId);
 
 private:
     void scanWidgets();
@@ -127,6 +141,7 @@ private:
     WidgetInfo *findWidget(const QString &widgetId);
     const Instance *findInstance(const QString &instanceId) const;
     Instance *findInstance(const QString &instanceId);
+    QString instanceConfigPath(const QString &instanceId) const;
     static Instance instanceFromJson(const QJsonObject &obj);
     static QJsonObject instanceToJson(const Instance &inst);
 

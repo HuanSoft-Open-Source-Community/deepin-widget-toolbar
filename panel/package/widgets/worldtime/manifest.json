@@ -5,11 +5,81 @@
     "description": "World clock for multiple cities",
     "description[zh_CN]": "多城市世界时钟小组件",
     "version": "1.0.0",
-    "apiVersion": "1.0",
+    "apiVersion": "1.2",
     "author": "deepin-widget-toolbar",
     "icon": "preferences-system-time",
     "runtime": "qml",
     "entry": "main.qml",
     "defaultSize": { "cols": 2, "rows": 2 },
+    "sizes": [
+        { "cols": 1, "rows": 1 },
+        { "cols": 2, "rows": 2 },
+        { "cols": 4, "rows": 2 },
+        { "cols": 4, "rows": 4 }
+    ],
+    "settings": [
+        {
+            "key": "clockMode",
+            "type": "enum",
+            "label": "Clock mode",
+            "label[zh_CN]": "时钟模式",
+            "default": "digital",
+            "options": [
+                { "value": "digital", "label": "Digital", "label[zh_CN]": "数字" },
+                { "value": "analog", "label": "Analog", "label[zh_CN]": "指针" }
+            ]
+        },
+        {
+            "key": "customOffset",
+            "type": "enum",
+            "label": "Custom timezone",
+            "label[zh_CN]": "自定义时区",
+            "default": -99,
+            "options": [
+                { "value": -99, "label": "None", "label[zh_CN]": "无" },
+                { "value": -12, "label": "UTC-12", "label[zh_CN]": "UTC-12" },
+                { "value": -11, "label": "UTC-11", "label[zh_CN]": "UTC-11" },
+                { "value": -10, "label": "UTC-10", "label[zh_CN]": "UTC-10" },
+                { "value": -9, "label": "UTC-9", "label[zh_CN]": "UTC-9" },
+                { "value": -8, "label": "UTC-8", "label[zh_CN]": "UTC-8" },
+                { "value": -7, "label": "UTC-7", "label[zh_CN]": "UTC-7" },
+                { "value": -6, "label": "UTC-6", "label[zh_CN]": "UTC-6" },
+                { "value": -5, "label": "UTC-5", "label[zh_CN]": "UTC-5" },
+                { "value": -4, "label": "UTC-4", "label[zh_CN]": "UTC-4" },
+                { "value": -3, "label": "UTC-3", "label[zh_CN]": "UTC-3" },
+                { "value": -2, "label": "UTC-2", "label[zh_CN]": "UTC-2" },
+                { "value": -1, "label": "UTC-1", "label[zh_CN]": "UTC-1" },
+                { "value": 0, "label": "UTC+0", "label[zh_CN]": "UTC+0" },
+                { "value": 1, "label": "UTC+1", "label[zh_CN]": "UTC+1" },
+                { "value": 2, "label": "UTC+2", "label[zh_CN]": "UTC+2" },
+                { "value": 3, "label": "UTC+3", "label[zh_CN]": "UTC+3" },
+                { "value": 4, "label": "UTC+4", "label[zh_CN]": "UTC+4" },
+                { "value": 5, "label": "UTC+5", "label[zh_CN]": "UTC+5" },
+                { "value": 6, "label": "UTC+6", "label[zh_CN]": "UTC+6" },
+                { "value": 7, "label": "UTC+7", "label[zh_CN]": "UTC+7" },
+                { "value": 8, "label": "UTC+8", "label[zh_CN]": "UTC+8" },
+                { "value": 9, "label": "UTC+9", "label[zh_CN]": "UTC+9" },
+                { "value": 10, "label": "UTC+10", "label[zh_CN]": "UTC+10" },
+                { "value": 11, "label": "UTC+11", "label[zh_CN]": "UTC+11" },
+                { "value": 12, "label": "UTC+12", "label[zh_CN]": "UTC+12" },
+                { "value": 13, "label": "UTC+13", "label[zh_CN]": "UTC+13" },
+                { "value": 14, "label": "UTC+14", "label[zh_CN]": "UTC+14" }
+            ]
+        },
+        {
+            "key": "showLabels",
+            "type": "boolean",
+            "label": "Show dial labels",
+            "label[zh_CN]": "显示表盘标签",
+            "default": true
+        },
+        {
+            "key": "highlightLocal",
+            "type": "boolean",
+            "label": "Highlight local time",
+            "label[zh_CN]": "高亮本机时间",
+            "default": true
+        }
+    ],
     "builtin": true
 }

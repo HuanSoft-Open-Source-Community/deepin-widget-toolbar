@@ -20,11 +20,12 @@ A Vista-style widget toolbar for the deepin desktop, built on the dde-shell plug
 - **🧩 Widget Grid**: 4-column grid layout with unlimited vertical scrolling (DDE-styled scrollbar, auto-hidden when idle); widgets occupy `cols × rows` cells
 - **🖱️ Drag & Arrange**: long-press to drag a widget to any cell (including off the first column); positions persist with no forced reflow; while dragging, occupied widgets move aside live in both directions (multiple widgets coordinated, animated), snapping back on cancel; the bottom-left Arrange button packs widgets to the top-left
 - **➕ Add Panel**: The "Add" button at the bottom opens a popup (translucent blur, system corner radius, round close button, no title bar) listing built-in and added widgets, with `.dwpkg` (tar.xz) import and third-party uninstall
-- **🕐 Built-in Widgets**: Clock, Calendar, System Monitor, Sticky Note (per-instance persisted data), World Time, and a full-width Ter-Music Lyrics widget
-- **🔌 Open API**: manifest + instance context injection (`dataDir`/`instanceId`) + host capability proxies (`FileIO`/`SystemInfo`/`Lyrics`); spec in [widget-api.md](widget-api.md)
+- **🖱️ Widget Context Menu**: right-click any widget to switch between manifest-declared sizes (`1×1` / `2×2` / `4×2` / `4×4`), open its per-instance settings, or remove it
+- **🕐 Built-in Widgets**: Clock (digital/analog), Calendar, System Monitor (configurable CPU/MEM/DISK IO/GPU/NPU rows and refresh interval), Sticky Note (per-instance persisted data), World Time (digital list or resizable analog dial grid), and a Ter-Music Lyrics widget with configurable font and color
+- **🔌 Open API**: manifest (`sizes` + `settings`) + instance context injection (`dataDir`/`instanceId`/`widgetConfig`) + host capability proxies (`FileIO`/`SystemInfo`/`Lyrics`); spec in [widget-api.md](widget-api.md)
 - **📌 Pin / Unpin**: A DTK pin button in the header toggles between *pinned* (always above other windows, `LayerOverlay`) and *unpinned* (covered by normal windows, `LayerButtom`)
 - **🔘 Dock Trigger Button**: A dde-dock tray plugin toggles the panel visibility — the only way to show or hide it, no auto-hide on focus loss
-- **💾 State Persistence**: `visible` and `pinned` states are persisted via DConfig and restored on restart; widget instances are stored in `~/.local/share/org.deepin.ds.widgettoolbar/installed.json`
+- **💾 State Persistence**: `visible` and `pinned` states are persisted via DConfig and restored on restart; widget instances are stored in `~/.local/share/org.deepin.ds.widgettoolbar/installed.json`, and per-instance settings are stored under each widget's data directory
 - **🌐 i18n**: all QML strings use `qsTr`, 23-language `.ts` files (Simplified Chinese translated)
 - **🖥️ Multi-screen**: The panel follows the screen where the dock resides
 
@@ -86,6 +87,8 @@ systemctl --user restart dde-shell@DDE
 - The dock tray button toggles the panel; its highlight follows the panel state.
 - Pinned panels are not covered by normal windows; unpinned panels can be.
 - Clicking outside the panel never closes it.
+- Right-clicking a widget offers only the sizes declared by its manifest; resizing persists and avoids other widgets; Remove deletes the instance.
+- Per-instance clock and lyrics settings apply immediately and survive a restart.
 - States persist across restarts.
 
 ## 📁 Directory Layout
@@ -102,14 +105,15 @@ deepin-widget-toolbar/
 │   ├── README.md           # this file (English)
 │   ├── README.zh-Hans.md   # Simplified Chinese
 │   ├── README.zh-Pre-Qin.md# Classical Chinese (Pre-Qin style)
-│   └── widget-api.md       # widget open API spec (v0.1)
+│   ├── widget-api.md       # widget open API spec (v1.2)
+│   └── system-monitor.md   # CPU/memory/disk/GPU/NPU metric sources and formulas
 ├── panel/                  # dde-shell DPanel plugin
 │   ├── CMakeLists.txt      # panel build (Dde::Shell + translations + install)
 │   ├── widgettoolbarpanel.*# DPanel + D-Bus service (visibility/pin/menu actions) + widget host
 │   ├── widgetmanager.*     # widget scanning / installed.json / grid slot / .dwpkg import
 │   ├── widgetmodel.*       # widget list model (add panel)
 │   ├── fileio.*            # host capability proxy: file I/O (QML singleton)
-│   ├── systeminfo.*        # host capability proxy: CPU/mem/disk (QML singleton)
+│   ├── systeminfo.*        # host capability proxy: CPU/mem/disk IO/GPU/NPU (QML singleton)
 │   ├── lyricssource.*      # host capability proxy: Ter-Music lyrics A/B buffer (QML singleton)
 │   ├── widgetresources.qrc # built-in widget resource registration
 │   ├── configs/            # DConfig metadata
@@ -120,9 +124,11 @@ deepin-widget-toolbar/
 │       ├── AddWidgetPopup.qml  # add-widget popup panel (PanelPopup framework)
 │       ├── SettingsDialog.qml  # settings popup (show panel / pin to top)
 │       ├── AboutPopup.qml  # about popup (team / repository / website links)
+│       ├── WidgetSettingsPopup.qml # schema-driven per-instance widget settings
+│       ├── PopupHeader.qml  # shared popup title bar
 │       ├── PinButton.qml   # pin button
 │       ├── icons/          # pin/unpin icon assets
-│       └── widgets/        # built-in widgets (clock/calendar/systemmonitor/todo/worldtime/lyrics)
+│       └── widgets/        # built-in widgets and shared WidgetCard component
 └── tray/                   # dde-tray-loader plugin
     ├── CMakeLists.txt      # tray plugin build (Qt6 + DTK6 + translations + install)
     ├── metadata.json       # plugin metadata (api 2.0.0)

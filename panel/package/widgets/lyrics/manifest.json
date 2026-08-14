@@ -5,11 +5,41 @@
     "description": "Shows the current and next lyric line from Ter-Music",
     "description[zh_CN]": "显示端闱乐部当前及下一句歌词",
     "version": "1.0.0",
-    "apiVersion": "1.1",
+    "apiVersion": "1.2",
     "author": "deepin-widget-toolbar",
     "icon": "media-player",
     "runtime": "qml",
     "entry": "main.qml",
     "defaultSize": { "cols": 4, "rows": 2 },
+    "sizes": [
+        { "cols": 2, "rows": 2 },
+        { "cols": 4, "rows": 2 },
+        { "cols": 4, "rows": 4 }
+    ],
+    "settings": [
+        {
+            "key": "lyricsFont",
+            "type": "font",
+            "label": "Lyrics font",
+            "label[zh_CN]": "歌词字体",
+            "default": "Noto Sans CJK SC"
+        },
+        {
+            "key": "lyricsColor",
+            "type": "color",
+            "label": "Lyrics color",
+            "label[zh_CN]": "歌词颜色",
+            "default": "auto",
+            "options": [
+                { "value": "auto", "label": "Follow theme", "label[zh_CN]": "跟随主题" },
+                { "value": "#ffffff", "label": "White", "label[zh_CN]": "白色" },
+                { "value": "#000000", "label": "Black", "label[zh_CN]": "黑色" },
+                { "value": "#4d8cff", "label": "Blue", "label[zh_CN]": "蓝色" },
+                { "value": "#ff4d4f", "label": "Red", "label[zh_CN]": "红色" },
+                { "value": "#22c55e", "label": "Green", "label[zh_CN]": "绿色" },
+                { "value": "#facc15", "label": "Yellow", "label[zh_CN]": "黄色" }
+            ]
+        }
+    ],
     "builtin": true
 }

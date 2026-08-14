@@ -106,6 +106,17 @@
     </message>
 </context>
 <context>
+    <name>WidgetSettingsPopup</name>
+    <message>
+        <source>Widget settings</source>
+        <translation>小组件设置</translation>
+    </message>
+    <message>
+        <source>This widget has no configurable options</source>
+        <translation>该小组件没有可配置选项</translation>
+    </message>
+</context>
+<context>
     <name>main</name>
     <message>
         <source>Widget Toolbar</source>
@@ -226,6 +237,54 @@
     <message>
         <source>About</source>
         <translation>关于</translation>
+    </message>
+    <message>
+        <source>Small</source>
+        <translation>小</translation>
+    </message>
+    <message>
+        <source>Medium</source>
+        <translation>中</translation>
+    </message>
+    <message>
+        <source>Wide</source>
+        <translation>宽</translation>
+    </message>
+    <message>
+        <source>Large</source>
+        <translation>大</translation>
+    </message>
+    <message>
+        <source>Settings…</source>
+        <translation>设置…</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>移除</translation>
+    </message>
+    <message>
+        <source>GPU</source>
+        <translation>GPU</translation>
+    </message>
+    <message>
+        <source>N/A</source>
+        <translation>不可用</translation>
+    </message>
+    <message>
+        <source>NPU</source>
+        <translation>NPU</translation>
+    </message>
+    <message>
+        <source>No metrics enabled</source>
+        <translation>未启用任何指标</translation>
+    </message>
+    <message>
+        <source>UTC+</source>
+        <translation>UTC+</translation>
+    </message>
+    <message>
+        <source>UTC</source>
+        <translation>UTC</translation>
     </message>
 </context>
 </TS>

@@ -12,6 +12,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
+#include <QJsonValue>
 #include <QLocale>
 #include <QProcess>
 #include <QRect>
@@ -37,6 +38,85 @@ static QString localeKey(const QString &base)
     if (!locale.isEmpty())
         return base + "[" + locale + "]";
     return base;
+}
+
+// 将 manifest 配置项 schema 转为 QML 可消费的 QVariantList，
+// 并把 label[zh_CN] 等本地化字段展开为 label。
+static QVariantList parseSettingsSchema(const QJsonArray &entries)
+{
+    QVariantList result;
+    const QString localizedLabel = localeKey("label");
+
+    for (const QJsonValue &value : entries) {
+        if (!value.isObject())
+            continue;
+        const QJsonObject obj = value.toObject();
+        QVariantMap item = obj.toVariantMap();
+        if (obj.contains(localizedLabel))
+            item.insert(QStringLiteral("label"), obj.value(localizedLabel).toString());
+
+        const QJsonArray options = obj.value("options").toArray();
+        if (!options.isEmpty()) {
+            QVariantList localizedOptions;
+            for (const QJsonValue &option : options) {
+                if (!option.isObject())
+                    continue;
+                const QJsonObject optionObj = option.toObject();
+                QVariantMap optionMap = optionObj.toVariantMap();
+                if (optionObj.contains(localizedLabel))
+                    optionMap.insert(QStringLiteral("label"), optionObj.value(localizedLabel).toString());
+                localizedOptions.append(optionMap);
+            }
+            item.insert(QStringLiteral("options"), localizedOptions);
+        }
+
+        if (!item.value(QStringLiteral("key")).toString().isEmpty()
+            && !item.value(QStringLiteral("type")).toString().isEmpty()) {
+            result.append(item);
+        }
+    }
+    return result;
+}
+
+static QStringList schemaKeys(const QVariantList &schema)
+{
+    QStringList keys;
+    for (const QVariant &item : schema) {
+        const QString key = item.toMap().value(QStringLiteral("key")).toString();
+        if (!key.isEmpty() && !keys.contains(key))
+            keys.append(key);
+    }
+    return keys;
+}
+
+static QVariantMap defaultConfig(const QVariantList &schema)
+{
+    QVariantMap config;
+    for (const QVariant &item : schema) {
+        const QVariantMap entry = item.toMap();
+        const QString key = entry.value(QStringLiteral("key")).toString();
+        if (!key.isEmpty() && entry.contains(QStringLiteral("default")))
+            config.insert(key, entry.value(QStringLiteral("default")));
+    }
+    return config;
+}
+
+static bool writeJsonAtomically(const QString &path, const QJsonObject &object)
+{
+    const QFileInfo info(path);
+    if (!info.dir().exists() && !QDir().mkpath(info.absolutePath()))
+        return false;
+
+    const QString tmpFile = path + QStringLiteral(".tmp");
+    QFile f(tmpFile);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    f.write(QJsonDocument(object).toJson(QJsonDocument::Indented));
+    f.close();
+
+    if (QFile::exists(path) && !QFile::remove(path))
+        return false;
+    return QFile::rename(tmpFile, path);
 }
 
 WidgetManager::WidgetManager(QObject *parent)
@@ -240,6 +320,149 @@ void WidgetManager::autoArrangeAll()
     }
 
     Q_EMIT layoutChanged();
+}
+
+QVariantList WidgetManager::supportedSizes(const QString &widgetId) const
+{
+    const WidgetInfo *w = findWidget(widgetId);
+    if (!w)
+        return QVariantList();
+
+    QVariantList result;
+    result.reserve(w->supportedSizes.size());
+    for (const QSize &size : w->supportedSizes) {
+        result.append(QVariantMap{
+            {QStringLiteral("cols"), size.width()},
+            {QStringLiteral("rows"), size.height()},
+        });
+    }
+    return result;
+}
+
+bool WidgetManager::isSizeSupported(const QString &widgetId, int cols, int rows) const
+{
+    const WidgetInfo *w = findWidget(widgetId);
+    if (!w)
+        return false;
+    return w->supportedSizes.contains(QSize(qBound(1, cols, kGridColumns), qMax(1, rows)));
+}
+
+bool WidgetManager::setInstanceSize(const QString &instanceId, int cols, int rows)
+{
+    Instance *inst = findInstance(instanceId);
+    if (!inst || !findWidget(inst->widgetId))
+        return false;
+    if (!isSizeSupported(inst->widgetId, cols, rows))
+        return false;
+
+    cols = qBound(1, cols, kGridColumns);
+    rows = qMax(1, rows);
+    if (inst->cols == cols && inst->rows == rows)
+        return true;
+
+    const QList<Instance> backup = m_instances;
+    QList<Instance> newLayout = m_instances;
+    int targetX = inst->gridX < 0 ? 0 : qMin(inst->gridX, kGridColumns - cols);
+    int targetY = qMax(0, inst->gridY);
+
+    for (Instance &entry : newLayout) {
+        if (entry.instanceId == instanceId) {
+            entry.cols = cols;
+            entry.rows = rows;
+            break;
+        }
+    }
+
+    // 以新的目标矩形做双向联动避让，保证扩大尺寸时不与其它实例重叠。
+    newLayout = computeAvoidance(newLayout, instanceId, targetX, targetY);
+    for (Instance &entry : newLayout) {
+        if (entry.instanceId == instanceId) {
+            entry.gridX = targetX;
+            entry.gridY = targetY;
+            break;
+        }
+    }
+
+    m_instances = newLayout;
+    if (!saveInstances()) {
+        m_instances = backup;
+        qWarning() << "setInstanceSize: failed to save, rolled back";
+        return false;
+    }
+
+    Q_EMIT instancesChanged();
+    return true;
+}
+
+QVariantList WidgetManager::widgetSettingsSchema(const QString &widgetId) const
+{
+    const WidgetInfo *w = findWidget(widgetId);
+    return w ? w->settingsSchema : QVariantList();
+}
+
+QString WidgetManager::instanceConfigPath(const QString &instanceId) const
+{
+    const Instance *inst = findInstance(instanceId);
+    if (!inst)
+        return QString();
+    return widgetDataDir(inst->widgetId) + QLatin1Char('/') + instanceId + QStringLiteral(".config.json");
+}
+
+QVariantMap WidgetManager::instanceConfig(const QString &instanceId) const
+{
+    const Instance *inst = findInstance(instanceId);
+    if (!inst)
+        return QVariantMap();
+    const WidgetInfo *w = findWidget(inst->widgetId);
+    if (!w)
+        return QVariantMap();
+
+    QVariantMap config = defaultConfig(w->settingsSchema);
+    const QStringList allowedKeys = schemaKeys(w->settingsSchema);
+    const QString path = instanceConfigPath(instanceId);
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return config;
+
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+    if (!doc.isObject())
+        return config;
+    const QJsonObject stored = doc.object();
+    for (auto it = stored.constBegin(); it != stored.constEnd(); ++it) {
+        if (allowedKeys.contains(it.key()))
+            config.insert(it.key(), it.value().toVariant());
+    }
+    return config;
+}
+
+bool WidgetManager::saveInstanceConfig(const QString &instanceId, const QVariantMap &values)
+{
+    const Instance *inst = findInstance(instanceId);
+    if (!inst)
+        return false;
+    const WidgetInfo *w = findWidget(inst->widgetId);
+    if (!w)
+        return false;
+
+    const QStringList allowedKeys = schemaKeys(w->settingsSchema);
+    QVariantMap config = instanceConfig(instanceId);
+    for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
+        if (allowedKeys.contains(it.key()))
+            config.insert(it.key(), it.value());
+    }
+
+    QJsonObject object;
+    for (auto it = config.constBegin(); it != config.constEnd(); ++it)
+        object.insert(it.key(), QJsonValue::fromVariant(it.value()));
+
+    const QString path = instanceConfigPath(instanceId);
+    if (!writeJsonAtomically(path, object)) {
+        qWarning() << "saveInstanceConfig: failed to save" << path;
+        return false;
+    }
+
+    Q_EMIT instanceConfigChanged(instanceId);
+    return true;
 }
 
 bool WidgetManager::addWidget(const QString &widgetId)
@@ -537,6 +760,26 @@ WidgetManager::WidgetInfo WidgetManager::readManifest(const QString &dir, bool b
     info.defaultSize = QSize(qBound(1, sizeObj.value("cols").toInt(2), kGridColumns),
                              qMax(1, sizeObj.value("rows").toInt(2)));
 
+    // 可选尺寸列表：旧 manifest 未声明时只允许默认尺寸。
+    const QJsonArray sizes = obj.value("sizes").toArray();
+    for (const QJsonValue &value : sizes) {
+        if (!value.isObject())
+            continue;
+        const QJsonObject entry = value.toObject();
+        const int cols = entry.value("cols").toInt(0);
+        const int rows = entry.value("rows").toInt(0);
+        if (cols < 1 || cols > kGridColumns || rows < 1)
+            continue;
+        const QSize candidate(cols, rows);
+        if (!info.supportedSizes.contains(candidate)) {
+            info.supportedSizes.append(candidate);
+        }
+    }
+    if (!info.supportedSizes.contains(info.defaultSize))
+        info.supportedSizes.prepend(info.defaultSize);
+
+    info.settingsSchema = parseSettingsSchema(obj.value("settings").toArray());
+
     // 多语言名称：name[zh_CN] 等
     const QString lk = localeKey("name");
     if (obj.contains(lk))
@@ -763,6 +1006,14 @@ void WidgetManager::normalizeLayout()
     QList<Instance> fixed;
     for (const Instance &inst : m_instances) {
         Instance copy = inst;
+        // 兼容旧清单或 manifest 变更：不支持的尺寸回退到组件默认尺寸。
+        if (const WidgetInfo *w = findWidget(copy.widgetId)) {
+            if (!w->supportedSizes.contains(QSize(qBound(1, copy.cols, kGridColumns),
+                                                 qMax(1, copy.rows)))) {
+                copy.cols = w->defaultSize.width();
+                copy.rows = w->defaultSize.height();
+            }
+        }
         const QRect rect = instanceRect(copy);
         if (copy.gridX < 0 || copy.gridY < 0
             || copy.gridX + rect.width() > kGridColumns) {
