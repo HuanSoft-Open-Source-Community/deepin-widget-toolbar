@@ -2,9 +2,8 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# DSG 元数据固定安装到系统标准位置（/usr/share/dsg/configs），
+# DSG 元数据安装目录由顶层 CMakeLists.txt 固定为 /usr/share/dsg，
 # 与 dde-shell 运行时 DConfig 搜索路径一致；不随 CMAKE_INSTALL_PREFIX 漂移
-set(DSG_DATA_DIR "/usr/share/dsg")
 
 find_package(Dtk6DConfig REQUIRED)
 find_package(Qt6 COMPONENTS LinguistTools Qml DBus REQUIRED)

@@ -35,8 +35,8 @@ void TrayButton::updateIcon()
 {
     const bool darkTheme = DGuiApplicationHelper::instance()->themeType()
         == DGuiApplicationHelper::DarkType;
-    m_icon = QIcon(darkTheme ? QStringLiteral(":/icons/widget-toolbar.svg")
-                             : QStringLiteral(":/icons/widget-toolbar-dark.svg"));
+    m_icon = QIcon(darkTheme ? QStringLiteral(":/widget-toolbar/widget-toolbar.svg")
+                             : QStringLiteral(":/widget-toolbar/widget-toolbar-dark.svg"));
     update();
 }
 

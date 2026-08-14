@@ -13,7 +13,7 @@ add_library(${PLUGIN_NAME} SHARED
     widgettoolbartrayplugin.h
     traybutton.cpp
     traybutton.h
-    icons/icons.qrc
+    icons/widget-toolbar-icons.qrc
 )
 
 target_compile_definitions(${PLUGIN_NAME} PRIVATE QT_PLUGIN)

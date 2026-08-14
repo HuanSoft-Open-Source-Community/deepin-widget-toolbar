@@ -1,0 +1,9 @@
+<RCC>
+    <!-- qrc 文件名与资源前缀必须唯一：qInitResources_* 函数名由 qrc 文件名生成，
+         DTK 的 libdtk6widget 已导出同名的 qInitResources_icons，
+         若重名会导致插件资源注册被 DTK 符号截胡而永不生效 -->
+    <qresource prefix="/widget-toolbar">
+        <file>widget-toolbar.svg</file>
+        <file>widget-toolbar-dark.svg</file>
+    </qresource>
+</RCC>
