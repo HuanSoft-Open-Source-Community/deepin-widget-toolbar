@@ -4,23 +4,28 @@
 
 import QtQuick
 import org.deepin.dtk 1.0
+import org.deepin.widgettoolbar 1.0
 import "../components" as Components
 
-// 内置示例小组件：世界时间。
-// 数字模式显示城市列表；指针模式按宿主格数排布表盘，
-// 表盘不足时从末位 UTC 偏移 +1 小时生成，越过 +14 回绕到 -12，
-// 并始终去重。
+// 内置小组件：世界时间（逐表盘自定义）。
+// 每块表盘由控制中心时区下拉定义：地区名与 UTC 偏移都由所选时区决定，
+// 无需维护偏移文本框。表盘列表按实例持久化（widgetConfig.dials，
+// 元素为 {zone, auto}），数字模式显示全部表盘，指针模式显示前
+// hostCols*hostRows 个表盘，表盘可少于格子数并留空。
+// 只有“调整小组件尺寸”事件会在指针模式下补满格子：缩小先删尾部补位表盘
+// （auto=true），用户表盘保留；放大从末位偏移 +1 小时、越过 +14 回绕到 -12、
+// 按偏移去重，取该偏移下 GetZoneList 顺序的第一个时区生成补位表盘（auto=true）；
+// 无对应时区的偏移跳过。手动增删、切换数字模式、首次加载都不补位。
 Components.WidgetCard {
     id: root
 
     property var widgetConfig: ({})
+    property string instanceId: ""
     property bool analogMode: widgetConfig && widgetConfig.clockMode === "analog"
     property bool showLabels: widgetConfig && widgetConfig.showLabels !== undefined
         ? widgetConfig.showLabels : true
     property bool highlightLocal: widgetConfig && widgetConfig.highlightLocal !== undefined
         ? widgetConfig.highlightLocal : true
-    property int customOffset: widgetConfig && widgetConfig.customOffset !== undefined
-        && widgetConfig.customOffset !== null ? Number(widgetConfig.customOffset) : -99
     property int hostCols: 4
     property int hostRows: 2
     property int dialCount: Math.max(1, hostCols * hostRows)
@@ -29,31 +34,19 @@ Components.WidgetCard {
         return -now.getTimezoneOffset() / 60
     }
 
-    property var baseCities: [
-        { "name": qsTr("Beijing"), "offset": 8 },
-        { "name": qsTr("Tokyo"), "offset": 9 },
-        { "name": qsTr("London"), "offset": 0 },
-        { "name": qsTr("New York"), "offset": -5 }
-    ]
+    // 持久化表盘（{zone, auto}）与渲染信息（{zone, name, offset}）
+    property var dials: []
+    property var zoneInfos: []
     property var times: []
-    property var visibleCities: []
-    property var timezoneSequence: []
+    property int lastSlotCount: -1
+    property bool resizePending: false
+
     property int layoutSpacing: 6
     property int rowHeight: Math.max(18,
-        Math.floor((content.height - 28 - layoutSpacing * (visibleCities.length + 1))
-            / visibleCities.length))
+        Math.floor((content.height - 28 - layoutSpacing * (zoneInfos.length + 1))
+            / Math.max(1, zoneInfos.length)))
     property int titlePixelSize: Math.max(11, Math.min(20, Math.round(content.width * 0.04)))
     property int cityPixelSize: Math.max(8, Math.min(18, Math.round(rowHeight * 0.42)))
-
-    function offsetLabel(offset) {
-        if (offset >= 0)
-            return qsTr("UTC+") + offset
-        return qsTr("UTC") + offset
-    }
-
-    function isCustomOffset(offset) {
-        return offset !== -99 && offset >= -12 && offset <= 14
-    }
 
     function cityTime(offset) {
         var now = new Date()
@@ -61,79 +54,167 @@ Components.WidgetCard {
         return new Date(utcMs + offset * 3600000)
     }
 
+    function zoneName(zoneId) {
+        var name = Timezones.displayName(zoneId)
+        if (name.length === 0) {
+            var parts = zoneId.split("/")
+            name = (parts.length > 0 ? parts[parts.length - 1] : zoneId).replace(/_/g, " ")
+        }
+        return name
+    }
+
+    function zoneOffset(zoneId) {
+        return Timezones.offsetSeconds(zoneId) / 3600
+    }
+
     function updateTimes() {
         var list = []
-        for (var i = 0; i < root.visibleCities.length; i++)
-            list.push(Qt.formatTime(root.cityTime(root.visibleCities[i].offset), "HH:mm"))
+        for (var i = 0; i < root.zoneInfos.length; i++)
+            list.push(Qt.formatTime(root.cityTime(root.zoneInfos[i].offset), "HH:mm"))
         root.times = list
     }
 
-    function rebuildCities() {
-        var list = root.baseCities.slice()
-        if (root.isCustomOffset(root.customOffset)) {
-            var exists = false
-            for (var i = 0; i < list.length; i++) {
-                if (list[i].offset === root.customOffset) {
-                    exists = true
-                    break
-                }
-            }
-            if (!exists)
-                list.push({ "name": root.offsetLabel(root.customOffset), "offset": root.customOffset })
+    function applyDials(list) {
+        root.dials = list
+
+        var infos = []
+        for (var j = 0; j < list.length; j++) {
+            infos.push({
+                "zone": list[j].zone,
+                "name": root.zoneName(list[j].zone),
+                "offset": root.zoneOffset(list[j].zone)
+            })
         }
-        root.visibleCities = list
+        root.zoneInfos = infos
+        root.updateTimes()
     }
 
-    function rebuildSequence() {
-        var used = {}
+    function rebuildDials() {
+        var source = root.widgetConfig && root.widgetConfig.dials
         var list = []
+        if (source && source.length !== undefined) {
+            for (var i = 0; i < source.length; i++) {
+                var item = source[i]
+                if (item && typeof item.zone === "string" && item.zone.length > 0)
+                    list.push({ "zone": item.zone, "auto": item.auto === true })
+            }
+        }
+        root.applyDials(list)
+    }
 
-        function add(offset, name) {
-            if (used[offset] !== undefined)
-                return
-            used[offset] = true
-            list.push({ "offset": offset, "name": name })
+    function fillDials(target) {
+        var list = root.dials.slice()
+        var usedZones = {}
+        var usedOffsets = {}
+        for (var i = 0; i < list.length; i++) {
+            usedZones[list[i].zone] = true
+            usedOffsets[root.zoneOffset(list[i].zone)] = true
         }
 
-        for (var i = 0; i < root.baseCities.length; i++)
-            add(root.baseCities[i].offset, root.baseCities[i].name)
-        if (root.isCustomOffset(root.customOffset))
-            add(root.customOffset, root.offsetLabel(root.customOffset))
+        // 跨实例唯一性：其它实例已用地区不参与补位
+        var otherUsed = root.instanceId.length > 0
+            ? WidgetHost.usedZones(root.instanceId) : []
+        for (var o = 0; o < otherUsed.length; o++)
+            usedZones[otherUsed[o]] = true
+        var excludeZones = []
+        for (var used in usedZones)
+            excludeZones.push(used)
 
-        while (list.length > root.dialCount)
-            list.pop()
-
-        var cursor = list.length > 0 ? list[list.length - 1].offset : 0
+        var cursor = list.length > 0
+            ? Math.round(root.zoneOffset(list[list.length - 1].zone)) : 0
         var guard = 0
-        while (list.length < root.dialCount && guard < 200) {
+        while (list.length < target && guard < 200) {
             guard++
             cursor = cursor >= 14 ? -12 : cursor + 1
-            if (used[cursor] === undefined)
-                add(cursor, root.offsetLabel(cursor))
+            if (usedOffsets[cursor] !== undefined)
+                continue
+            var zoneId = Timezones.firstZoneForOffset(cursor, excludeZones)
+            if (zoneId.length === 0 || usedZones[zoneId] !== undefined)
+                continue
+            usedZones[zoneId] = true
+            excludeZones.push(zoneId)
+            usedOffsets[cursor] = true
+            list.push({ "zone": zoneId, "auto": true })
         }
-        root.timezoneSequence = list
+        return list
     }
 
-    onCustomOffsetChanged: {
-        root.rebuildCities()
-        root.rebuildSequence()
-        root.updateTimes()
+    function shrinkDials() {
+        var list = root.dials.slice()
+        var target = root.hostCols * root.hostRows
+        while (list.length > target && list[list.length - 1].auto === true)
+            list.pop()
+        return list
     }
-    onDialCountChanged: root.rebuildSequence()
-    onWidgetConfigChanged: {
-        root.rebuildCities()
-        root.rebuildSequence()
-        root.updateTimes()
+
+    function persistDials(list) {
+        if (root.instanceId.length === 0)
+            return
+        // 保存成功后先本地生效，避免宿主回写前的连续快速缩放使用旧列表
+        if (WidgetHost.saveConfig(root.instanceId, { "dials": list }))
+            root.applyDials(list)
     }
+
+    function handleResize() {
+        var slots = root.hostCols * root.hostRows
+        if (root.lastSlotCount >= 0 && slots !== root.lastSlotCount && root.analogMode) {
+            if (slots > root.dials.length) {
+                var grown = root.fillDials(slots)
+                if (grown.length !== root.dials.length)
+                    root.persistDials(grown)
+            } else if (slots < root.dials.length) {
+                var shrunk = root.shrinkDials()
+                if (shrunk.length !== root.dials.length)
+                    root.persistDials(shrunk)
+            }
+        }
+        root.lastSlotCount = slots
+    }
+
+    function scheduleResize() {
+        if (root.resizePending)
+            return
+        root.resizePending = true
+        resizeTimer.restart()
+    }
+
+    onHostColsChanged: root.scheduleResize()
+    onHostRowsChanged: root.scheduleResize()
+    onWidgetConfigChanged: root.rebuildDials()
     Component.onCompleted: {
-        root.rebuildCities()
-        root.rebuildSequence()
-        root.updateTimes()
+        root.rebuildDials()
+        // 宿主对 hostCols/hostRows 的首次注入可能晚于 onCompleted，
+        // 延迟一拍再记录基准尺寸，避免把首次注入误判为“缩放”
+        Qt.callLater(function () {
+            root.lastSlotCount = root.hostCols * root.hostRows
+        })
+    }
+
+    Timer {
+        id: resizeTimer
+        interval: 0
+        repeat: false
+        onTriggered: {
+            root.resizePending = false
+            root.handleResize()
+        }
+    }
+
+    Text {
+        anchors.centerIn: parent
+        width: parent.width - 24
+        visible: root.zoneInfos.length === 0
+        text: qsTr("No dials yet. Add timezones in widget settings.")
+        font: DTK.fontManager.t5
+        color: palette.windowText
+        opacity: 0.6
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.Wrap
     }
 
     Column {
         id: content
-        visible: !root.analogMode
+        visible: !root.analogMode && root.zoneInfos.length > 0
         anchors.fill: parent
         spacing: root.layoutSpacing
 
@@ -144,8 +225,11 @@ Components.WidgetCard {
         }
 
         Repeater {
-            model: root.visibleCities
+            model: root.zoneInfos
             delegate: Item {
+                required property var modelData
+                required property int index
+
                 width: content.width
                 height: root.rowHeight
 
@@ -190,14 +274,14 @@ Components.WidgetCard {
 
     Grid {
         id: analogGrid
-        visible: root.analogMode
+        visible: root.analogMode && root.zoneInfos.length > 0
         anchors.fill: parent
         columns: root.hostCols
         rows: root.hostRows
         spacing: 2
 
         Repeater {
-            model: root.timezoneSequence
+            model: root.zoneInfos.slice(0, root.dialCount)
             delegate: Item {
                 required property var modelData
 
@@ -225,5 +309,13 @@ Components.WidgetCard {
         running: !root.analogMode
         triggeredOnStart: true
         onTriggered: root.updateTimes()
+    }
+
+    // DST 切换会改变表盘当前偏移，每小时重算渲染信息
+    Timer {
+        interval: 3600000
+        repeat: true
+        running: true
+        onTriggered: root.rebuildDials()
     }
 }

@@ -7,12 +7,13 @@ import QtQuick.Layouts
 import org.deepin.dtk 1.0
 
 // 可复用指针表盘：clock 与世界时钟共用。
-// utcOffset 以小时为单位；showLabels 控制表盘下方文字；
+// utcOffset 以小时为单位（支持半小时等非整小时时区）；
+// showLabels 控制表盘下方文字；
 // highlighted 用于区分本机时区。
 Item {
     id: root
 
-    property int utcOffset: 0
+    property real utcOffset: 0
     property string label: ""
     property bool showLabels: true
     property bool highlighted: false

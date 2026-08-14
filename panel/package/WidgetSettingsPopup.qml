@@ -8,6 +8,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.deepin.dtk 1.0
 import org.deepin.ds 1.0
+import org.deepin.widgettoolbar 1.0
 
 // 单个小组件实例的配置面板：复用 PanelPopup/PopupHeader，
 // 根据 WidgetManager 返回的 settings schema 动态生成控件并即时保存。
@@ -18,6 +19,8 @@ PanelPopup {
     property string widgetId: ""
     property var schema: []
     property var values: ({})
+    property var zoneOptions: []
+    property var usedZones: []
     property string editingColorKey: ""
 
     popupX: 0 - width - 8
@@ -32,12 +35,108 @@ PanelPopup {
         control.widgetId = Panel.widgetManager.instanceWidgetId(instance)
         control.schema = Panel.widgetManager.widgetSettingsSchema(control.widgetId)
         control.values = Panel.widgetManager.instanceConfig(instance)
+        control.zoneOptions = Timezones.zoneOptions()
+        control.usedZones = WidgetHost.usedZones(control.instanceId)
         control.open()
     }
 
     function commit(key, value) {
-        control.values[key] = value
-        Panel.widgetManager.saveInstanceConfig(control.instanceId, control.values)
+        // 重新赋值整个 values 对象，保证依赖 control.values 的绑定（如
+        // timezoneList 的行模型）在保存后重新求值
+        var next = {}
+        for (var k in control.values)
+            next[k] = control.values[k]
+        next[key] = value
+        control.values = next
+        Panel.widgetManager.saveInstanceConfig(control.instanceId, next)
+    }
+
+    function dialList(key) {
+        var list = control.values[key]
+        return list && list.length !== undefined ? list : []
+    }
+
+    // 其它实例已用地区集合（跨实例唯一性）
+    function usedZoneSet() {
+        var set = {}
+        for (var i = 0; i < control.usedZones.length; i++)
+            set[control.usedZones[i]] = true
+        return set
+    }
+
+    // 单行下拉选项：过滤其它实例已用地区，但保留本行当前地区（旧配置可见）
+    function rowOptions(key, index) {
+        var used = control.usedZoneSet()
+        var list = control.dialList(key)
+        var dial = index < list.length ? list[index] : null
+        var zone = dial && dial.zone ? dial.zone : ""
+        var result = []
+        for (var i = 0; i < control.zoneOptions.length; i++) {
+            var value = control.zoneOptions[i].value
+            if (used[value] === undefined || value === zone)
+                result.push(control.zoneOptions[i])
+        }
+        return result
+    }
+
+    function zoneIndex(key, index) {
+        var options = control.rowOptions(key, index)
+        var list = control.dialList(key)
+        var dial = index < list.length ? list[index] : null
+        var zone = dial && dial.zone ? dial.zone : ""
+        for (var i = 0; i < options.length; i++) {
+            if (options[i].value === zone)
+                return i
+        }
+        return 0
+    }
+
+    function addDial(key) {
+        var list = control.dialList(key).slice()
+        var used = control.usedZoneSet()
+        var defaultZone = Timezones.systemTimezone
+        if (defaultZone.length === 0 || used[defaultZone] !== undefined) {
+            defaultZone = ""
+            for (var i = 0; i < control.zoneOptions.length; i++) {
+                if (used[control.zoneOptions[i].value] === undefined) {
+                    defaultZone = control.zoneOptions[i].value
+                    break
+                }
+            }
+        }
+        if (defaultZone.length === 0)
+            return
+
+        // 新用户表盘插到补位表盘之前，保证补位表盘始终是尾部可回收的 padding
+        var insertAt = list.length
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].auto === true) {
+                insertAt = i
+                break
+            }
+        }
+        list.splice(insertAt, 0, { "zone": defaultZone, "auto": false })
+        control.commit(key, list)
+    }
+
+    function removeDial(key, index) {
+        var list = control.dialList(key).slice()
+        if (index < 0 || index >= list.length)
+            return
+        list.splice(index, 1)
+        control.commit(key, list)
+    }
+
+    function setDialZone(key, index, zone) {
+        var list = control.dialList(key).slice()
+        if (index < 0 || index >= list.length)
+            return
+        // 跨实例唯一性：其它实例已用地区不允许改选进来
+        if (control.usedZoneSet()[zone] !== undefined)
+            return
+        // 用户改过的补位表盘视为用户表盘，缩放缩小时不再删除
+        list[index] = { "zone": zone, "auto": false }
+        control.commit(key, list)
     }
 
     Rectangle {
@@ -116,6 +215,7 @@ PanelPopup {
 
                             Text {
                                 Layout.preferredWidth: 88
+                                visible: type !== "timezoneList"
                                 text: modelData.label ? modelData.label : modelData.key
                                 font: DTK.fontManager.t6
                                 color: palette.windowText
@@ -240,6 +340,53 @@ PanelPopup {
                                     } else {
                                         control.commit(key, text)
                                     }
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                visible: type === "timezoneList"
+                                spacing: 6
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modelData.label ? modelData.label : modelData.key
+                                    font: DTK.fontManager.t6
+                                    color: palette.windowText
+                                }
+
+                                Repeater {
+                                    model: control.values[key]
+                                    delegate: RowLayout {
+                                        required property int index
+
+                                        Layout.fillWidth: true
+                                        spacing: 6
+
+                                        ComboBox {
+                                            Layout.fillWidth: true
+                                            Layout.minimumWidth: 120
+                                            model: control.rowOptions(key, index)
+                                            textRole: "label"
+                                            currentIndex: control.zoneIndex(key, index)
+                                            onActivated: function (i) {
+                                                if (i >= 0 && i < control.zoneOptions.length)
+                                                    control.setDialZone(key, index,
+                                                        control.zoneOptions[i].value)
+                                            }
+                                        }
+
+                                        Button {
+                                            Layout.preferredWidth: 32
+                                            text: "✕"
+                                            onClicked: control.removeDial(key, index)
+                                        }
+                                    }
+                                }
+
+                                Button {
+                                    text: qsTr("Add")
+                                    onClicked: control.addDial(key)
                                 }
                             }
                         }
