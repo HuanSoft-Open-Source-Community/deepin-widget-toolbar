@@ -2,8 +2,9 @@
 /build/
 /CMakeFiles/
 
-# Reasonix tooling artifacts
+# AI agent tooling artifacts
 /.reasonix/
+/AGENTS.md
 
 # Compiled translation files
 *.qm
