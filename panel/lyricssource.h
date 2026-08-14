@@ -29,6 +29,11 @@ class LyricsSource : public QObject
     Q_PROPERTY(QString activeText READ activeText NOTIFY lyricsChanged)
     // 下一句（另一槽位的文本）
     Q_PROPERTY(QString nextText READ nextText NOTIFY lyricsChanged)
+    // A/B 双缓冲槽位文本：供小组件按槽位固定布局（如左/右两行交替高亮）
+    Q_PROPERTY(QString lineAText READ lineAText NOTIFY lyricsChanged)
+    Q_PROPERTY(QString lineBText READ lineBText NOTIFY lyricsChanged)
+    // 当前活动槽是否为 A（active_line == "A"；active_line 为 null 时按 A 处理）
+    Q_PROPERTY(bool activeLineA READ activeLineA NOTIFY lyricsChanged)
     // 当前曲目的 mpris:trackid
     Q_PROPERTY(QString trackId READ trackId NOTIFY lyricsChanged)
 
@@ -41,6 +46,9 @@ public:
     bool hasTimestamps() const;
     QString activeText() const;
     QString nextText() const;
+    QString lineAText() const;
+    QString lineBText() const;
+    bool activeLineA() const;
     QString trackId() const;
 
     // 主动拉取一次歌词快照（订阅信号之外的兜底刷新）
@@ -65,6 +73,9 @@ private:
     bool m_hasTimestamps = false;
     QString m_activeText;
     QString m_nextText;
+    QString m_lineAText;
+    QString m_lineBText;
+    bool m_activeLineA = true;
     QString m_trackId;
     // 上次快照原文：接口文档保证内容变化才发信号，这里按原文去重，
     // 等价于用 revision 丢弃重复/过期更新

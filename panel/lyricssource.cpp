@@ -79,6 +79,21 @@ QString LyricsSource::nextText() const
     return m_nextText;
 }
 
+QString LyricsSource::lineAText() const
+{
+    return m_lineAText;
+}
+
+QString LyricsSource::lineBText() const
+{
+    return m_lineBText;
+}
+
+bool LyricsSource::activeLineA() const
+{
+    return m_activeLineA;
+}
+
 QString LyricsSource::trackId() const
 {
     return m_trackId;
@@ -153,6 +168,12 @@ void LyricsSource::applySnapshot(const QString &payload)
     m_trackId = obj.value("track_id").toString();
     m_hasTrack = !m_trackId.isEmpty();
 
+    // 槽位固定映射：line A / line B 始终对应快照的 line_a / line_b，
+    // 活动槽由 active_line 决定（null 按 A 处理，与 activeText 语义一致）
+    m_lineAText = textA;
+    m_lineBText = textB;
+    m_activeLineA = activeLine != QLatin1String("B");
+
     if (activeLine == QLatin1String("B")) {
         m_activeText = textB;
         m_nextText = textA;
@@ -174,6 +195,9 @@ void LyricsSource::resetSnapshot()
     m_hasTimestamps = false;
     m_activeText.clear();
     m_nextText.clear();
+    m_lineAText.clear();
+    m_lineBText.clear();
+    m_activeLineA = true;
     m_trackId.clear();
     m_lastPayload.clear();
 }

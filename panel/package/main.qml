@@ -215,6 +215,10 @@ Window {
     property bool dragTargetValid: false
     // 拖拽开始时的已提交布局快照：取消/失败时回弹用
     property var committedPositions: ({})
+    // 长按时指针相对组件左上角的像素偏移：目标格 = 指针格 − 该偏移，
+    // 保证宽/高较大的组件无论抓取哪个位置都能把左上角对准目标格
+    property int dragGrabOffsetX: 0
+    property int dragGrabOffsetY: 0
 
     // 把 C++ previewMove 返回的避让布局写入位置映射
     function applyPreviewLayout(layout) {
@@ -237,6 +241,8 @@ Window {
         root.dragInstanceId = host.modelData
         root.dragCols = Panel.widgetManager.instanceCols(host.modelData)
         root.dragRows = Panel.widgetManager.instanceRows(host.modelData)
+        root.dragGrabOffsetX = pointerX - host.x
+        root.dragGrabOffsetY = pointerY - host.y
         // 快照拖拽前的已提交布局，供取消/失败时动画回弹
         root.committedPositions = {}
         for (let key in root.gridPositions)
@@ -256,16 +262,18 @@ Window {
     function updateDrag(pointerX, pointerY) {
         if (!root.dragging)
             return
-        let cellX = Math.floor(pointerX / (cellWidth + cellSpacing))
-        let cellY = Math.floor(pointerY / (cellHeight + cellSpacing))
-        root.dragTargetX = cellX
-        root.dragTargetY = cellY
-        root.dragTargetValid = Panel.widgetManager.canDrop(root.dragInstanceId, cellX, cellY)
-        // 预览显示位置：越界时吸附回网格内，边框仍按实际目标显示有效/无效
-        let previewX = Math.max(0, Math.min(cellX, gridColumns - root.dragCols))
-        let previewY = Math.max(0, cellY)
-        dragPreview.x = previewX * (cellWidth + cellSpacing)
-        dragPreview.y = previewY * (cellHeight + cellSpacing)
+        // 目标格 = 组件左上角格：指针格扣除抓取偏移后钳制到网格可容纳范围。
+        // 钳制保证宽 4 高 2 等大组件抓取任意位置都能自由放置（含最顶行）
+        let targetX = Math.floor((pointerX - root.dragGrabOffsetX) / (cellWidth + cellSpacing))
+        let targetY = Math.floor((pointerY - root.dragGrabOffsetY) / (cellHeight + cellSpacing))
+        targetX = Math.max(0, Math.min(targetX, gridColumns - root.dragCols))
+        targetY = Math.max(0, targetY)
+        root.dragTargetX = targetX
+        root.dragTargetY = targetY
+        root.dragTargetValid = Panel.widgetManager.canDrop(root.dragInstanceId, targetX, targetY)
+        // 预览显示位置：与目标格一致（越界时已吸附回网格内）
+        dragPreview.x = targetX * (cellWidth + cellSpacing)
+        dragPreview.y = targetY * (cellHeight + cellSpacing)
         if (root.dragTargetValid) {
             // 实时避让：目标格被占用时，被占组件立即动画让位（双向联动）
             let layout = Panel.widgetManager.previewMove(
@@ -301,6 +309,8 @@ Window {
         root.dragTargetX = -1
         root.dragTargetY = -1
         root.dragTargetValid = false
+        root.dragGrabOffsetX = 0
+        root.dragGrabOffsetY = 0
     }
 
     // ===== 窗口基础配置（与通知中心一致的尺寸与样式） =====

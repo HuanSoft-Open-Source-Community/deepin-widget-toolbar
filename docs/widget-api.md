@@ -99,6 +99,9 @@
 | `hasTimestamps` | bool | 歌词是否带 LRC 时间戳 |
 | `activeText` | string | 当前句文本（`active_line` 指向的槽位） |
 | `nextText` | string | 下一句文本（另一槽位） |
+| `lineAText` | string | A/B 双缓冲中槽 A 的歌词文本（空槽为空串） |
+| `lineBText` | string | A/B 双缓冲中槽 B 的歌词文本（空槽为空串） |
+| `activeLineA` | bool | 当前活动槽是否为 A（`active_line == "A"`；`null` 按 A 处理） |
 | `trackId` | string | 当前曲目的 `mpris:trackid` |
 
 信号：`connectedChanged()`（总线上线/下线）、`lyricsChanged()`（快照内容变化，
