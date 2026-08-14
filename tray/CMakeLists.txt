@@ -42,3 +42,5 @@ qt_add_translations(${PLUGIN_NAME}
 
 install(TARGETS ${PLUGIN_NAME} LIBRARY DESTINATION /usr/lib/dde-dock/plugins)
 install(FILES ${widget_toolbar_qm_files} DESTINATION /usr/share/widget-toolbar/translations)
+# 控制中心图标（个性化 → 桌面和任务栏 → 插件区域，dcc-<pluginName>.dci 约定）
+install(FILES icons/dcc-widget-toolbar.dci DESTINATION /usr/share/dde-dock/icons/dcc-setting)

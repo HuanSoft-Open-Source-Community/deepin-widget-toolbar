@@ -9,6 +9,7 @@
 #include <QCoreApplication>
 #include <QDBusInterface>
 #include <QDebug>
+#include <QIcon>
 #include <QJsonDocument>
 #include <QLocale>
 #include <QTranslator>
@@ -75,8 +76,19 @@ QWidget *WidgetToolbarTrayPlugin::itemPopupApplet(const QString &itemKey)
 
 Dock::PluginFlags WidgetToolbarTrayPlugin::flags() const
 {
-    // 基础托盘插件：不附加拖拽/控制中心设置等无关能力
-    return Dock::Type_Tray;
+    // 声明 Attribute_CanSetting 使插件出现在控制中心
+    // "个性化 → 桌面和任务栏 → 插件区域"，可管理显示/隐藏；
+    // 不附加拖拽能力，也不使用 Attribute_ForceDock（强制显示会从列表隐藏）
+    return Dock::Type_Tray | Dock::Attribute_CanSetting;
+}
+
+QIcon WidgetToolbarTrayPlugin::icon(Dock::IconType dockPart, Dock::ThemeType themeType) const
+{
+    Q_UNUSED(dockPart)
+    // 与任务栏按钮一致：暗色主题用白色版，亮色主题用黑色版
+    return QIcon(themeType == Dock::ThemeType_Dark
+                     ? QStringLiteral(":/widget-toolbar/widget-toolbar.svg")
+                     : QStringLiteral(":/widget-toolbar/widget-toolbar-dark.svg"));
 }
 
 const QString WidgetToolbarTrayPlugin::itemContextMenu(const QString &itemKey)
