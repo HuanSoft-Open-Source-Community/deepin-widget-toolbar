@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🧩 深之小组件欄（deepin-widget-toolbar）
+# 🧩 深之度小组件欄（deepin-widget-toolbar）
 
 ![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 ![Platform: Linux](https://img.shields.io/badge/Platform-Linux-green.svg)
