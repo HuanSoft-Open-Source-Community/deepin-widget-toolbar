@@ -465,6 +465,37 @@ bool WidgetManager::saveInstanceConfig(const QString &instanceId, const QVariant
     return true;
 }
 
+QStringList WidgetManager::usedZones(const QString &excludingInstanceId) const
+{
+    QStringList zones;
+    for (const Instance &inst : m_instances) {
+        if (inst.instanceId == excludingInstanceId)
+            continue;
+
+        // 仅统计声明了 dials 配置的组件（当前为世界时间）
+        const QVariantList schema = widgetSettingsSchema(inst.widgetId);
+        bool hasDials = false;
+        for (const QVariant &entry : schema) {
+            if (entry.toMap().value(QStringLiteral("key")).toString()
+                == QLatin1String("dials")) {
+                hasDials = true;
+                break;
+            }
+        }
+        if (!hasDials)
+            continue;
+
+        const QVariantList dials =
+            instanceConfig(inst.instanceId).value(QStringLiteral("dials")).toList();
+        for (const QVariant &dial : dials) {
+            const QString zone = dial.toMap().value(QStringLiteral("zone")).toString();
+            if (!zone.isEmpty() && !zones.contains(zone))
+                zones.append(zone);
+        }
+    }
+    return zones;
+}
+
 bool WidgetManager::addWidget(const QString &widgetId)
 {
     if (findWidget(widgetId) == nullptr) {

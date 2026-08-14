@@ -21,6 +21,10 @@ add_library(ds-widget-toolbar SHARED
     lyricssource.h
     systeminfo.cpp
     systeminfo.h
+    timezones.cpp
+    timezones.h
+    widgethost.cpp
+    widgethost.h
     widgetresources.qrc
 )
 

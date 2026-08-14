@@ -7,6 +7,8 @@
 #include "fileio.h"
 #include "lyricssource.h"
 #include "systeminfo.h"
+#include "timezones.h"
+#include "widgethost.h"
 #include "widgetmanager.h"
 #include "widgetmodel.h"
 
@@ -54,13 +56,19 @@ bool WidgetToolbarPanel::init()
     m_widgetListModel->refresh();
 
     // 宿主能力代理（开放接口的一部分）：注册 QML 单例，小组件通过
-    // import org.deepin.widgettoolbar 1.0 使用 FileIO / SystemInfo / Lyrics
+    // import org.deepin.widgettoolbar 1.0 使用 FileIO / SystemInfo / Lyrics /
+    // Timezones / WidgetHost
     auto *fileIO = new FileIO(this);
     fileIO->setAllowedRoot(m_widgetManager->widgetsDataRoot());
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "FileIO", fileIO);
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "SystemInfo", new SystemInfo(this));
-    // 端闱乐部歌词代理：唯一的系统 D-Bus 能力，小组件通过它读取歌词
+    // 端闱乐部歌词代理：小组件通过它读取歌词
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "Lyrics", new LyricsSource(this));
+    // 时区数据代理：小组件通过它读取控制中心“时间设置”的时区列表与地区名
+    qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "Timezones", new Timezones(this));
+    // 配置回写代理：小组件经它持久化自身实例配置（如世界时间的缩放补位）
+    qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "WidgetHost",
+                                 new WidgetHost(m_widgetManager, this));
 
     // 读取持久化状态（默认显示 + 默认置顶，Vista 侧栏风格）
     m_config = DConfig::create("org.deepin.dde.shell", "org.deepin.ds.widgettoolbar");

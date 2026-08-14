@@ -47,10 +47,14 @@
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `key` | string | 配置键，不能为空 |
-| `type` | string | `boolean` / `enum` / `color` / `font` / `string` / `integer` |
+| `type` | string | `boolean` / `enum` / `color` / `font` / `string` / `integer` / `timezoneList` |
 | `label` / `label[locale]` | string | 显示名称及本地化名称 |
 | `default` | 任意 | 默认值 |
-| `options` | array | `enum`/`color` 的候选项，元素含 `value`、`label`、`label[locale]`；`font` 的候选由宿主从 `Qt.fontFamilies()` 生成 |
+| `options` | array | `enum`/`color` 的候选项，元素含 `value`、`label`、`label[locale]`；`font` 的候选由宿主从 `Qt.fontFamilies()` 生成；`timezoneList` 的候选由宿主从 `Timezones` 生成 |
+
+`timezoneList` 的值形如 `[{ "zone": "Asia/Shanghai", "auto": false }]`：
+`zone` 为控制中心时区 id，`auto` 标记是否为缩放补位生成。宿主配置面板渲染为
+“时区下拉 + 删除”行列表及“添加”按钮；改过任一行会把 `auto` 置为 false。
 
 内置组件示例：clock 允许 `1×1 / 2×2 / 4×2 / 4×4` 并声明 `clockMode` 配置；lyrics 声明 `lyricsFont` 与 `lyricsColor`。
 
@@ -126,6 +130,36 @@
 信号：`connectedChanged()`（总线上线/下线）、`lyricsChanged()`（快照内容变化，
 重复/过期快照已按 payload 去重）。方法：`refresh()` 主动拉取一次快照。
 
+### Timezones（控制中心时区数据）
+
+> **系统 D-Bus 能力代理**：小组件不允许直接访问系统 D-Bus。世界时间等组件经本代理
+> 读取 DDE 控制中心“时间设置”使用的时区数据，数据源为会话总线
+> `org.deepin.dde.Timedate1`（与控制中心 datetime 插件一致）。
+
+| 属性 | 类型 | 说明 |
+|---|---|---|
+| `available` | bool | 会话总线上的 Timedate1 服务是否可用 |
+| `systemTimezone` | string | 系统时区 id（如 `Asia/Shanghai`） |
+| `userTimezones` | string[] | 控制中心“时间设置”维护的用户时区 id 列表，首个为系统时区 |
+
+| 方法 | 签名 | 说明 |
+|---|---|---|
+| `displayName` | `string displayName(string zoneId)` | 时区的本地化地区名（daemon 按当前语言返回，未写入组件 ts）；失败回退为时区 id 末段 |
+| `offsetSeconds` | `int offsetSeconds(string zoneId)` | 当前 UTC 偏移秒（与控制中心口径一致，DST 生效期间为 DST 偏移） |
+| `zoneIds` | `string[] zoneIds()` | 控制中心时区选择器使用的完整时区列表（`GetZoneList` 顺序） |
+| `firstZoneForOffset` | `string firstZoneForOffset(int offsetHours, string[] excludeZones)` | 当前偏移等于给定小时数的时区中，按 `GetZoneList` 顺序、跳过 `excludeZones` 后取第一个 id；无则空串 |
+| `zoneOptions` | `var zoneOptions()` | 时区下拉选项 `[{value, label}]`（本地化地区名，首次调用后缓存） |
+
+信号：`availableChanged()`、`systemTimezoneChanged()`、`userTimezonesChanged()`。
+地区名与时差直接来自控制中心的本地化数据，因此无需在小组件 ts 中维护时区名。
+
+### WidgetHost（实例配置回写）
+
+| 方法 | 签名 | 说明 |
+|---|---|---|
+| `saveConfig` | `bool saveConfig(string instanceId, object values)` | 保存该实例的配置；仅允许 manifest `settings` 中声明的 key，供小组件在运行期（如缩放补位）持久化设置 |
+| `usedZones` | `string[] usedZones(string excludingInstanceId)` | 其它实例 `dials` 配置中已使用的时区 id（世界时间跨实例地区唯一性用） |
+
 ## 7. 面板 API（预留）
 
 以下接口为本规范预留，尚未实现，未来版本按此契约提供：
@@ -163,7 +197,7 @@
 ## 11. 已知限制
 
 - 网格支持长按拖放调整位置；右键菜单可切换 `sizes` 声明的占位尺寸，切换时冲突实例联动避让并持久化。
-- 小组件设置页由 manifest `settings` schema 自动生成，仅支持列出的六种基础类型。
+- 小组件设置页由 manifest `settings` schema 自动生成，支持列出的基础类型及 `timezoneList`。
 - 网络请求未开放；小组件不允许直接访问系统 D-Bus，只能使用宿主能力代理
-  （`FileIO` / `SystemInfo` / `Lyrics`）。
+  （`FileIO` / `SystemInfo` / `Lyrics` / `Timezones` / `WidgetHost`）。
 - 小组件间事件总线（`bus.emit/on`）未实现。

@@ -95,6 +95,8 @@ public:
     Q_INVOKABLE QVariantList widgetSettingsSchema(const QString &widgetId) const;
     Q_INVOKABLE QVariantMap instanceConfig(const QString &instanceId) const;
     Q_INVOKABLE bool saveInstanceConfig(const QString &instanceId, const QVariantMap &values);
+    // 收集其它实例 dials 配置中已使用的时区 id（世界时间跨实例地区唯一性用）
+    Q_INVOKABLE QStringList usedZones(const QString &excludingInstanceId) const;
 
     // 添加一个小组件实例（放入首个空闲格，不移动其它实例）
     Q_INVOKABLE bool addWidget(const QString &widgetId);
