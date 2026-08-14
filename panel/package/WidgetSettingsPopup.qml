@@ -457,6 +457,7 @@ PanelPopup {
 
                             Switch {
                                 Layout.fillWidth: true
+                                Layout.preferredHeight: indicator.implicitHeight
                                 visible: type === "boolean"
                                 checked: control.values[key] === true
                                 onToggled: control.commit(key, checked)
