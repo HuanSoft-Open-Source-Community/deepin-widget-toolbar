@@ -58,6 +58,15 @@ Components.WidgetCard {
         })
     }
 
+    // 主面板拖放层接收按下以持有鼠标抓取；普通点击由此转发，
+    // 让便签仍能进入编辑并把光标放到点击位置。
+    function handleHostClick(x, y) {
+        var p = noteArea.mapFromItem(root, x, y)
+        noteArea.forceActiveFocus()
+        var pos = noteArea.positionAt(p.x, p.y)
+        noteArea.cursorPosition = Math.max(0, pos)
+    }
+
     Column {
         id: content
         anchors.fill: parent

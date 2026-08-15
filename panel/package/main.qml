@@ -236,6 +236,10 @@ Window {
     property int dragTargetX: -1
     property int dragTargetY: -1
     property bool dragTargetValid: false
+    // 上一次参与避让计算的格子：只有跨格时才重算布局，
+    // 避免鼠标逐像素移动时反复重启多张卡片的位移动画造成卡顿。
+    property int lastDragTargetX: -1
+    property int lastDragTargetY: -1
     // 拖拽开始时的已提交布局快照：取消/失败时回弹用
     property var committedPositions: ({})
     // 长按时指针相对组件左上角的像素偏移：目标格 = 指针格 − 该偏移，
@@ -294,6 +298,10 @@ Window {
         root.dragTargetX = targetX
         root.dragTargetY = targetY
         root.dragTargetValid = Panel.widgetManager.canDrop(root.dragInstanceId, targetX, targetY)
+        let targetChanged = root.dragTargetX !== root.lastDragTargetX
+            || root.dragTargetY !== root.lastDragTargetY
+        root.lastDragTargetX = root.dragTargetX
+        root.lastDragTargetY = root.dragTargetY
         // 预览跟随原始指针连续移动（仅做网格边界钳制），
         // 最终停放仍由 dragTargetX/Y 吸附格决定。
         let previewWidth = root.dragCols * cellWidth
@@ -306,7 +314,7 @@ Window {
         dragPreview.y = Math.max(0,
             Math.min(pointerY - root.dragGrabOffsetY,
                      Math.max(0, gridCanvas.height - previewHeight)))
-        if (root.dragTargetValid) {
+        if (root.dragTargetValid && targetChanged) {
             // 实时避让：目标格被占用时，被占组件立即动画让位（双向联动）
             let layout = Panel.widgetManager.previewMove(
                 root.dragInstanceId, root.dragTargetX, root.dragTargetY)
@@ -316,7 +324,7 @@ Window {
                 root.gridPositions = root.committedPositions
                 root.layoutVersion++
             }
-        } else {
+        } else if (!root.dragTargetValid && targetChanged) {
             // 越界：回弹到拖拽前布局
             root.gridPositions = root.committedPositions
             root.layoutVersion++
@@ -341,6 +349,8 @@ Window {
         root.dragTargetX = -1
         root.dragTargetY = -1
         root.dragTargetValid = false
+        root.lastDragTargetX = -1
+        root.lastDragTargetY = -1
         root.dragGrabOffsetX = 0
         root.dragGrabOffsetY = 0
     }
@@ -716,22 +726,18 @@ Window {
                                 z: widgetLoader.z + 1
                                 hoverEnabled: true
                                 acceptedButtons: Qt.LeftButton
-                                propagateComposedEvents: true
-
-                                // 按下列为“未接受”并放行给组件内容（如便签 TextArea 取焦），
-                                // 拖拽改用自管理定时器：长按 500ms 才开始，不依赖 pressAndHold。
-                                property bool dragPressActive: false
-                                property point dragPressPoint: Qt.point(0, 0)
-                                property point dragLastPoint: Qt.point(0, 0)
+                                pressAndHoldInterval: 500
+                                // 普通点击转交组件内容处理（如便签取焦），拖拽由 pressAndHold 接管。
+                                // 按下必须被本层接受以持有鼠标抓取，否则避让时卡片移开后松开事件会丢失。
+                                property bool suppressClick: false
 
                                 onPressed: function(mouse) {
-                                    if (root.dragging)
-                                        return
-                                    dragPressActive = true
-                                    dragPressPoint = Qt.point(mouse.x, mouse.y)
-                                    dragLastPoint = dragPressPoint
-                                    widgetDragHoldTimer.restart()
-                                    mouse.accepted = false
+                                    suppressClick = false
+                                }
+                                onPressAndHold: function(mouse) {
+                                    suppressClick = true
+                                    var p = widgetDragArea.mapToItem(gridCanvas, mouse.x, mouse.y)
+                                    root.startDrag(widgetHost, p.x, p.y)
                                 }
                                 onPositionChanged: function(mouse) {
                                     if (root.dragging) {
@@ -739,49 +745,31 @@ Window {
                                         root.updateDrag(p.x, p.y)
                                         return
                                     }
-                                    if (!dragPressActive)
-                                        return
-                                    dragLastPoint = Qt.point(mouse.x, mouse.y)
-                                    // 明显移动视为普通点击/滚动，不再触发长按拖拽
-                                    if (Math.abs(mouse.x - dragPressPoint.x) > 10
-                                            || Math.abs(mouse.y - dragPressPoint.y) > 10)
-                                        widgetDragHoldTimer.stop()
                                 }
                                 onReleased: function(mouse) {
-                                    dragPressActive = false
-                                    widgetDragHoldTimer.stop()
                                     if (root.dragging)
                                         root.endDrag()
                                     else
-                                        mouse.accepted = false
+                                        suppressClick = false
                                 }
                                 onCanceled: function(mouse) {
-                                    dragPressActive = false
-                                    widgetDragHoldTimer.stop()
+                                    suppressClick = false
                                     if (root.dragging)
                                         root.endDrag()
                                 }
                                 onClicked: function(mouse) {
-                                    // 普通点击放行给组件内容（如便签编辑），长按仍用于拖拽
-                                    if (!root.dragging)
-                                        mouse.accepted = false
-                                }
-
-                                Timer {
-                                    id: widgetDragHoldTimer
-                                    interval: 500
-                                    repeat: false
-                                    onTriggered: {
-                                        if (!widgetDragArea.dragPressActive)
-                                            return
-                                        var p = widgetDragArea.mapToItem(
-                                            gridCanvas,
-                                            widgetDragArea.dragLastPoint.x,
-                                            widgetDragArea.dragLastPoint.y)
-                                        root.startDrag(widgetHost, p.x, p.y)
+                                    if (suppressClick) {
+                                        suppressClick = false
+                                        return
                                     }
+                                    if (root.dragging)
+                                        return
+                                    // 把普通点击转交给组件内容（如便签 TextArea 取焦），
+                                    // 避免按下已被拖放层接收后组件无法编辑。
+                                    var widget = widgetLoader.item
+                                    if (widget && typeof widget.handleHostClick === "function")
+                                        widget.handleHostClick(mouse.x, mouse.y)
                                 }
-
                             }
 
                             // 右键菜单层：只接收右键，不影响左键点击与长按拖拽
