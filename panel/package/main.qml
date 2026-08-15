@@ -353,8 +353,7 @@ Window {
     }
 
     function openWidgetMenu(instanceId) {
-        widgetContextMenu.currentInstanceId = instanceId
-        widgetContextMenu.currentWidgetId = Panel.widgetManager.instanceWidgetId(instanceId)
+        widgetContextMenu.rebuild(instanceId)
         widgetContextMenu.popup()
     }
 
@@ -813,42 +812,110 @@ Window {
         }
     }
 
-    // ===== 单个小组件的右键菜单 =====
+    // ===== 小组件右键菜单项组件（按当前实例可见项动态重建） =====
+    Component {
+        id: sizeMenuEntry
+
+        MenuItem {
+            property string instanceId: ""
+            property int cols: 1
+            property int rows: 1
+
+            onTriggered: Panel.widgetManager.setInstanceSize(instanceId, cols, rows)
+        }
+    }
+
+    Component {
+        id: settingsMenuEntry
+
+        MenuItem {
+            property string instanceId: ""
+
+            onTriggered: root.openWidgetSettings(instanceId)
+        }
+    }
+
+    Component {
+        id: removeMenuEntry
+
+        MenuItem {
+            property string instanceId: ""
+
+            onTriggered: Panel.widgetManager.removeInstance(instanceId)
+        }
+    }
+
+    Component {
+        id: menuSeparatorEntry
+
+        MenuSeparator { }
+    }
+
+    // ===== 单个小组件的右键菜单（每次打开按可见项重建，高度随内容收缩） =====
     Menu {
         id: widgetContextMenu
 
         property string currentInstanceId: ""
         property string currentWidgetId: ""
+        property var builtItems: []
 
-        MenuItem {
-            text: qsTr("Small") + " 1×1"
-            visible: Panel.widgetManager.isSizeSupported(widgetContextMenu.currentWidgetId, 1, 1)
-            onTriggered: Panel.widgetManager.setInstanceSize(widgetContextMenu.currentInstanceId, 1, 1)
+        function addEntry(component, props) {
+            var item = component.createObject(view, props)
+            widgetContextMenu.addItem(item)
+            widgetContextMenu.builtItems.push(item)
+            return item
         }
-        MenuItem {
-            text: qsTr("Medium") + " 2×2"
-            visible: Panel.widgetManager.isSizeSupported(widgetContextMenu.currentWidgetId, 2, 2)
-            onTriggered: Panel.widgetManager.setInstanceSize(widgetContextMenu.currentInstanceId, 2, 2)
-        }
-        MenuItem {
-            text: qsTr("Wide") + " 4×2"
-            visible: Panel.widgetManager.isSizeSupported(widgetContextMenu.currentWidgetId, 4, 2)
-            onTriggered: Panel.widgetManager.setInstanceSize(widgetContextMenu.currentInstanceId, 4, 2)
-        }
-        MenuItem {
-            text: qsTr("Large") + " 4×4"
-            visible: Panel.widgetManager.isSizeSupported(widgetContextMenu.currentWidgetId, 4, 4)
-            onTriggered: Panel.widgetManager.setInstanceSize(widgetContextMenu.currentInstanceId, 4, 4)
-        }
-        MenuSeparator { }
-        MenuItem {
-            text: qsTr("Settings…")
-            visible: Panel.widgetManager.widgetSettingsSchema(widgetContextMenu.currentWidgetId).length > 0
-            onTriggered: root.openWidgetSettings(widgetContextMenu.currentInstanceId)
-        }
-        MenuItem {
-            text: qsTr("Remove")
-            onTriggered: Panel.widgetManager.removeInstance(widgetContextMenu.currentInstanceId)
+
+        function rebuild(instanceId) {
+            widgetContextMenu.currentInstanceId = instanceId
+            widgetContextMenu.currentWidgetId =
+                Panel.widgetManager.instanceWidgetId(instanceId)
+
+            // 先移除上一次打开的菜单项，避免隐藏项继续占位撑高菜单
+            for (var i = widgetContextMenu.builtItems.length - 1; i >= 0; --i) {
+                var oldItem = widgetContextMenu.builtItems[i]
+                widgetContextMenu.removeItem(oldItem)
+                oldItem.destroy()
+            }
+            widgetContextMenu.builtItems = []
+
+            var sizeOptions = [
+                { "cols": 1, "rows": 1, "label": qsTr("Small") + " 1×1" },
+                { "cols": 2, "rows": 2, "label": qsTr("Medium") + " 2×2" },
+                { "cols": 4, "rows": 2, "label": qsTr("Wide") + " 4×2" },
+                { "cols": 4, "rows": 4, "label": qsTr("Large") + " 4×4" }
+            ]
+            var hasSize = false
+            for (var s = 0; s < sizeOptions.length; ++s) {
+                var option = sizeOptions[s]
+                if (!Panel.widgetManager.isSizeSupported(
+                        widgetContextMenu.currentWidgetId, option.cols, option.rows)) {
+                    continue
+                }
+                widgetContextMenu.addEntry(sizeMenuEntry, {
+                    "instanceId": instanceId,
+                    "cols": option.cols,
+                    "rows": option.rows,
+                    "text": option.label
+                })
+                hasSize = true
+            }
+
+            if (hasSize)
+                widgetContextMenu.addEntry(menuSeparatorEntry, {})
+
+            if (Panel.widgetManager.widgetSettingsSchema(
+                    widgetContextMenu.currentWidgetId).length > 0) {
+                widgetContextMenu.addEntry(settingsMenuEntry, {
+                    "instanceId": instanceId,
+                    "text": qsTr("Settings…")
+                })
+            }
+
+            widgetContextMenu.addEntry(removeMenuEntry, {
+                "instanceId": instanceId,
+                "text": qsTr("Remove")
+            })
         }
     }
 
