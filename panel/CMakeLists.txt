@@ -17,6 +17,8 @@ add_library(ds-widget-toolbar SHARED
     widgetmodel.h
     fileio.cpp
     fileio.h
+    clocktime.cpp
+    clocktime.h
     lyricssource.cpp
     lyricssource.h
     systeminfo.cpp

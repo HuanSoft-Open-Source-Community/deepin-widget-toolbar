@@ -4,6 +4,7 @@
 
 #include "widgettoolbarpanel.h"
 
+#include "clocktime.h"
 #include "fileio.h"
 #include "lyricssource.h"
 #include "systeminfo.h"
@@ -57,7 +58,7 @@ bool WidgetToolbarPanel::init()
 
     // 宿主能力代理（开放接口的一部分）：注册 QML 单例，小组件通过
     // import org.deepin.widgettoolbar 1.0 使用 FileIO / SystemInfo / Lyrics /
-    // Timezones / WidgetHost
+    // Timezones / ClockTime / WidgetHost
     auto *fileIO = new FileIO(this);
     fileIO->setAllowedRoot(m_widgetManager->widgetsDataRoot());
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "FileIO", fileIO);
@@ -66,6 +67,8 @@ bool WidgetToolbarPanel::init()
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "Lyrics", new LyricsSource(this));
     // 时区数据代理：小组件通过它读取控制中心“时间设置”的时区列表与地区名
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "Timezones", new Timezones(this));
+    // 预加载时间源：时钟/世界时钟共享同一整秒广播，避免大量表盘各自建 Timer 卡顿
+    qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "ClockTime", new ClockTime(this));
     // 配置回写代理：小组件经它持久化自身实例配置（如世界时间的缩放补位）
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "WidgetHost",
                                  new WidgetHost(m_widgetManager, this));
