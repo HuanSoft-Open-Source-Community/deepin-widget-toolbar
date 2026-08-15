@@ -84,7 +84,7 @@ public:
     Q_INVOKABLE QVariantList previewMove(const QString &instanceId, int gridX, int gridY);
     // 拖放落位：成功则触发沿列下推避让并持久化
     Q_INVOKABLE bool moveInstance(const QString &instanceId, int gridX, int gridY);
-    // 一键自动排列：全部实例按列表顺序左上优先压实
+    // 自动整理：按当前视觉顺序左上优先压实；已整齐时跳过，避免无谓重排
     Q_INVOKABLE void autoArrangeAll();
     // 组件允许的尺寸预设（QVariantList of {"cols":n,"rows":m}）
     Q_INVOKABLE QVariantList supportedSizes(const QString &widgetId) const;

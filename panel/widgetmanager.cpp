@@ -306,12 +306,35 @@ QVariantList WidgetManager::previewMove(const QString &instanceId, int gridX, in
 void WidgetManager::autoArrangeAll()
 {
     const QList<Instance> backup = m_instances;
-    QList<Instance> packed;
-    for (const Instance &inst : m_instances) {
+
+    // 按当前视觉顺序（先 y 后 x）压实，而不是按实例清单顺序：
+    // 用户已手动摆整齐时，不会因为清单顺序与视觉顺序不一致而被无谓重排。
+    QList<Instance> ordered = m_instances;
+    std::stable_sort(ordered.begin(), ordered.end(), [](const Instance &a, const Instance &b) {
+        if (a.gridY != b.gridY)
+            return a.gridY < b.gridY;
+        return a.gridX < b.gridX;
+    });
+
+    QList<Instance> placed;
+    QList<Instance> packed = m_instances;
+    for (const Instance &inst : ordered) {
         Instance copy = inst;
-        placeFirstFree(copy, packed);
-        packed.append(copy);
+        placeFirstFree(copy, placed);
+        placed.append(copy);
+        for (Instance &target : packed) {
+            if (target.instanceId == copy.instanceId) {
+                target.gridX = copy.gridX;
+                target.gridY = copy.gridY;
+                break;
+            }
+        }
     }
+
+    // 已经按同样规则压实：不重写文件、不发布局信号，避免“明明整齐还重排”。
+    if (layoutEquals(m_instances, packed))
+        return;
+
     m_instances = packed;
     if (!saveInstances()) {
         m_instances = backup;
