@@ -7,6 +7,8 @@
 #include "clocktime.h"
 #include "fileio.h"
 #include "lyricssource.h"
+#include "mediaplayer.h"
+#include "mediaplayerregistry.h"
 #include "systeminfo.h"
 #include "timezones.h"
 #include "widgethost.h"
@@ -65,6 +67,10 @@ bool WidgetToolbarPanel::init()
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "SystemInfo", new SystemInfo(this));
     // 端闱乐部歌词代理：小组件通过它读取歌词
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "Lyrics", new LyricsSource(this));
+    // MPRIS 播放器注册表与代理：播放控制器小组件通过它们枚举、订阅与控制播放器
+    qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "MediaPlayers",
+                                 new MediaPlayers(this));
+    qmlRegisterType<MediaPlayer>("org.deepin.widgettoolbar", 1, 0, "MediaPlayer");
     // 时区数据代理：小组件通过它读取控制中心“时间设置”的时区列表与地区名
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "Timezones", new Timezones(this));
     // 预加载时间源：时钟/世界时钟共享同一整秒广播，避免大量表盘各自建 Timer 卡顿

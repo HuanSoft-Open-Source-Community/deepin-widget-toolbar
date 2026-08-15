@@ -1,7 +1,7 @@
-# 小组件接口规范（v1.3）
+# 小组件接口规范（v1.4）
 
 > 本文档定义 deepin-widget-toolbar 面板（宿主）与小组件之间的开放接口契约。
-> 当前宿主接口版本：1.3；同时兼容 1.0/1.1/1.2 小组件。
+> 当前宿主接口版本：1.4；同时兼容 1.0/1.1/1.2/1.3 小组件。
 
 ## 1. 架构
 
@@ -47,10 +47,10 @@
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `key` | string | 配置键，不能为空 |
-| `type` | string | `boolean` / `enum` / `color` / `font` / `string` / `integer` / `timezoneList` |
+| `type` | string | `boolean` / `enum` / `color` / `font` / `string` / `integer` / `timezoneList` / `player` |
 | `label` / `label[locale]` | string | 显示名称及本地化名称 |
 | `default` | 任意 | 默认值 |
-| `options` | array | `enum`/`color` 的候选项，元素含 `value`、`label`、`label[locale]`；`font` 的候选由宿主从 `Qt.fontFamilies()` 生成；`timezoneList` 的候选由宿主从 `Timezones` 生成 |
+| `options` | array | `enum`/`color` 的候选项，元素含 `value`、`label`、`label[locale]`；`font` 的候选由宿主从 `Qt.fontFamilies()` 生成；`timezoneList` 的候选由宿主从 `Timezones` 生成；`player` 的候选由宿主从 `MediaPlayers.players` 生成 |
 
 颜色类配置值统一为 `#RRGGBB` 或 `#AARRGGBB`（`AARRGGBB` 用于带透明度的默认色）。宿主/小组件在渲染前必须校验：
 非法值回退到 manifest 默认色，避免脏配置导致渲染异常。内置小组件统一提供
@@ -59,6 +59,10 @@
 `timezoneList` 的值形如 `[{ "zone": "Asia/Shanghai", "auto": false }]`：
 `zone` 为控制中心时区 id，`auto` 标记是否为缩放补位生成。宿主配置面板渲染为
 “时区下拉 + 删除”行列表及“添加”按钮；改过任一行会把 `auto` 置为 false。
+
+`player` 类型的值是一个 MPRIS 会话总线服务名（如 `org.mpris.MediaPlayer2.vlc`），
+由宿主动态枚举；当前无播放器时下拉为空且禁用。配置面板应在 `playerMode` 为
+`locked` 时才显示该行。
 
 内置组件示例：clock 允许 `1×1 / 2×2 / 4×2 / 4×4` 并声明 `clockMode` 配置；lyrics 声明 `lyricsFont` 与 `lyricsColor`。
 
@@ -143,6 +147,55 @@
 信号：`connectedChanged()`（总线上线/下线）、`lyricsChanged()`（快照内容变化，
 重复/过期快照已按 payload 去重）。方法：`refresh()` 主动拉取一次快照。
 
+### MediaPlayers / MediaPlayer（MPRIS 播放器）
+
+> **系统 D-Bus 能力代理**：小组件不允许直接访问系统 D-Bus。宿主提供
+> `MediaPlayers` 单例枚举/监控 MPRIS 播放器，并提供可创建类型 `MediaPlayer`
+> 作为每个播放控制器实例的播放器代理（自动或锁定选择、订阅属性、转发控制与 seek）。
+>
+> **信任边界**：该代理对所有小组件开放。MPRIS 属于同一用户会话的信任边界，
+> 任何持有会话总线权限的进程都可以注册 MPRIS 服务名、扮演播放器或控制播放器；
+> `http(s)` 封面 URL 会由面板发起网络请求，属已接受风险。
+
+`MediaPlayers`（单例）：
+
+| 属性/方法 | 类型 | 说明 |
+|---|---|---|
+| `players` | var | `[{service, name}]`，按服务名排序；`playersChanged()` 在列表变化时发出 |
+| `activeService` | string | 最近产生播放器信号的服务（auto 模式首选） |
+| `playerName(service)` | string | 播放器显示名（Identity，未取到时用服务名后缀） |
+| `serviceNames()` | string[] | 当前 MPRIS 服务名列表 |
+| `isRunning(service)` | bool | 指定服务当前是否持有总线名 |
+
+`MediaPlayer`（每实例一个）：
+
+| 属性 | 类型 | 说明 |
+|---|---|---|
+| `mode` | string | `auto` 或 `locked`（锁定到 `service`） |
+| `service` | string | locked 模式下的目标 MPRIS 服务名 |
+| `connected` / `hasTrack` | bool | 是否已连接 / 是否有曲目元数据 |
+| `playbackStatus` | string | `Playing` / `Paused` / `Stopped` / 空 |
+| `title` / `artist` / `artUrl` | string | 当前曲目元数据（artist 为数组时以逗号连接） |
+| `positionMs` / `lengthMs` | int | 进度（播放中按 Rate 插值）与曲目时长 |
+| `canSeek` / `canControl` | bool | 是否允许 seek / 控制（`CanSeek`/`CanControl`） |
+| `canGoNext` / `canGoPrevious` / `canPlay` / `canPause` | bool | 控制能力门控 |
+
+`Rate` 来自播放器元数据，宿主只接受有限且 `(0, 16]` 范围内的值；非有限、
+`<= 0` 的值回退为 `1.0`，超过 `16.0` 的值钳制为 `16.0`。插值结果始终
+限制在 `[0, lengthMs]` 内。
+
+| 方法 | 签名 | 说明 |
+|---|---|---|
+| `playPause()` | void | 播放/暂停（受 `CanControl`/`CanPlay`/`CanPause` 门控） |
+| `next()` / `previous()` | void | 下一曲/上一曲（受对应能力门控） |
+| `seek(ms)` | void | 绝对 seek（受 `CanSeek` 门控，内部优先 `SetPosition`，无 trackid 时回退 `Seek` 偏移） |
+| `refresh()` | void | 主动重新拉取播放器属性 |
+
+信号：`stateChanged()` 在任一状态/元数据/进度/能力变化时发出。`mpris:artUrl`
+由小组件直接作为 `Image.source` 使用；宿主只接受 `file://`、`http://`、
+`https://` 三种 scheme，其余 URL 会清空并触发小组件回退内置占位图标。
+封面 URL 只来自播放器元数据，不来自小组件配置。
+
 ### Timezones（控制中心时区数据）
 
 > **系统 D-Bus 能力代理**：小组件不允许直接访问系统 D-Bus。世界时间等组件经本代理
@@ -213,7 +266,7 @@
 
 - 小组件声明 `apiVersion`；宿主加载时校验，不兼容则拒绝加载并提示，不静默失败。
 - 宿主新增接口走次版本递增，不破坏既有小组件（1.0 小组件仍可加载）。
-- 当前宿主实现：`apiVersion = "1.3"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控）。
+- 当前宿主实现：`apiVersion = "1.4"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型）。
 
 ## 10. 生命周期（当前范围）
 
@@ -227,5 +280,5 @@
 - 网格支持长按拖放调整位置；右键菜单可切换 `sizes` 声明的占位尺寸，切换时冲突实例联动避让并持久化。
 - 小组件设置页由 manifest `settings` schema 自动生成，支持列出的基础类型及 `timezoneList`。
 - 网络请求未开放；小组件不允许直接访问系统 D-Bus，只能使用宿主能力代理
-  （`FileIO` / `SystemInfo` / `Lyrics` / `Timezones` / `WidgetHost`）。
+  （`FileIO` / `SystemInfo` / `Lyrics` / `Timezones` / `ClockTime` / `WidgetHost` / `MediaPlayers` / `MediaPlayer`）。
 - 小组件间事件总线（`bus.emit/on`）未实现。

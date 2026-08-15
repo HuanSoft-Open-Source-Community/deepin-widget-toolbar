@@ -21,6 +21,10 @@ add_library(ds-widget-toolbar SHARED
     clocktime.h
     lyricssource.cpp
     lyricssource.h
+    mediaplayer.cpp
+    mediaplayer.h
+    mediaplayerregistry.cpp
+    mediaplayerregistry.h
     systeminfo.cpp
     systeminfo.h
     systeminfoworker.cpp
