@@ -6,34 +6,32 @@
 
 #include <QHash>
 #include <QObject>
-#include <QTimer>
+#include <QStringList>
+
+class QThread;
+class SystemInfoWorker;
 
 // 系统监视数据源（QML 单例 org.deepin.widgettoolbar/SystemInfo）：
-// 周期读取 /proc/stat、/proc/meminfo、/proc/diskstats、DRM/accel sysfs
-// 与可选的 NVIDIA NVML。具体公式与数据来源见 docs/system-monitor.md。
+// 文件/sysfs/NVML 采样在工作线程执行，结果通过 queued signal 回传后更新 QML 属性。
+// 新组件通过 updateMonitor(clientId, ...) 注册自身需求，SystemInfo 合并所有活动
+// 客户端的指标集合并按最小刷新间隔采样；旧的无参接口继续兼容。
 class SystemInfo : public QObject
 {
     Q_OBJECT
 public:
-    // 累积计数器采样（GPU Xe idle / NPU busy 共用）
-    struct CumulativeSample {
-        quint64 value = 0;
-        qint64 timeUs = 0;
-    };
-
-    Q_PROPERTY(qreal cpuUsage READ cpuUsage NOTIFY refreshed)
-    Q_PROPERTY(qreal memUsedPercent READ memUsedPercent NOTIFY refreshed)
+    Q_PROPERTY(qreal cpuUsage READ cpuUsage NOTIFY cpuUsageChanged)
+    Q_PROPERTY(qreal memUsedPercent READ memUsedPercent NOTIFY memUsedPercentChanged)
     // 兼容旧接口：根分区空间占用率，仅保留给第三方旧小组件。
-    Q_PROPERTY(qreal diskUsedPercent READ diskUsedPercent NOTIFY refreshed)
+    Q_PROPERTY(qreal diskUsedPercent READ diskUsedPercent NOTIFY diskUsedPercentChanged)
     // iostat 风格的磁盘 IO 忙时利用率（0~1）
-    Q_PROPERTY(qreal diskBusyPercent READ diskBusyPercent NOTIFY refreshed)
-    Q_PROPERTY(qreal gpuUsage READ gpuUsage NOTIFY refreshed)
-    Q_PROPERTY(bool gpuAvailable READ gpuAvailable NOTIFY refreshed)
-    Q_PROPERTY(qreal npuUsage READ npuUsage NOTIFY refreshed)
-    Q_PROPERTY(bool npuAvailable READ npuAvailable NOTIFY refreshed)
+    Q_PROPERTY(qreal diskBusyPercent READ diskBusyPercent NOTIFY diskBusyPercentChanged)
+    Q_PROPERTY(qreal gpuUsage READ gpuUsage NOTIFY gpuUsageChanged)
+    Q_PROPERTY(bool gpuAvailable READ gpuAvailable NOTIFY gpuAvailableChanged)
+    Q_PROPERTY(qreal npuUsage READ npuUsage NOTIFY npuUsageChanged)
+    Q_PROPERTY(bool npuAvailable READ npuAvailable NOTIFY npuAvailableChanged)
 
-public:
     explicit SystemInfo(QObject *parent = nullptr);
+    ~SystemInfo() override;
 
     qreal cpuUsage() const;
     qreal memUsedPercent() const;
@@ -45,20 +43,45 @@ public:
     bool npuAvailable() const;
 
     Q_INVOKABLE void setRefreshInterval(int ms);
+    Q_INVOKABLE void setMonitoringActive(bool active);
+    Q_INVOKABLE void setMonitoredMetrics(const QStringList &metrics);
+    // 以 clientId 注册/更新监控需求；clientId 为空时忽略。
+    Q_INVOKABLE void updateMonitor(const QString &clientId, bool active,
+                                   const QStringList &metrics, int intervalMs);
+    Q_INVOKABLE void releaseMonitor(const QString &clientId);
 
 Q_SIGNALS:
+    // 各属性独立通知信号；refreshed 保留为任一指标变化时的兼容信号。
+    void cpuUsageChanged();
+    void memUsedPercentChanged();
+    void diskUsedPercentChanged();
+    void diskBusyPercentChanged();
+    void gpuUsageChanged();
+    void gpuAvailableChanged();
+    void npuUsageChanged();
+    void npuAvailableChanged();
     void refreshed();
 
-private:
-    void refresh();
-    void readCpu();
-    void readMem();
-    void readDisk();
-    void readDiskIO();
-    void readGpu();
-    void readNpu();
+private Q_SLOTS:
+    void applySample(qreal cpuUsage, qreal memUsedPercent, qreal diskUsedPercent,
+                     qreal diskBusyPercent, qreal gpuUsage, bool gpuAvailable,
+                     qreal npuUsage, bool npuAvailable);
+    void applyRequest();
 
-    QTimer m_timer;
+private:
+    struct MonitorRequest {
+        bool active = false;
+        QStringList metrics;
+        int intervalMs = 5000;
+    };
+
+    void scheduleApplyRequest();
+
+    QThread *m_workerThread = nullptr;
+    SystemInfoWorker *m_worker = nullptr;
+    QHash<QString, MonitorRequest> m_requests;
+    bool m_applyPending = false;
+
     qreal m_cpuUsage = 0.0;
     qreal m_memUsedPercent = 0.0;
     qreal m_diskUsedPercent = 0.0;
@@ -67,14 +90,4 @@ private:
     bool m_gpuAvailable = false;
     qreal m_npuUsage = 0.0;
     bool m_npuAvailable = false;
-
-    quint64 m_prevIdle = 0;
-    quint64 m_prevTotal = 0;
-
-    quint64 m_prevDiskBusyTicks = 0;
-    qint64 m_prevDiskTimeUs = 0;
-    long m_clockTicksPerSecond = 0;
-
-    // key 为 sysfs 文件路径；GPU(Xe idle) 与 NPU 的累积计数器共用
-    QHash<QString, CumulativeSample> m_cumulativeSamples;
 };

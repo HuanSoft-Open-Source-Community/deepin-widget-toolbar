@@ -6,7 +6,7 @@
 # 与 dde-shell 运行时 DConfig 搜索路径一致；不随 CMAKE_INSTALL_PREFIX 漂移
 
 find_package(Dtk6DConfig REQUIRED)
-find_package(Qt6 COMPONENTS LinguistTools Qml DBus REQUIRED)
+find_package(Qt6 COMPONENTS LinguistTools Qml DBus Concurrent REQUIRED)
 
 add_library(ds-widget-toolbar SHARED
     widgettoolbarpanel.cpp
@@ -21,6 +21,8 @@ add_library(ds-widget-toolbar SHARED
     lyricssource.h
     systeminfo.cpp
     systeminfo.h
+    systeminfoworker.cpp
+    systeminfoworker.h
     timezones.cpp
     timezones.h
     widgethost.cpp
@@ -28,7 +30,7 @@ add_library(ds-widget-toolbar SHARED
     widgetresources.qrc
 )
 
-target_link_libraries(ds-widget-toolbar PRIVATE Dde::Shell Qt6::Qml Qt6::DBus)
+target_link_libraries(ds-widget-toolbar PRIVATE Dde::Shell Qt6::Qml Qt6::DBus Qt6::Concurrent)
 
 dtk_add_config_meta_files(APPID "org.deepin.dde.shell" FILES configs/org.deepin.ds.widgettoolbar.json)
 
