@@ -462,6 +462,10 @@ PanelPopup {
                 // 底部保留余量：设置项可滚动时最后一行不会紧贴可视区下缘，
                 // 避免 DTK Switch 等控件底部因亚像素/DPR 取整被裁掉几行像素。
                 contentHeight: settingsColumn.implicitHeight + 12
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                    anchors.right: parent.right
+                }
 
                 ColumnLayout {
                     id: settingsColumn

@@ -91,6 +91,7 @@ PanelPopup {
                 model: Panel.widgetListModel
 
                 ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
                     anchors.right: parent.right
                 }
 
@@ -185,6 +186,7 @@ PanelPopup {
                 model: control.instanceIds
 
                 ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
                     anchors.right: parent.right
                 }
 
