@@ -52,6 +52,10 @@
 | `default` | 任意 | 默认值 |
 | `options` | array | `enum`/`color` 的候选项，元素含 `value`、`label`、`label[locale]`；`font` 的候选由宿主从 `Qt.fontFamilies()` 生成；`timezoneList` 的候选由宿主从 `Timezones` 生成 |
 
+颜色类配置值统一为 `#RRGGBB` 或 `#AARRGGBB`（`AARRGGBB` 用于带透明度的默认色）。宿主/小组件在渲染前必须校验：
+非法值回退到 manifest 默认色，避免脏配置导致渲染异常。内置小组件统一提供
+`transparentBackground`（boolean，默认 `false`）开关：开启时隐藏卡片与内部区域底色（日历/便签等含区域底色的组件一并透明），文字与内容仍保留。
+
 `timezoneList` 的值形如 `[{ "zone": "Asia/Shanghai", "auto": false }]`：
 `zone` 为控制中心时区 id，`auto` 标记是否为缩放补位生成。宿主配置面板渲染为
 “时区下拉 + 删除”行列表及“添加”按钮；改过任一行会把 `auto` 置为 false。
