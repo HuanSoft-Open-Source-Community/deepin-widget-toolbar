@@ -150,6 +150,31 @@ Window {
     // 布局版本：位置变化时递增，驱动内容高度等绑定重新求值
     property int layoutVersion: 0
     property bool widgetsLoaded: false
+    // 网格内容高度的动画代理：尺寸切换时滚动范围平滑过渡
+    property int animatedGridContentHeight: Math.max(gridContentHeight(), height)
+    Behavior on animatedGridContentHeight {
+        NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+    }
+
+    // 刷新实例 ID 列表：只有增删实例时才重建模型并重置滚动；
+    // 尺寸切换只更新位置/尺寸映射，避免 Repeater 重建导致动画丢失。
+    function refreshInstanceIds() {
+        let ids = Panel.widgetManager.instanceIds()
+        let changed = ids.length !== root.instanceIds.length
+        if (!changed) {
+            for (let i = 0; i < ids.length; ++i) {
+                if (ids[i] !== root.instanceIds[i]) {
+                    changed = true
+                    break
+                }
+            }
+        }
+        if (changed) {
+            root.instanceIds = ids
+            gridFlickable.contentY = 0
+        }
+        root.updateGridPositions()
+    }
 
     // 从 C++ 读取全部实例位置并刷新映射
     function updateGridPositions() {
@@ -177,9 +202,7 @@ Window {
     Connections {
         target: Panel.widgetManager
         function onInstancesChanged() {
-            instanceIds = Panel.widgetManager.instanceIds()
-            updateGridPositions()
-            gridFlickable.contentY = 0
+            root.refreshInstanceIds()
         }
         function onLayoutChanged() {
             updateGridPositions()
@@ -271,9 +294,18 @@ Window {
         root.dragTargetX = targetX
         root.dragTargetY = targetY
         root.dragTargetValid = Panel.widgetManager.canDrop(root.dragInstanceId, targetX, targetY)
-        // 预览显示位置：与目标格一致（越界时已吸附回网格内）
-        dragPreview.x = targetX * (cellWidth + cellSpacing)
-        dragPreview.y = targetY * (cellHeight + cellSpacing)
+        // 预览跟随原始指针连续移动（仅做网格边界钳制），
+        // 最终停放仍由 dragTargetX/Y 吸附格决定。
+        let previewWidth = root.dragCols * cellWidth
+            + (root.dragCols - 1) * cellSpacing
+        let previewHeight = root.dragRows * cellHeight
+            + (root.dragRows - 1) * cellSpacing
+        dragPreview.x = Math.max(0,
+            Math.min(pointerX - root.dragGrabOffsetX,
+                     Math.max(0, gridCanvas.width - previewWidth)))
+        dragPreview.y = Math.max(0,
+            Math.min(pointerY - root.dragGrabOffsetY,
+                     Math.max(0, gridCanvas.height - previewHeight)))
         if (root.dragTargetValid) {
             // 实时避让：目标格被占用时，被占组件立即动画让位（双向联动）
             let layout = Panel.widgetManager.previewMove(
@@ -618,7 +650,7 @@ Window {
                 anchors.fill: parent
                 clip: true
                 contentWidth: width
-                contentHeight: Math.max(gridContentHeight(), height)
+                contentHeight: root.animatedGridContentHeight
 
                 // DDE 样式滚动条：不活跃时自动隐藏（org.deepin.dtk ScrollBar）
                 ScrollBar.vertical: ScrollBar {
@@ -657,6 +689,17 @@ Window {
                             }
                             Behavior on y {
                                 NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                            }
+                            // 尺寸切换动画：让组件在 1×1/2×2/4×2/4×4 之间平滑缩放
+                            Behavior on width {
+                                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                            }
+                            Behavior on height {
+                                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                            }
+                            // 拖拽中淡化的原实例也平滑过渡
+                            Behavior on opacity {
+                                NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
                             }
 
                             // 小组件渲染入口（qrc 或本地文件），由宿主按 widgetId 解析
@@ -766,6 +809,19 @@ Window {
                         z: 10
                         width: root.dragCols * cellWidth + (root.dragCols - 1) * cellSpacing
                         height: root.dragRows * cellHeight + (root.dragRows - 1) * cellSpacing
+                        // 拖拽预览平滑跟随指针，避免逐格硬跳
+                        Behavior on x {
+                            SmoothedAnimation {
+                                velocity: 1000
+                                reversingMode: SmoothedAnimation.Immediate
+                            }
+                        }
+                        Behavior on y {
+                            SmoothedAnimation {
+                                velocity: 1000
+                                reversingMode: SmoothedAnimation.Immediate
+                            }
+                        }
 
                         Image {
                             id: dragPreviewImage
