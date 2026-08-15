@@ -19,6 +19,13 @@
     ],
     "settings": [
         {
+            "key": "transparentBackground",
+            "type": "boolean",
+            "label": "Transparent background",
+            "label[zh_CN]": "透明背景",
+            "default": false
+        },
+        {
             "key": "clockMode",
             "type": "enum",
             "label": "Clock mode",
@@ -56,6 +63,76 @@
             "label": "Highlight local time",
             "label[zh_CN]": "高亮本机时间",
             "default": true
+        },
+        {
+            "key": "backgroundColor",
+            "type": "color",
+            "label": "Background color",
+            "label[zh_CN]": "背景颜色",
+            "default": "#000000",
+            "options": [
+                { "value": "#000000", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "textColor",
+            "type": "color",
+            "label": "Text color",
+            "label[zh_CN]": "文字颜色",
+            "default": "#ffffff",
+            "options": [
+                { "value": "#ffffff", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "dialBackgroundColor",
+            "type": "color",
+            "label": "Dial background",
+            "label[zh_CN]": "表盘背景",
+            "default": "#ffffff",
+            "options": [
+                { "value": "#ffffff", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "dialColor",
+            "type": "color",
+            "label": "Dial marks",
+            "label[zh_CN]": "盘面格",
+            "default": "#000000",
+            "options": [
+                { "value": "#000000", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "hourMinuteHandColor",
+            "type": "color",
+            "label": "Hour/minute hand",
+            "label[zh_CN]": "时分针",
+            "default": "#000000",
+            "options": [
+                { "value": "#000000", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "secondHandColor",
+            "type": "color",
+            "label": "Second hand",
+            "label[zh_CN]": "秒针",
+            "default": "#ff4d4f",
+            "options": [
+                { "value": "#ff4d4f", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "highlightColor",
+            "type": "color",
+            "label": "Highlight color",
+            "label[zh_CN]": "高亮颜色",
+            "default": "#4d8cff",
+            "options": [
+                { "value": "#4d8cff", "label": "Default", "label[zh_CN]": "默认" }
+            ]
         }
     ],
     "builtin": true

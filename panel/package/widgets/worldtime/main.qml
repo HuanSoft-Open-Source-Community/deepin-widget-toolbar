@@ -20,18 +20,33 @@ import "../components" as Components
 Components.WidgetCard {
     id: root
 
-    property var widgetConfig: ({})
-    property string instanceId: ""
+    widgetConfig: ({})
+    instanceId: ""
     property bool analogMode: widgetConfig && widgetConfig.clockMode === "analog"
     property bool preloadTime: widgetConfig && widgetConfig.preloadTime !== undefined
         ? widgetConfig.preloadTime : true
+    transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
+    backgroundColor: Components.ColorUtils.opaqueColor(
+        widgetConfig && widgetConfig.backgroundColor, "#000000")
+    textColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.textColor, "#ffffff")
+    property color dialBackgroundColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.dialBackgroundColor, "#ffffff")
+    property color dialColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.dialColor, "#000000")
+    property color hourMinuteHandColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.hourMinuteHandColor, "#000000")
+    property color secondHandColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.secondHandColor, "#ff4d4f")
+    highlightColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.highlightColor, "#4d8cff")
     property bool panelVisible: Panel.visible
     property bool showLabels: widgetConfig && widgetConfig.showLabels !== undefined
         ? widgetConfig.showLabels : true
     property bool highlightLocal: widgetConfig && widgetConfig.highlightLocal !== undefined
         ? widgetConfig.highlightLocal : true
-    property int hostCols: 4
-    property int hostRows: 2
+    hostCols: 4
+    hostRows: 2
     property int dialCount: Math.max(1, hostCols * hostRows)
     property real localOffset: {
         var now = new Date()
@@ -91,7 +106,15 @@ Components.WidgetCard {
             infos.push({
                 "zone": list[j].zone,
                 "name": root.zoneName(list[j].zone),
-                "offset": root.zoneOffset(list[j].zone)
+                "offset": root.zoneOffset(list[j].zone),
+                "dialBackground": Components.ColorUtils.resolveColor(
+                    list[j].dialBackground, root.dialBackgroundColor),
+                "dialColor": Components.ColorUtils.resolveColor(
+                    list[j].dialColor, root.dialColor),
+                "hourMinuteColor": Components.ColorUtils.resolveColor(
+                    list[j].hourMinuteColor, root.hourMinuteHandColor),
+                "secondColor": Components.ColorUtils.resolveColor(
+                    list[j].secondColor, root.secondHandColor)
             })
         }
         root.zoneInfos = infos
@@ -104,8 +127,16 @@ Components.WidgetCard {
         if (source && source.length !== undefined) {
             for (var i = 0; i < source.length; i++) {
                 var item = source[i]
-                if (item && typeof item.zone === "string" && item.zone.length > 0)
-                    list.push({ "zone": item.zone, "auto": item.auto === true })
+                if (item && typeof item.zone === "string" && item.zone.length > 0) {
+                    list.push({
+                        "zone": item.zone,
+                        "auto": item.auto === true,
+                        "dialBackground": item.dialBackground,
+                        "dialColor": item.dialColor,
+                        "hourMinuteColor": item.hourMinuteColor,
+                        "secondColor": item.secondColor
+                    })
+                }
             }
         }
         root.applyDials(list)
@@ -309,7 +340,12 @@ Components.WidgetCard {
                     showLabels: root.showLabels
                     highlighted: root.highlightLocal
                         && Math.abs(modelData.offset - root.localOffset) < 0.001
-                    accentColor: palette.highlight
+                    accentColor: root.highlightColor
+                    faceBackgroundColor: modelData.dialBackground
+                    dialColor: modelData.dialColor
+                    hourMinuteHandColor: modelData.hourMinuteColor
+                    secondHandColor: modelData.secondColor
+                    textColor: root.textColor
                     preloadTime: root.preloadTime
                     active: root.analogMode && root.panelVisible
                 }

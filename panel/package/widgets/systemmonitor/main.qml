@@ -16,10 +16,10 @@ import "../components" as Components
 Components.WidgetCard {
     id: root
 
-    property string instanceId: ""
-    property int hostCols: 2
-    property int hostRows: 2
-    property var widgetConfig: ({})
+    instanceId: ""
+    hostCols: 2
+    hostRows: 2
+    widgetConfig: ({})
     property bool showCpu: widgetConfig && widgetConfig.showCpu !== undefined
         ? widgetConfig.showCpu : true
     property bool showMem: widgetConfig && widgetConfig.showMem !== undefined
@@ -32,6 +32,21 @@ Components.WidgetCard {
         ? widgetConfig.showNpu : true
     property int refreshInterval: widgetConfig && widgetConfig.refreshInterval
         ? Math.max(1000, Number(widgetConfig.refreshInterval)) : 5000
+    transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
+    backgroundColor: Components.ColorUtils.opaqueColor(
+        widgetConfig && widgetConfig.backgroundColor, "#ff8b5cf6")
+    textColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.textColor, "#ffffff")
+    property color titleTextColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.titleTextColor, "#ffffff")
+    property color labelTextColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.labelTextColor, "#ffffff")
+    property color valueTextColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.valueTextColor, "#ffffff")
+    property color barTrackColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.barTrackColor, "#ffffff")
+    property color barColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.barColor, "#4d8cff")
 
     // 双列对宽（4×2）与大（4×4）生效；中号（2×2）固定单列。
     property bool dualColumn: hostCols >= 4
@@ -154,7 +169,7 @@ Components.WidgetCard {
             width: root.metricLabelWidth
             text: label
             font: DTK.fontManager.t7
-            color: palette.windowText
+            color: root.labelTextColor
             opacity: 0.7
             elide: Text.ElideRight
         }
@@ -167,7 +182,7 @@ Components.WidgetCard {
             horizontalAlignment: Text.AlignRight
             text: root.metricText(metricId)
             font: DTK.fontManager.t7
-            color: palette.windowText
+            color: root.valueTextColor
             opacity: root.metricAvailable(metricId) ? 1.0 : 0.5
         }
 
@@ -184,7 +199,7 @@ Components.WidgetCard {
             Rectangle {
                 anchors.fill: parent
                 radius: root.barHeight / 2
-                color: palette.windowText
+                color: root.barTrackColor
                 opacity: 0.15
             }
 
@@ -195,7 +210,7 @@ Components.WidgetCard {
                 anchors.bottom: parent.bottom
                 width: Math.max(0, parent.width * root.metricUsage(metricId))
                 radius: root.barHeight / 2
-                color: palette.highlight
+                color: root.barColor
             }
         }
     }
@@ -211,7 +226,7 @@ Components.WidgetCard {
             width: parent.width
             text: qsTr("System Monitor")
             font: root.hostRows >= 4 ? DTK.fontManager.t5 : DTK.fontManager.t6
-            color: palette.windowText
+            color: root.titleTextColor
             elide: Text.ElideRight
         }
 
@@ -253,7 +268,7 @@ Components.WidgetCard {
             horizontalAlignment: Text.AlignHCenter
             text: qsTr("No metrics enabled")
             font: root.hostRows >= 4 ? DTK.fontManager.t5 : DTK.fontManager.t6
-            color: palette.windowText
+            color: root.textColor
             opacity: 0.6
         }
     }

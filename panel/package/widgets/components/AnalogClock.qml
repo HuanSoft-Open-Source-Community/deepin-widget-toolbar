@@ -20,6 +20,11 @@ Item {
     property bool showLabels: true
     property bool highlighted: false
     property color accentColor: palette.highlight
+    property color faceBackgroundColor: "#ffffff"
+    property color dialColor: "#000000"
+    property color hourMinuteHandColor: "#000000"
+    property color secondHandColor: "#ff4d4f"
+    property color textColor: palette.windowText
     property bool preloadTime: true
     property bool active: true
 
@@ -60,6 +65,10 @@ Item {
     onPreloadTimeChanged: root.tick()
     onPaletteChanged: dialCanvas.requestPaint()
     onShowLabelsChanged: dialCanvas.requestPaint()
+    onFaceBackgroundColorChanged: dialCanvas.requestPaint()
+    onDialColorChanged: dialCanvas.requestPaint()
+    onHourMinuteHandColorChanged: dialCanvas.requestPaint()
+    onSecondHandColorChanged: dialCanvas.requestPaint()
     Component.onCompleted: root.tick()
 
     Connections {
@@ -113,9 +122,15 @@ Item {
                 var radius = root.radius
                 var tickCount = radius < 28 ? 4 : 12
 
+                // 表盘底色
+                ctx.fillStyle = root.faceBackgroundColor
+                ctx.beginPath()
+                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
+                ctx.fill()
+
                 ctx.lineCap = "round"
-                ctx.strokeStyle = palette.windowText
-                ctx.fillStyle = palette.windowText
+                ctx.strokeStyle = root.dialColor
+                ctx.fillStyle = root.dialColor
 
                 ctx.lineWidth = Math.max(1, radius * 0.04)
                 ctx.beginPath()
@@ -161,7 +176,7 @@ Item {
                 width: root.handWidth
                 height: root.radius * 0.48
                 radius: root.handWidth / 2
-                color: palette.windowText
+                color: root.hourMinuteHandColor
             }
         }
 
@@ -185,7 +200,7 @@ Item {
                 width: root.handWidth * 0.8
                 height: root.radius * 0.68
                 radius: Math.max(1, root.handWidth * 0.4)
-                color: palette.windowText
+                color: root.hourMinuteHandColor
             }
         }
 
@@ -209,7 +224,7 @@ Item {
                 width: root.handWidth * 0.7
                 height: root.radius * 0.76
                 radius: Math.max(1, root.handWidth * 0.35)
-                color: root.accentColor
+                color: root.secondHandColor
             }
         }
 
@@ -219,7 +234,7 @@ Item {
             width: Math.max(3, root.radius * 0.1)
             height: Math.max(3, root.radius * 0.1)
             radius: Math.max(1.5, root.radius * 0.05)
-            color: root.accentColor
+            color: root.secondHandColor
         }
     }
 
@@ -235,7 +250,7 @@ Item {
         verticalAlignment: Text.AlignVCenter
         text: root.label
         font.pixelSize: Math.max(7, Math.min(13, parent.width * 0.035))
-        color: root.highlighted ? root.accentColor : palette.windowText
+        color: root.highlighted ? root.accentColor : root.textColor
         elide: Text.ElideRight
     }
 }

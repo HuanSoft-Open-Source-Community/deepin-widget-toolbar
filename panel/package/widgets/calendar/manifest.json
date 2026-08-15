@@ -18,6 +18,13 @@
     ],
     "settings": [
         {
+            "key": "transparentBackground",
+            "type": "boolean",
+            "label": "Transparent background",
+            "label[zh_CN]": "透明背景",
+            "default": false
+        },
+        {
             "key": "weekStartsOn",
             "type": "enum",
             "label": "Week starts on",
@@ -34,6 +41,96 @@
             "label": "Highlight today",
             "label[zh_CN]": "高亮今天",
             "default": true
+        },
+        {
+            "key": "backgroundColor",
+            "type": "color",
+            "label": "Background color",
+            "label[zh_CN]": "背景颜色",
+            "default": "#ffffff",
+            "options": [
+                { "value": "#ffffff", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "textColor",
+            "type": "color",
+            "label": "Text color",
+            "label[zh_CN]": "文字颜色",
+            "default": "#222222",
+            "options": [
+                { "value": "#222222", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "titleBackgroundColor",
+            "type": "color",
+            "label": "Title background",
+            "label[zh_CN]": "标题栏背景",
+            "default": "#e64545",
+            "options": [
+                { "value": "#e64545", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "titleTextColor",
+            "type": "color",
+            "label": "Title text",
+            "label[zh_CN]": "标题文字",
+            "default": "#ffffff",
+            "options": [
+                { "value": "#ffffff", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "weekdayBackgroundColor",
+            "type": "color",
+            "label": "Weekday background",
+            "label[zh_CN]": "星期栏背景",
+            "default": "#ffc0cb",
+            "options": [
+                { "value": "#ffc0cb", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "weekdayTextColor",
+            "type": "color",
+            "label": "Weekday text",
+            "label[zh_CN]": "星期文字",
+            "default": "#8a3a3a",
+            "options": [
+                { "value": "#8a3a3a", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "highlightColor",
+            "type": "color",
+            "label": "Highlight color",
+            "label[zh_CN]": "高亮颜色",
+            "default": "#e64545",
+            "options": [
+                { "value": "#e64545", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "highlightedTextColor",
+            "type": "color",
+            "label": "Highlighted text",
+            "label[zh_CN]": "高亮文字",
+            "default": "#ffffff",
+            "options": [
+                { "value": "#ffffff", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "gridColor",
+            "type": "color",
+            "label": "Grid lines",
+            "label[zh_CN]": "网格线",
+            "default": "#cccccc",
+            "options": [
+                { "value": "#cccccc", "label": "Default", "label[zh_CN]": "默认" }
+            ]
         }
     ],
     "builtin": true

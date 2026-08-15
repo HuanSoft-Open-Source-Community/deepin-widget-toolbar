@@ -18,6 +18,13 @@
     ],
     "settings": [
         {
+            "key": "transparentBackground",
+            "type": "boolean",
+            "label": "Transparent background",
+            "label[zh_CN]": "透明背景",
+            "default": false
+        },
+        {
             "key": "noteFontScale",
             "type": "enum",
             "label": "Note font size",
@@ -39,6 +46,56 @@
                 { "value": 2000, "label": "2 s", "label[zh_CN]": "2 秒" },
                 { "value": 5000, "label": "5 s", "label[zh_CN]": "5 秒" },
                 { "value": 10000, "label": "10 s", "label[zh_CN]": "10 秒" }
+            ]
+        },
+        {
+            "key": "textColor",
+            "type": "color",
+            "label": "Text color",
+            "label[zh_CN]": "文字颜色",
+            "default": "#3d2b00",
+            "options": [
+                { "value": "#3d2b00", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "titleBackgroundColor",
+            "type": "color",
+            "label": "Title background",
+            "label[zh_CN]": "标题背景",
+            "default": "#c8a500",
+            "options": [
+                { "value": "#c8a500", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "titleTextColor",
+            "type": "color",
+            "label": "Title text",
+            "label[zh_CN]": "标题文字",
+            "default": "#1a1a00",
+            "options": [
+                { "value": "#1a1a00", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "contentBackgroundColor",
+            "type": "color",
+            "label": "Content background",
+            "label[zh_CN]": "内容背景",
+            "default": "#fff8d6",
+            "options": [
+                { "value": "#fff8d6", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "lineColor",
+            "type": "color",
+            "label": "Line color",
+            "label[zh_CN]": "行底线",
+            "default": "#cccccc",
+            "options": [
+                { "value": "#cccccc", "label": "Default", "label[zh_CN]": "默认" }
             ]
         }
     ],

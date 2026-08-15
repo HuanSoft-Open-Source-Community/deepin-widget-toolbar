@@ -13,12 +13,25 @@ import "../components" as Components
 Components.WidgetCard {
     id: root
 
-    property var widgetConfig: ({})
-    property string dataDir: ""
-    property string instanceId: ""
+    widgetConfig: ({})
+    dataDir: ""
+    instanceId: ""
 
     property string notePath: dataDir.length > 0 && instanceId.length > 0
         ? dataDir + "/" + instanceId + ".txt" : ""
+    transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
+    // 卡片底色跟随内容背景色，让内容自定义色延伸到整个便签卡片
+    backgroundColor: root.contentBackgroundColor
+    textColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.textColor, "#3d2b00")
+    property color titleBackgroundColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.titleBackgroundColor, "#c8a500")
+    property color titleTextColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.titleTextColor, "#1a1a00")
+    property color contentBackgroundColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.contentBackgroundColor, "#fff8d6")
+    property color lineColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.lineColor, "#cccccc")
     property int titlePixelSize: Math.max(10, Math.min(20, Math.round(content.width * 0.04)))
     property real noteFontScale: {
         var mode = widgetConfig && widgetConfig.noteFontScale ? widgetConfig.noteFontScale : "medium"
@@ -30,8 +43,13 @@ Components.WidgetCard {
     }
     property int notePixelSize: Math.max(9, Math.min(20,
         Math.round(content.height * 0.09 * noteFontScale)))
+    // 行底线必须与 TextArea 实际文本行高一致，不能用像素大小的经验倍率估算
+    property real lineHeight: Math.max(12, noteFontMetrics.lineSpacing)
     property int autoSaveInterval: widgetConfig && widgetConfig.autoSaveInterval
         ? Number(widgetConfig.autoSaveInterval) : 5000
+
+    onNotePixelSizeChanged: if (lineCanvas) lineCanvas.requestPaint()
+    onLineHeightChanged: if (lineCanvas) lineCanvas.requestPaint()
 
     onNotePathChanged: {
         Qt.callLater(function () {
@@ -45,45 +63,90 @@ Components.WidgetCard {
         anchors.fill: parent
         spacing: 4
 
-        Text {
-            text: qsTr("Sticky Note")
-            font.pixelSize: root.titlePixelSize
-            color: palette.windowText
+        Rectangle {
+            id: titleBar
+            width: parent.width
+            height: root.titlePixelSize + 8
+            radius: 4
+            color: root.transparentBackground ? "transparent" : root.titleBackgroundColor
+
+            Text {
+                anchors.centerIn: parent
+                text: qsTr("Sticky Note")
+                font.pixelSize: root.titlePixelSize
+                color: root.titleTextColor
+            }
         }
 
-        TextArea {
-            id: noteArea
+        Item {
             width: parent.width
-            height: parent.height - 30
-            font.pixelSize: root.notePixelSize
-            color: palette.windowText
-            placeholderText: qsTr("Write something…")
-            background: Rectangle {
+            height: parent.height - titleBar.height - content.spacing
+
+            Rectangle {
+                anchors.fill: parent
                 radius: DTK.platformTheme.windowRadius
-                color: "transparent"
+                color: root.transparentBackground ? "transparent" : root.contentBackgroundColor
             }
 
-            function loadNote() {
-                if (root.notePath.length > 0 && FileIO.exists(root.notePath))
-                    noteArea.text = FileIO.readTextFile(root.notePath)
-            }
-            function saveNote() {
-                if (root.notePath.length > 0)
-                    FileIO.writeTextFile(root.notePath, text)
-            }
+            TextArea {
+                id: noteArea
+                anchors.fill: parent
+                font.pixelSize: root.notePixelSize
+                color: root.textColor
+                placeholderText: qsTr("Write something…")
+                FontMetrics {
+                    id: noteFontMetrics
+                    font: noteArea.font
+                }
+                background: Canvas {
+                    id: lineCanvas
+                    anchors.fill: parent
 
-            onActiveFocusChanged: {
-                if (!activeFocus)
-                    saveNote()
-            }
-            Component.onDestruction: saveNote()
+                    onWidthChanged: requestPaint()
+                    onHeightChanged: requestPaint()
 
-            Timer {
-                id: autoSaveTimer
-                interval: root.autoSaveInterval
-                repeat: true
-                running: noteArea.activeFocus
-                onTriggered: noteArea.saveNote()
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        if (!ctx)
+                            return
+                        ctx.reset()
+                        ctx.strokeStyle = root.transparentBackground ? "transparent" : root.lineColor
+                        ctx.globalAlpha = 0.7
+                        ctx.lineWidth = 1
+
+                        var y = noteArea.topPadding + root.lineHeight - 1
+                        while (y < height - noteArea.bottomPadding) {
+                            ctx.beginPath()
+                            ctx.moveTo(2, y)
+                            ctx.lineTo(width - 4, y)
+                            ctx.stroke()
+                            y += root.lineHeight
+                        }
+                    }
+                }
+
+                function loadNote() {
+                    if (root.notePath.length > 0 && FileIO.exists(root.notePath))
+                        noteArea.text = FileIO.readTextFile(root.notePath)
+                }
+                function saveNote() {
+                    if (root.notePath.length > 0)
+                        FileIO.writeTextFile(root.notePath, text)
+                }
+
+                onActiveFocusChanged: {
+                    if (!activeFocus)
+                        saveNote()
+                }
+                Component.onDestruction: saveNote()
+
+                Timer {
+                    id: autoSaveTimer
+                    interval: root.autoSaveInterval
+                    repeat: true
+                    running: noteArea.activeFocus
+                    onTriggered: noteArea.saveNote()
+                }
             }
         }
     }

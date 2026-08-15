@@ -12,10 +12,25 @@ import "../components" as Components
 Components.WidgetCard {
     id: root
 
-    property var widgetConfig: ({})
+    widgetConfig: ({})
     property bool analogMode: widgetConfig && widgetConfig.clockMode === "analog"
     property bool preloadTime: widgetConfig && widgetConfig.preloadTime !== undefined
         ? widgetConfig.preloadTime : true
+    transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
+    backgroundColor: Components.ColorUtils.opaqueColor(
+        widgetConfig && widgetConfig.backgroundColor, "#000000")
+    textColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.textColor, "#ffffff")
+    property color dialBackgroundColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.dialBackgroundColor, "#ffffff")
+    property color dialColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.dialColor, "#000000")
+    property color hourMinuteHandColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.hourMinuteHandColor, "#000000")
+    property color secondHandColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.secondHandColor, "#ff4d4f")
+    highlightColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.highlightColor, "#4d8cff")
     property bool panelVisible: Panel.visible
     property int contentWidth: Math.max(1, width - margin * 2)
     property int contentHeight: Math.max(1, height - margin * 2)
@@ -59,7 +74,12 @@ Components.WidgetCard {
         anchors.fill: parent
         utcOffset: 0
         showLabels: false
-        accentColor: palette.highlight
+        accentColor: root.highlightColor
+        faceBackgroundColor: root.dialBackgroundColor
+        dialColor: root.dialColor
+        hourMinuteHandColor: root.hourMinuteHandColor
+        secondHandColor: root.secondHandColor
+        textColor: root.textColor
         preloadTime: root.preloadTime
         active: root.analogMode && root.panelVisible
     }

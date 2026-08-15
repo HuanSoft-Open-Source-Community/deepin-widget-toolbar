@@ -13,11 +13,20 @@ import "../components" as Components
 Components.WidgetCard {
     id: root
 
-    property var widgetConfig: ({})
+    widgetConfig: ({})
     property string lyricFontFamily: widgetConfig && widgetConfig.lyricsFont
         ? widgetConfig.lyricsFont : DTK.fontManager.t4.family
     property string lyricColor: widgetConfig && widgetConfig.lyricsColor
         ? widgetConfig.lyricsColor : "auto"
+    transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
+    backgroundColor: Components.ColorUtils.opaqueColor(
+        widgetConfig && widgetConfig.backgroundColor, "#ffffc0cb")
+    property color titleTextColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.titleTextColor, "#7a1f33")
+    property color statusTextColor: Components.ColorUtils.resolveColor(
+        widgetConfig && widgetConfig.statusTextColor, "#7a3b4a")
+    property string inactiveTextColor: widgetConfig && widgetConfig.inactiveTextColor
+        ? String(widgetConfig.inactiveTextColor) : "#8a4a55"
     property int contentHeight: Math.max(1, height - margin * 2)
     property int activePixelSize: Math.max(13, Math.min(42,
         Math.round(contentHeight * 0.105)))
@@ -37,10 +46,20 @@ Components.WidgetCard {
     function textColor(active) {
         if (root.lyricColor !== "auto")
             return root.lyricColor
-        return active ? palette.highlight : palette.windowText
+        // 淡粉底固定为浅色，auto 模式必须用深色文字保证可读性
+        return active ? "#b0305a" : "#5a2233"
     }
 
-    // 标题行：应用图标 + 标题 + 连接状态圆点
+    function inactiveColor(activeColor) {
+        if (root.inactiveTextColor !== "auto") {
+            var resolved = Components.ColorUtils.resolveColor(root.inactiveTextColor, "")
+            if (resolved.length > 0)
+                return resolved
+        }
+        return activeColor
+    }
+
+    // 标题行：标题 + 连接状态圆点
     RowLayout {
         anchors {
             top: parent.top
@@ -52,19 +71,11 @@ Components.WidgetCard {
         }
         spacing: 6
 
-        Image {
-            Layout.preferredWidth: 16
-            Layout.preferredHeight: 16
-            source: "media-player"
-            sourceSize.width: 16
-            sourceSize.height: 16
-        }
-
         Text {
             Layout.fillWidth: true
             text: qsTr("Ter-Music Lyrics")
             font: DTK.fontManager.t6
-            color: palette.windowText
+            color: root.titleTextColor
             elide: Text.ElideRight
         }
 
@@ -102,8 +113,11 @@ Components.WidgetCard {
             font.family: root.lyricFontFamily
             font.pixelSize: Lyrics.activeLineA
                 ? root.activePixelSize : root.inactivePixelSize
-            color: root.textColor(Lyrics.activeLineA)
-            opacity: Lyrics.activeLineA ? 1.0 : 0.55
+            color: Lyrics.activeLineA
+                ? root.textColor(true)
+                : root.inactiveColor(root.textColor(false))
+            opacity: Lyrics.activeLineA ? 1.0
+                : (root.inactiveTextColor === "auto" ? 0.55 : 0.85)
             wrapMode: Text.Wrap
             elide: Text.ElideRight
             maximumLineCount: 2
@@ -121,8 +135,9 @@ Components.WidgetCard {
             font.family: root.lyricFontFamily
             font.pixelSize: Lyrics.activeLineA
                 ? root.inactivePixelSize : root.activePixelSize
-            color: root.textColor(!Lyrics.activeLineA)
-            opacity: Lyrics.activeLineA ? 0.55 : 1.0
+            color: root.inactiveColor(root.textColor(!Lyrics.activeLineA))
+            opacity: Lyrics.activeLineA
+                ? (root.inactiveTextColor === "auto" ? 0.55 : 0.85) : 1.0
             wrapMode: Text.Wrap
             elide: Text.ElideRight
             maximumLineCount: 2
@@ -147,7 +162,7 @@ Components.WidgetCard {
         visible: root.statusText.length > 0
         text: root.statusText
         font: DTK.fontManager.t6
-        color: palette.windowText
+        color: root.statusTextColor
         opacity: 0.6
         wrapMode: Text.Wrap
     }

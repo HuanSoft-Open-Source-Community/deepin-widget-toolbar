@@ -18,6 +18,13 @@
     ],
     "settings": [
         {
+            "key": "transparentBackground",
+            "type": "boolean",
+            "label": "Transparent background",
+            "label[zh_CN]": "透明背景",
+            "default": false
+        },
+        {
             "key": "showCpu",
             "type": "boolean",
             "label": "Show CPU",
@@ -69,6 +76,76 @@
                 { "value": 1000, "label": "1 s", "label[zh_CN]": "1 秒" },
                 { "value": 2000, "label": "2 s", "label[zh_CN]": "2 秒" },
                 { "value": 5000, "label": "5 s", "label[zh_CN]": "5 秒" }
+            ]
+        },
+        {
+            "key": "backgroundColor",
+            "type": "color",
+            "label": "Background color",
+            "label[zh_CN]": "背景颜色",
+            "default": "#ff8b5cf6",
+            "options": [
+                { "value": "#ff8b5cf6", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "textColor",
+            "type": "color",
+            "label": "Text color",
+            "label[zh_CN]": "文字颜色",
+            "default": "#ffffff",
+            "options": [
+                { "value": "#ffffff", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "titleTextColor",
+            "type": "color",
+            "label": "Title text",
+            "label[zh_CN]": "标题文字",
+            "default": "#ffffff",
+            "options": [
+                { "value": "#ffffff", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "labelTextColor",
+            "type": "color",
+            "label": "Label text",
+            "label[zh_CN]": "指标文字",
+            "default": "#ffffff",
+            "options": [
+                { "value": "#ffffff", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "valueTextColor",
+            "type": "color",
+            "label": "Value text",
+            "label[zh_CN]": "数值文字",
+            "default": "#ffffff",
+            "options": [
+                { "value": "#ffffff", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "barTrackColor",
+            "type": "color",
+            "label": "Bar track",
+            "label[zh_CN]": "进度条轨道",
+            "default": "#ffffff",
+            "options": [
+                { "value": "#ffffff", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "barColor",
+            "type": "color",
+            "label": "Bar color",
+            "label[zh_CN]": "进度条颜色",
+            "default": "#4d8cff",
+            "options": [
+                { "value": "#4d8cff", "label": "Default", "label[zh_CN]": "默认" }
             ]
         }
     ],

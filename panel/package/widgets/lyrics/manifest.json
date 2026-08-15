@@ -18,11 +18,58 @@
     ],
     "settings": [
         {
+            "key": "transparentBackground",
+            "type": "boolean",
+            "label": "Transparent background",
+            "label[zh_CN]": "透明背景",
+            "default": false
+        },
+        {
             "key": "lyricsFont",
             "type": "font",
             "label": "Lyrics font",
             "label[zh_CN]": "歌词字体",
             "default": "Noto Sans CJK SC"
+        },
+        {
+            "key": "backgroundColor",
+            "type": "color",
+            "label": "Background color",
+            "label[zh_CN]": "背景颜色",
+            "default": "#ffffc0cb",
+            "options": [
+                { "value": "#ffffc0cb", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "titleTextColor",
+            "type": "color",
+            "label": "Title text",
+            "label[zh_CN]": "标题文字",
+            "default": "#7a1f33",
+            "options": [
+                { "value": "#7a1f33", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "statusTextColor",
+            "type": "color",
+            "label": "Status text",
+            "label[zh_CN]": "状态文字",
+            "default": "#7a3b4a",
+            "options": [
+                { "value": "#7a3b4a", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "inactiveTextColor",
+            "type": "color",
+            "label": "Inactive lyric",
+            "label[zh_CN]": "非当前句颜色",
+            "default": "#8a4a55",
+            "options": [
+                { "value": "#8a4a55", "label": "Default", "label[zh_CN]": "默认" }
+            ]
         },
         {
             "key": "lyricsColor",
