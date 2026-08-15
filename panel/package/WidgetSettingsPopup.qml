@@ -10,6 +10,7 @@ import QtQuick.Layouts
 import org.deepin.dtk 1.0
 import org.deepin.ds 1.0
 import org.deepin.widgettoolbar 1.0
+import "widgets/components" as Components
 
 // 单个小组件实例的配置面板：复用 PanelPopup/PopupHeader，
 // 根据 WidgetManager 返回的 settings schema 动态生成控件并即时保存。
@@ -24,13 +25,16 @@ PanelPopup {
     property var zoneOptions: []
     property var usedZones: []
     property string editingColorKey: ""
+    property string editingDialKey: ""
+    property int editingDialIndex: -1
+    property string editingDialField: ""
 
     popupX: 0 - width - 8
     popupY: 0
     windowTitle: "dde-shell/widgettoolbar-widget-settings"
 
-    width: 320
-    height: 400
+    width: 360
+    height: 520
 
     function openFor(instance) {
         control.instanceId = instance
@@ -83,8 +87,46 @@ PanelPopup {
 
     function openCustomColor(key, colorText, anchorX, anchorY) {
         control.editingColorKey = key
+        control.editingDialKey = ""
         customColorDialog.loadColor(String(colorText))
         customColorDialog.open()
+    }
+
+    function dialColorValue(key, index, field) {
+        var list = control.dialList(key)
+        var dial = index < list.length ? list[index] : null
+        var value = dial ? dial[field] : undefined
+        var fallback = "#ffffff"
+        if (field === "dialColor")
+            fallback = control.values.dialColor || "#000000"
+        else if (field === "hourMinuteColor")
+            fallback = control.values.hourMinuteHandColor || "#000000"
+        else if (field === "secondColor")
+            fallback = control.values.secondHandColor || "#ff4d4f"
+        else if (field === "dialBackground")
+            fallback = control.values.dialBackgroundColor || "#ffffff"
+        return Components.ColorUtils.resolveColor(value, fallback)
+    }
+
+    function openDialColor(key, index, field, colorText, anchorX, anchorY) {
+        control.editingColorKey = ""
+        control.editingDialKey = key
+        control.editingDialIndex = index
+        control.editingDialField = field
+        customColorDialog.loadColor(String(colorText))
+        customColorDialog.open()
+    }
+
+    function commitDialColor(key, index, field, value) {
+        var list = control.dialList(key).slice()
+        if (index < 0 || index >= list.length)
+            return
+        var dial = {}
+        for (var k in list[index])
+            dial[k] = list[index][k]
+        dial[field] = value
+        list[index] = dial
+        control.commit(key, list)
     }
 
     function dialList(key) {
@@ -188,8 +230,8 @@ PanelPopup {
         PanelPopup {
             id: customColorDialog
 
-            width: 380
-            height: 380
+            width: 420
+            height: 460
             popupWindow: customColorDialogWindow
             // 二级子弹窗以父弹窗为基准：水平在父弹窗左侧，垂直与父弹窗居中；
             // 不做鼠标位置处理。后续三级子弹窗同样以本弹窗的 popupWindow 为基准。
@@ -205,7 +247,7 @@ PanelPopup {
             readonly property color currentColor: Qt.hsla(hue, saturation, lightness, alpha)
 
             function loadColor(colorText) {
-                parsedColor = String(colorText).indexOf("#") === 0
+                parsedColor = Components.ColorUtils.isValidColor(String(colorText))
                     ? String(colorText) : "#4d8cff"
                 hue = parsedColor.hslHue
                 saturation = parsedColor.hslSaturation
@@ -223,8 +265,12 @@ PanelPopup {
             onPopupVisibleChanged: {
                 if (popupVisible)
                     focus = true
-                else
+                else {
                     control.editingColorKey = ""
+                    control.editingDialKey = ""
+                    control.editingDialIndex = -1
+                    control.editingDialField = ""
+                }
             }
 
             ColumnLayout {
@@ -395,16 +441,25 @@ PanelPopup {
                         spacing: 12
 
                         onAccepted: {
+                            var colorText = customColorDialog.currentColor.toString()
                             if (control.editingColorKey.length > 0) {
-                                control.commit(control.editingColorKey,
-                                    customColorDialog.currentColor.toString())
+                                control.commit(control.editingColorKey, colorText)
                                 control.editingColorKey = ""
+                            } else if (control.editingDialKey.length > 0) {
+                                control.commitDialColor(control.editingDialKey,
+                                    control.editingDialIndex, control.editingDialField, colorText)
+                                control.editingDialKey = ""
+                                control.editingDialIndex = -1
+                                control.editingDialField = ""
                             }
                             customColorDialog.close()
                         }
 
                         onRejected: {
                             control.editingColorKey = ""
+                            control.editingDialKey = ""
+                            control.editingDialIndex = -1
+                            control.editingDialField = ""
                             customColorDialog.close()
                         }
                     }
@@ -811,6 +866,46 @@ PanelPopup {
                                                 var row = control.rowOptions(key, index)
                                                 if (i >= 0 && i < row.length)
                                                     control.setDialZone(key, index, row[i].value)
+                                            }
+                                        }
+
+                                        Row {
+                                            Layout.preferredWidth: 4 * 14 + 3 * 4
+                                            spacing: 4
+
+                                            Repeater {
+                                                model: [
+                                                    { "field": "dialBackground", "hint": "BG" },
+                                                    { "field": "dialColor", "hint": "MK" },
+                                                    { "field": "hourMinuteColor", "hint": "HM" },
+                                                    { "field": "secondColor", "hint": "SS" }
+                                                ]
+                                                delegate: Rectangle {
+                                                    required property var modelData
+
+                                                    width: 14
+                                                    height: 14
+                                                    radius: 7
+                                                    color: control.dialColorValue(
+                                                        key, index, modelData.field)
+                                                    border.width: 1
+                                                    border.color: Qt.rgba(0, 0, 0, 0.25)
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        onClicked: {
+                                                            var current = control.dialColorValue(
+                                                                key, index, modelData.field)
+                                                            var anchor = parent.mapToItem(
+                                                                customColorDialog.parent,
+                                                                parent.width / 2,
+                                                                parent.height)
+                                                            control.openDialColor(key, index,
+                                                                modelData.field, current,
+                                                                anchor.x, anchor.y)
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
 

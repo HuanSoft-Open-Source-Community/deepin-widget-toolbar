@@ -24,7 +24,7 @@ PanelPopup {
     windowTitle: "dde-shell/widgettoolbar-add"
 
     width: 320
-    height: 440
+    height: 520
 
     // 已添加实例列表（随 WidgetManager 信号刷新）
     property var instanceIds: Panel.widgetManager ? Panel.widgetManager.instanceIds() : []
