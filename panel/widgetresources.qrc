@@ -17,5 +17,19 @@
         <file alias="worldtime/manifest.json">package/widgets/worldtime/manifest.json</file>
         <file alias="lyrics/main.qml">package/widgets/lyrics/main.qml</file>
         <file alias="lyrics/manifest.json">package/widgets/lyrics/manifest.json</file>
+        <file alias="player/main.qml">package/widgets/player/main.qml</file>
+        <file alias="player/manifest.json">package/widgets/player/manifest.json</file>
+        <file alias="player/icons/prev-light.svg">package/widgets/player/icons/prev-light.svg</file>
+        <file alias="player/icons/prev-dark.svg">package/widgets/player/icons/prev-dark.svg</file>
+        <file alias="player/icons/play-light.svg">package/widgets/player/icons/play-light.svg</file>
+        <file alias="player/icons/play-dark.svg">package/widgets/player/icons/play-dark.svg</file>
+        <file alias="player/icons/pause-light.svg">package/widgets/player/icons/pause-light.svg</file>
+        <file alias="player/icons/pause-dark.svg">package/widgets/player/icons/pause-dark.svg</file>
+        <file alias="player/icons/next-light.svg">package/widgets/player/icons/next-light.svg</file>
+        <file alias="player/icons/next-dark.svg">package/widgets/player/icons/next-dark.svg</file>
+        <file alias="player/icons/music-light.svg">package/widgets/player/icons/music-light.svg</file>
+        <file alias="player/icons/music-dark.svg">package/widgets/player/icons/music-dark.svg</file>
+        <file alias="player/icons/na-light.svg">package/widgets/player/icons/na-light.svg</file>
+        <file alias="player/icons/na-dark.svg">package/widgets/player/icons/na-dark.svg</file>
     </qresource>
 </RCC>

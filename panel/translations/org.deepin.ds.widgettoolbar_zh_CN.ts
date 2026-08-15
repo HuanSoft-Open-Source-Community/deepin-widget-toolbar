@@ -270,5 +270,17 @@
         <source>No dials yet. Add timezones in widget settings.</source>
         <translation>暂无表盘，请在小组件设置中添加时区。</translation>
     </message>
+    <message>
+        <source>Unknown title</source>
+        <translation>未知曲目</translation>
+    </message>
+    <message>
+        <source>Unknown artist</source>
+        <translation>未知艺术家</translation>
+    </message>
+    <message>
+        <source>No song playing</source>
+        <translation>无歌曲</translation>
+    </message>
 </context>
 </TS>

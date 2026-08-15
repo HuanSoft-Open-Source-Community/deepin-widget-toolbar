@@ -24,6 +24,7 @@ PanelPopup {
     property var values: ({})
     property var zoneOptions: []
     property var usedZones: []
+    property var playerOptions: []
     property string editingColorKey: ""
     property string editingDialKey: ""
     property int editingDialIndex: -1
@@ -48,6 +49,10 @@ PanelPopup {
             control.zoneOptions = []
             control.usedZones = []
         }
+        if (control.needsPlayers())
+            control.playerOptions = MediaPlayers.players
+        else
+            control.playerOptions = []
         control.rebuildVisibleSchema()
         control.open()
     }
@@ -60,6 +65,14 @@ PanelPopup {
         return false
     }
 
+    function needsPlayers() {
+        for (var i = 0; i < control.schema.length; ++i) {
+            if (control.schema[i].type === "player")
+                return true
+        }
+        return false
+    }
+
     function rebuildVisibleSchema() {
         var cols = Panel.widgetManager.instanceCols(control.instanceId)
         var result = []
@@ -67,6 +80,10 @@ PanelPopup {
             var item = control.schema[i]
             if (control.widgetId === "systemmonitor" && item.key === "dualColumn"
                 && cols < 4) {
+                continue
+            }
+            if (control.widgetId === "player" && item.key === "lockedPlayer"
+                && control.values.playerMode !== "locked") {
                 continue
             }
             result.push(item)
@@ -83,6 +100,8 @@ PanelPopup {
         next[key] = value
         control.values = next
         Panel.widgetManager.saveInstanceConfig(control.instanceId, next)
+        if (control.widgetId === "player" && key === "playerMode")
+            control.rebuildVisibleSchema()
     }
 
     function openCustomColor(key, colorText, anchorX, anchorY) {
@@ -488,6 +507,14 @@ PanelPopup {
             }
         }
 
+        Connections {
+            target: MediaPlayers
+            function onPlayersChanged() {
+                if (control.needsPlayers())
+                    control.playerOptions = MediaPlayers.players
+            }
+        }
+
         ColumnLayout {
             id: contentColumn
             anchors.fill: parent
@@ -516,7 +543,7 @@ PanelPopup {
                 contentWidth: width
                 // 底部保留余量：设置项可滚动时最后一行不会紧贴可视区下缘，
                 // 避免 DTK Switch 等控件底部因亚像素/DPR 取整被裁掉几行像素。
-                contentHeight: settingsColumn.implicitHeight + 12
+                contentHeight: settingsColumn.implicitHeight + 16
                 ScrollBar.vertical: ScrollBar {
                     policy: ScrollBar.AsNeeded
                     anchors.right: parent.right
@@ -562,10 +589,10 @@ PanelPopup {
                             Switch {
                                 Layout.fillWidth: true
                                 // DTK Switch 的 indicator 比控件隐式高度高；
-                                // 再多留 6px 安全高度，覆盖阴影、焦点描边与 DPR 取整。
+                                // 再多留 10px 安全高度，覆盖阴影、焦点描边与 DPR 取整。
                                 Layout.preferredHeight: Math.max(
                                     implicitHeight,
-                                    (indicator ? indicator.implicitHeight : 0) + 6)
+                                    (indicator ? indicator.implicitHeight : 0) + 10)
                                 visible: type === "boolean"
                                 checked: control.values[key] === true
                                 onToggled: control.commit(key, checked)
@@ -604,6 +631,27 @@ PanelPopup {
                                     var fonts = Qt.fontFamilies()
                                     if (i >= 0 && i < fonts.length)
                                         control.commit(key, fonts[i])
+                                }
+                            }
+
+                            ComboBox {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 120
+                                visible: type === "player"
+                                enabled: control.playerOptions.length > 0
+                                model: control.playerOptions
+                                textRole: "name"
+                                currentIndex: {
+                                    var current = control.values[key]
+                                    for (var i = 0; i < control.playerOptions.length; i++) {
+                                        if (control.playerOptions[i].service === current)
+                                            return i
+                                    }
+                                    return 0
+                                }
+                                onActivated: function (i) {
+                                    if (i >= 0 && i < control.playerOptions.length)
+                                        control.commit(key, control.playerOptions[i].service)
                                 }
                             }
 

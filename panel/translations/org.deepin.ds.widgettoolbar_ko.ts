@@ -270,5 +270,17 @@
         <source>No dials yet. Add timezones in widget settings.</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>Unknown title</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Unknown artist</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>No song playing</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 </TS>

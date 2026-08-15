@@ -1,0 +1,81 @@
+{
+    "id": "player",
+    "name": "Media Player",
+    "name[zh_CN]": "播放控制器",
+    "description": "Shows and controls the current MPRIS player",
+    "description[zh_CN]": "显示并控制当前 MPRIS 播放器的曲目",
+    "version": "1.0.0",
+    "apiVersion": "1.4",
+    "author": "deepin-widget-toolbar",
+    "icon": "multimedia-player",
+    "runtime": "qml",
+    "entry": "main.qml",
+    "defaultSize": { "cols": 4, "rows": 2 },
+    "sizes": [
+        { "cols": 2, "rows": 2 },
+        { "cols": 4, "rows": 2 },
+        { "cols": 4, "rows": 4 }
+    ],
+    "settings": [
+        {
+            "key": "transparentBackground",
+            "type": "boolean",
+            "label": "Transparent background",
+            "label[zh_CN]": "透明背景",
+            "default": false
+        },
+        {
+            "key": "backgroundColor",
+            "type": "color",
+            "label": "Background color",
+            "label[zh_CN]": "背景颜色",
+            "default": "#00bcd4",
+            "options": [
+                { "value": "#00bcd4", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "textColor",
+            "type": "color",
+            "label": "Text color",
+            "label[zh_CN]": "文字颜色",
+            "default": "#1a1a1a",
+            "options": [
+                { "value": "#1a1a1a", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "playerMode",
+            "type": "enum",
+            "label": "Player selection",
+            "label[zh_CN]": "播放器选择",
+            "default": "auto",
+            "options": [
+                { "value": "auto", "label": "Automatic", "label[zh_CN]": "自动" },
+                { "value": "locked", "label": "Lock to player", "label[zh_CN]": "锁定播放器" }
+            ]
+        },
+        {
+            "key": "lockedPlayer",
+            "type": "player",
+            "label": "Player",
+            "label[zh_CN]": "播放器",
+            "default": ""
+        },
+        {
+            "key": "showCover",
+            "type": "boolean",
+            "label": "Show cover",
+            "label[zh_CN]": "显示封面",
+            "default": true
+        },
+        {
+            "key": "showControls",
+            "type": "boolean",
+            "label": "Show playback controls",
+            "label[zh_CN]": "显示播放控制",
+            "default": true
+        }
+    ],
+    "builtin": true
+}
