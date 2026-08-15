@@ -191,6 +191,8 @@ PanelPopup {
             width: 380
             height: 380
             popupWindow: customColorDialogWindow
+            // 二级子弹窗以父弹窗为基准：水平在父弹窗左侧，垂直与父弹窗居中；
+            // 不做鼠标位置处理。后续三级子弹窗同样以本弹窗的 popupWindow 为基准。
             popupX: -customColorDialog.width - 8
             popupY: Math.max(0, (control.height - customColorDialog.height) / 2)
             windowTitle: "dde-shell/widgettoolbar-widget-color"

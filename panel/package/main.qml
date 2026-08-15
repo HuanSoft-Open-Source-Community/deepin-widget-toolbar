@@ -319,9 +319,38 @@ Window {
         gridFlickable.contentY = 0
     }
 
+    // 最近一次鼠标右键在主窗口坐标系中的 Y；-1 表示没有鼠标来源（如托盘 D-Bus）。
+    property int lastPopupMouseY: -1
+
+    // 设置类弹窗：以屏幕右缘为基准；主面板可见时向左避让，隐藏时贴屏幕右缘。
+    function settingsPopupX(target) {
+        if (!root.screen)
+            return -target.width - 8
+        if (Panel.visible)
+            return -target.width - 8
+        const screenRight = root.screen.virtualX + root.screen.width - 10
+        return Math.round(screenRight - target.width - root.x)
+    }
+
+    // 打开前统一摆放弹窗：垂直中心对齐鼠标 Y（无鼠标时垂直居中），
+    // 且上下边界始终落在主面板高度内。
+    function positionPopup(target, mouseY) {
+        const panelHeight = Math.max(1, root.height)
+        const targetY = mouseY >= 0
+            ? mouseY - target.height / 2
+            : (panelHeight - target.height) / 2
+        target.popupY = Math.max(0,
+            Math.min(Math.round(targetY), Math.max(0, panelHeight - target.height)))
+
+        if (target === settingsDialog || target === widgetSettingsDialog)
+            target.popupX = root.settingsPopupX(target)
+        else
+            target.popupX = -target.width - 8
+    }
+
     // 弹出面板互斥：添加/设置/关于同时只允许打开一个。
     // 打开目标前先关闭另外两个；目标已打开则关闭（切换语义）
-    function openPanelPopup(target) {
+    function openPanelPopup(target, mouseY) {
         if (target === addPopup) {
             settingsDialog.close()
             aboutDialog.close()
@@ -341,18 +370,22 @@ Window {
         }
         if (target.visible)
             target.close()
-        else
+        else {
+            root.positionPopup(target, mouseY === undefined ? -1 : mouseY)
             target.open()
+        }
     }
 
     function openWidgetSettings(instanceId) {
         addPopup.close()
         settingsDialog.close()
         aboutDialog.close()
+        root.positionPopup(widgetSettingsDialog, root.lastPopupMouseY)
         widgetSettingsDialog.openFor(instanceId)
     }
 
-    function openWidgetMenu(instanceId) {
+    function openWidgetMenu(instanceId, mouseY) {
+        root.lastPopupMouseY = mouseY === undefined ? -1 : mouseY
         widgetContextMenu.rebuild(instanceId)
         widgetContextMenu.popup()
     }
@@ -569,10 +602,13 @@ Window {
 
             // 空白处右键菜单：只接受右键，不影响组件左键长按拖拽
             MouseArea {
+                id: blankContextArea
                 anchors.fill: parent
                 z: 0
                 acceptedButtons: Qt.RightButton
                 onClicked: function(mouse) {
+                    var p = blankContextArea.mapToItem(root.contentItem, mouse.x, mouse.y)
+                    root.lastPopupMouseY = p.y
                     contextMenu.popup()
                 }
             }
@@ -660,7 +696,9 @@ Window {
                                 z: widgetDragArea.z + 1
                                 acceptedButtons: Qt.RightButton
                                 onClicked: function(mouse) {
-                                    root.openWidgetMenu(widgetHost.modelData)
+                                    var p = widgetContextArea.mapToItem(
+                                        root.contentItem, mouse.x, mouse.y)
+                                    root.openWidgetMenu(widgetHost.modelData, p.y)
                                 }
                             }
 
@@ -795,7 +833,7 @@ Window {
 
         MenuItem {
             text: qsTr("Add widget")
-            onTriggered: openPanelPopup(addPopup)
+            onTriggered: openPanelPopup(addPopup, root.lastPopupMouseY)
         }
         MenuItem {
             text: qsTr("Arrange")
@@ -804,11 +842,11 @@ Window {
         MenuSeparator { }
         MenuItem {
             text: qsTr("Settings")
-            onTriggered: openPanelPopup(settingsDialog)
+            onTriggered: openPanelPopup(settingsDialog, root.lastPopupMouseY)
         }
         MenuItem {
             text: qsTr("About")
-            onTriggered: openPanelPopup(aboutDialog)
+            onTriggered: openPanelPopup(aboutDialog, root.lastPopupMouseY)
         }
     }
 
