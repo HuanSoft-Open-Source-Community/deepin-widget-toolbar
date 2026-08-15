@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <QFutureWatcher>
 #include <QDate>
 #include <QHash>
 #include <QObject>
@@ -50,14 +51,15 @@ public:
     // excludeZones 后取第一个 id；无可用时返回空串。用于补位表盘
     // “同一偏移有多个时区名时缺省第一个”，并配合跨实例地区唯一性。
     Q_INVOKABLE QString firstZoneForOffset(int offsetHours, const QStringList &excludeZones);
-    // 时区下拉选项（[{value: 时区id, label: 本地化地区名}]），按 GetZoneList 顺序；
-    // 首次调用会逐个解析地区名并缓存，后续复用
+    // 时区下拉选项（[{value: 时区id, label: 本地化地区名}]），按 GetZoneList 顺序。
+    // 首次调用返回当前缓存并触发后台加载，完成后发出 zoneOptionsChanged()。
     Q_INVOKABLE QVariantList zoneOptions();
 
 Q_SIGNALS:
     void availableChanged();
     void systemTimezoneChanged();
     void userTimezonesChanged();
+    void zoneOptionsChanged();
 
 private Q_SLOTS:
     void refreshProperties();
@@ -79,6 +81,7 @@ private:
     int currentOffsetSeconds(const ZoneDetails &details) const;
     QStringList zonesForOffset(int offsetHours);
     void ensureFreshCaches();
+    void startZoneOptionsLoad();
     static QString prettifyName(QString name);
 
     QDBusInterface *m_timedate = nullptr;
@@ -93,4 +96,8 @@ private:
     QVariantList m_zoneOptions;
     QDate m_detailsDate;
     int m_offsetCacheHour = -1;
+    QFutureWatcher<QVariantList> *m_zoneOptionsWatcher = nullptr;
+    bool m_zoneOptionsLoading = false;
+    bool m_zoneOptionsRequested = false;
+    int m_zoneOptionsGeneration = 0;
 };

@@ -14,6 +14,7 @@
 #include <QDebug>
 #include <QTime>
 #include <QTimeZone>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QVariant>
 #include <QVariantMap>
 
@@ -69,6 +70,46 @@ bool decodeZoneInfo(const QVariant &value, QString *name, int *standardOffset,
     return true;
 }
 
+QString prettifyZoneName(QString name)
+{
+    return name.replace(QLatin1Char('_'), QLatin1Char(' '));
+}
+
+QVariantList fetchZoneOptions()
+{
+    QVariantList options;
+    QDBusInterface timedate(kService, kPath, kInterface,
+                            QDBusConnection::sessionBus());
+    if (!timedate.isValid())
+        return options;
+
+    const QDBusMessage listReply = timedate.call(QStringLiteral("GetZoneList"));
+    if (listReply.type() == QDBusMessage::ErrorMessage || listReply.arguments().isEmpty())
+        return options;
+
+    const QStringList ids = listReply.arguments().constFirst().toStringList();
+    options.reserve(ids.size());
+    for (const QString &id : ids) {
+        QString name;
+        const QDBusMessage reply = timedate.call(QStringLiteral("GetZoneInfo"), id);
+        if (reply.type() != QDBusMessage::ErrorMessage && !reply.arguments().isEmpty()) {
+            decodeZoneInfo(reply.arguments().constFirst(), &name,
+                           nullptr, nullptr, nullptr, nullptr);
+        }
+
+        if (name.isEmpty()) {
+            const int slash = id.lastIndexOf(QLatin1Char('/'));
+            name = slash >= 0 ? id.mid(slash + 1) : id;
+        }
+
+        QVariantMap entry;
+        entry.insert(QStringLiteral("value"), id);
+        entry.insert(QStringLiteral("label"), prettifyZoneName(name));
+        options.append(entry);
+    }
+    return options;
+}
+
 } // namespace
 
 Timezones::Timezones(QObject *parent)
@@ -81,10 +122,18 @@ Timezones::Timezones(QObject *parent)
                                             | QDBusServiceWatcher::WatchForUnregistration,
                                         this);
     connect(m_watcher, &QDBusServiceWatcher::serviceRegistered,
-            this, &Timezones::refreshProperties);
+            this, [this](const QString &) {
+        refreshProperties();
+        if (m_zoneOptionsRequested && m_zoneOptions.isEmpty()
+            && !m_zoneOptionsLoading) {
+            startZoneOptionsLoad();
+        }
+    });
     connect(m_watcher, &QDBusServiceWatcher::serviceUnregistered,
             this, [this](const QString &) {
         // 服务重启后缓存可能过期，全部清空，待重新注册时再读取
+        ++m_zoneOptionsGeneration;
+        m_zoneOptionsLoading = false;
         m_detailsCache.clear();
         m_zoneIds.clear();
         m_zoneIdsLoaded = false;
@@ -195,21 +244,38 @@ QStringList Timezones::zonesForOffset(int offsetHours)
 
 QVariantList Timezones::zoneOptions()
 {
-    if (!m_zoneOptions.isEmpty())
-        return m_zoneOptions;
-
-    const QStringList ids = zoneIds();
-    m_zoneOptions.reserve(ids.size());
-    for (const QString &id : ids) {
-        const QString label = displayName(id);
-        if (label.isEmpty())
-            continue;
-        QVariantMap entry;
-        entry.insert(QStringLiteral("value"), id);
-        entry.insert(QStringLiteral("label"), label);
-        m_zoneOptions.append(entry);
-    }
+    if (m_zoneOptions.isEmpty())
+        startZoneOptionsLoad();
     return m_zoneOptions;
+}
+
+void Timezones::startZoneOptionsLoad()
+{
+    m_zoneOptionsRequested = true;
+    if (m_zoneOptionsLoading || !m_zoneOptions.isEmpty())
+        return;
+    if (!m_timedate || !m_timedate->isValid())
+        return;
+
+    m_zoneOptionsLoading = true;
+    const int generation = ++m_zoneOptionsGeneration;
+    if (!m_zoneOptionsWatcher) {
+        m_zoneOptionsWatcher = new QFutureWatcher<QVariantList>(this);
+    } else {
+        disconnect(m_zoneOptionsWatcher, nullptr, this, nullptr);
+    }
+
+    connect(m_zoneOptionsWatcher, &QFutureWatcher<QVariantList>::finished,
+            this, [this, generation]() {
+        if (generation != m_zoneOptionsGeneration)
+            return;
+
+        m_zoneOptions = m_zoneOptionsWatcher->result();
+        m_zoneOptionsLoading = false;
+        Q_EMIT zoneOptionsChanged();
+    });
+
+    m_zoneOptionsWatcher->setFuture(QtConcurrent::run(&fetchZoneOptions));
 }
 
 void Timezones::refreshProperties()
@@ -370,5 +436,5 @@ int Timezones::currentOffsetSeconds(const ZoneDetails &details) const
 
 QString Timezones::prettifyName(QString name)
 {
-    return name.replace(QLatin1Char('_'), QLatin1Char(' '));
+    return prettifyZoneName(name);
 }

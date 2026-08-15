@@ -2,10 +2,10 @@
     "id": "systemmonitor",
     "name": "System Monitor",
     "name[zh_CN]": "资源监视仪表",
-    "description": "CPU / memory / disk usage widget",
-    "description[zh_CN]": "CPU / 内存 / 磁盘占用小组件",
+    "description": "CPU / memory / disk / GPU / NPU usage widget",
+    "description[zh_CN]": "CPU / 内存 / 磁盘 / GPU / NPU 占用小组件",
     "version": "1.0.0",
-    "apiVersion": "1.2",
+    "apiVersion": "1.3",
     "author": "deepin-widget-toolbar",
     "icon": "utilities-system-monitor",
     "runtime": "qml",
@@ -53,13 +53,19 @@
             "default": true
         },
         {
+            "key": "dualColumn",
+            "type": "boolean",
+            "label": "Dual-column mode",
+            "label[zh_CN]": "双列模式",
+            "default": true
+        },
+        {
             "key": "refreshInterval",
             "type": "enum",
             "label": "Refresh interval",
             "label[zh_CN]": "刷新间隔",
-            "default": 1000,
+            "default": 5000,
             "options": [
-                { "value": 500, "label": "0.5 s", "label[zh_CN]": "0.5 秒" },
                 { "value": 1000, "label": "1 s", "label[zh_CN]": "1 秒" },
                 { "value": 2000, "label": "2 s", "label[zh_CN]": "2 秒" },
                 { "value": 5000, "label": "5 s", "label[zh_CN]": "5 秒" }

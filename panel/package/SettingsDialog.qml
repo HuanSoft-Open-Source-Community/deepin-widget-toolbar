@@ -53,6 +53,9 @@ PanelPopup {
                 }
 
                 Switch {
+                    // 与小组件配置页保持一致：为 DTK Switch 预留 indicator 完整高度，
+                    // 避免底部在行高不足时被裁切或叠进间距。
+                    Layout.preferredHeight: indicator.implicitHeight
                     checked: Panel.visible
                     onToggled: Panel.visible = checked
                 }
@@ -70,6 +73,7 @@ PanelPopup {
                 }
 
                 Switch {
+                    Layout.preferredHeight: indicator.implicitHeight
                     checked: Panel.pinned
                     onToggled: Panel.pinned = checked
                 }

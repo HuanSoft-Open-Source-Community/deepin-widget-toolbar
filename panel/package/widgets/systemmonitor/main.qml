@@ -3,18 +3,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Layouts
 import org.deepin.dtk 1.0
+import org.deepin.ds 1.0
 import org.deepin.widgettoolbar 1.0
 import "../components" as Components
 
-// 内置示例小组件：系统资源监视（默认 2×2）
+// 内置小组件：系统资源监视（默认 2×2）
 // CPU / 内存 / 磁盘 IO / GPU / NPU 数据来自宿主单例 SystemInfo。
-// 每实例可配置指标行显隐与刷新间隔；SystemInfo 为全局单例，
-// 多个实例同时存在时以最后加载/修改的刷新间隔为准。
+// 中号（2×2）固定单列；宽（4×2）与大（4×4）支持双列（默认启用）。
+// 所有尺寸都可展示全部已启用指标，单列时压缩行距/行高避免超出格子。
+// 渲染使用轻量 Rectangle 进度条，避免 DTK ProgressBar 的持续动画和图层开销。
 Components.WidgetCard {
     id: root
 
+    property string instanceId: ""
+    property int hostCols: 2
+    property int hostRows: 2
     property var widgetConfig: ({})
     property bool showCpu: widgetConfig && widgetConfig.showCpu !== undefined
         ? widgetConfig.showCpu : true
@@ -27,188 +31,228 @@ Components.WidgetCard {
     property bool showNpu: widgetConfig && widgetConfig.showNpu !== undefined
         ? widgetConfig.showNpu : true
     property int refreshInterval: widgetConfig && widgetConfig.refreshInterval
-        ? Number(widgetConfig.refreshInterval) : 1000
-    property int titlePixelSize: Math.max(10, Math.min(20, Math.round(content.height * 0.075)))
-    property int labelPixelSize: Math.max(7, Math.min(13, Math.round(content.height * 0.045)))
-    property int barHeight: Math.max(5, Math.min(12, Math.round(content.height * 0.035)))
+        ? Math.max(1000, Number(widgetConfig.refreshInterval)) : 5000
 
-    function applyRefreshInterval() {
-        SystemInfo.setRefreshInterval(root.refreshInterval)
+    // 双列对宽（4×2）与大（4×4）生效；中号（2×2）固定单列。
+    property bool dualColumn: hostCols >= 4
+        && (widgetConfig && widgetConfig.dualColumn !== undefined
+            ? widgetConfig.dualColumn : true)
+    property bool panelVisible: Panel.visible
+    property bool monitoringPending: false
+    property var metrics: []
+
+    property int metricLabelWidth: 44
+    property int metricValueWidth: 42
+    property int metricSpacing: dualColumn ? 6 : (root.metrics.length > 4 ? 4 : 8)
+    property int barHeight: 6
+
+    function metricDescriptors() {
+        return [
+            { "id": "cpu", "label": qsTr("CPU") },
+            { "id": "mem", "label": qsTr("MEM") },
+            { "id": "disk", "label": qsTr("DISK") },
+            { "id": "gpu", "label": qsTr("GPU") },
+            { "id": "npu", "label": qsTr("NPU") }
+        ]
     }
 
-    onWidgetConfigChanged: applyRefreshInterval()
-    Component.onCompleted: applyRefreshInterval()
+    function metricEnabled(metricId) {
+        switch (metricId) {
+            case "cpu": return root.showCpu
+            case "mem": return root.showMem
+            case "disk": return root.showDisk
+            case "gpu": return root.showGpu
+            case "npu": return root.showNpu
+        }
+        return false
+    }
 
-    ColumnLayout {
+    function metricAvailable(metricId) {
+        if (metricId === "gpu")
+            return SystemInfo.gpuAvailable
+        if (metricId === "npu")
+            return SystemInfo.npuAvailable
+        return true
+    }
+
+    function metricUsage(metricId) {
+        switch (metricId) {
+            case "cpu": return SystemInfo.cpuUsage
+            case "mem": return SystemInfo.memUsedPercent
+            case "disk": return SystemInfo.diskBusyPercent
+            case "gpu": return SystemInfo.gpuAvailable ? SystemInfo.gpuUsage : 0
+            case "npu": return SystemInfo.npuAvailable ? SystemInfo.npuUsage : 0
+        }
+        return 0
+    }
+
+    function metricText(metricId) {
+        if (metricId === "gpu" && !SystemInfo.gpuAvailable)
+            return qsTr("N/A")
+        if (metricId === "npu" && !SystemInfo.npuAvailable)
+            return qsTr("N/A")
+        return Math.round(root.metricUsage(metricId) * 100) + "%"
+    }
+
+    function visibleMetrics() {
+        var descriptors = root.metricDescriptors()
+        var result = []
+        // 全部指标最多 5 项；中号单列时由布局压缩行距/行高，保证不超出格子。
+        for (var i = 0; i < descriptors.length; ++i) {
+            if (root.metricEnabled(descriptors[i].id))
+                result.push(descriptors[i])
+        }
+        return result
+    }
+
+    function monitoredMetricIds() {
+        var ids = []
+        for (var i = 0; i < root.metrics.length; ++i)
+            ids.push(root.metrics[i].id)
+        return ids
+    }
+
+    function applyMonitoringState() {
+        root.monitoringPending = false
+        root.metrics = root.visibleMetrics()
+
+        if (root.instanceId.length === 0)
+            return
+
+        var ids = root.monitoredMetricIds()
+        var active = root.visible && root.panelVisible && ids.length > 0
+        SystemInfo.updateMonitor(root.instanceId, active, ids, root.refreshInterval)
+    }
+
+    function scheduleMonitoringUpdate() {
+        if (root.monitoringPending)
+            return
+        root.monitoringPending = true
+        Qt.callLater(function () { root.applyMonitoringState() })
+    }
+
+    onWidgetConfigChanged: root.scheduleMonitoringUpdate()
+    onVisibleChanged: root.scheduleMonitoringUpdate()
+    onPanelVisibleChanged: root.scheduleMonitoringUpdate()
+    onHostColsChanged: root.scheduleMonitoringUpdate()
+    onHostRowsChanged: root.scheduleMonitoringUpdate()
+    onInstanceIdChanged: root.scheduleMonitoringUpdate()
+    Component.onCompleted: root.scheduleMonitoringUpdate()
+    Component.onDestruction: {
+        if (root.instanceId.length > 0)
+            SystemInfo.releaseMonitor(root.instanceId)
+    }
+
+    component MetricBar: Item {
+        required property string metricId
+        required property string label
+
+        Text {
+            id: labelText
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: root.metricLabelWidth
+            text: label
+            font: DTK.fontManager.t7
+            color: palette.windowText
+            opacity: 0.7
+            elide: Text.ElideRight
+        }
+
+        Text {
+            id: valueText
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            width: root.metricValueWidth
+            horizontalAlignment: Text.AlignRight
+            text: root.metricText(metricId)
+            font: DTK.fontManager.t7
+            color: palette.windowText
+            opacity: root.metricAvailable(metricId) ? 1.0 : 0.5
+        }
+
+        Item {
+            id: barTrack
+            anchors.left: labelText.right
+            anchors.right: valueText.left
+            anchors.leftMargin: root.metricSpacing
+            anchors.rightMargin: root.metricSpacing
+            anchors.verticalCenter: parent.verticalCenter
+            height: root.barHeight
+            clip: true
+
+            Rectangle {
+                anchors.fill: parent
+                radius: root.barHeight / 2
+                color: palette.windowText
+                opacity: 0.15
+            }
+
+            Rectangle {
+                id: barFill
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: Math.max(0, parent.width * root.metricUsage(metricId))
+                radius: root.barHeight / 2
+                color: palette.highlight
+            }
+        }
+    }
+
+    Column {
         id: content
         anchors.fill: parent
-        spacing: Math.max(3, content.height * 0.018)
+        spacing: 6
+        clip: true
 
         Text {
-            Layout.fillWidth: true
+            id: titleText
+            width: parent.width
             text: qsTr("System Monitor")
-            font.pixelSize: root.titlePixelSize
+            font: root.hostRows >= 4 ? DTK.fontManager.t5 : DTK.fontManager.t6
             color: palette.windowText
+            elide: Text.ElideRight
         }
 
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: root.showCpu
-            spacing: 8
+        Grid {
+            id: metricsGrid
+            width: parent.width
+            height: Math.max(0, content.height - titleText.height - content.spacing)
+            columns: root.dualColumn ? 2 : 1
+            spacing: root.metricSpacing
+            visible: root.metrics.length > 0
 
-            Text {
-                Layout.preferredWidth: 48
-                text: qsTr("CPU")
-                font.pixelSize: root.labelPixelSize
-                color: palette.windowText
-                opacity: 0.7
-            }
-            ProgressBar {
-                Layout.fillWidth: true
-                height: root.barHeight
-                from: 0
-                to: 1
-                value: SystemInfo.cpuUsage
-            }
-            Text {
-                Layout.preferredWidth: 40
-                horizontalAlignment: Text.AlignRight
-                text: Math.round(SystemInfo.cpuUsage * 100) + "%"
-                font.pixelSize: root.labelPixelSize
-                color: palette.windowText
-            }
-        }
+            Repeater {
+                model: root.metrics
+                delegate: MetricBar {
+                    required property var modelData
 
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: root.showMem
-            spacing: 8
-
-            Text {
-                Layout.preferredWidth: 48
-                text: qsTr("MEM")
-                font.pixelSize: root.labelPixelSize
-                color: palette.windowText
-                opacity: 0.7
-            }
-            ProgressBar {
-                Layout.fillWidth: true
-                height: root.barHeight
-                from: 0
-                to: 1
-                value: SystemInfo.memUsedPercent
-            }
-            Text {
-                Layout.preferredWidth: 40
-                horizontalAlignment: Text.AlignRight
-                text: Math.round(SystemInfo.memUsedPercent * 100) + "%"
-                font.pixelSize: root.labelPixelSize
-                color: palette.windowText
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: root.showDisk
-            spacing: 8
-
-            Text {
-                Layout.preferredWidth: 48
-                text: qsTr("DISK")
-                font.pixelSize: root.labelPixelSize
-                color: palette.windowText
-                opacity: 0.7
-            }
-            ProgressBar {
-                Layout.fillWidth: true
-                height: root.barHeight
-                from: 0
-                to: 1
-                value: SystemInfo.diskBusyPercent
-            }
-            Text {
-                Layout.preferredWidth: 40
-                horizontalAlignment: Text.AlignRight
-                text: Math.round(SystemInfo.diskBusyPercent * 100) + "%"
-                font.pixelSize: root.labelPixelSize
-                color: palette.windowText
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: root.showGpu
-            spacing: 8
-
-            Text {
-                Layout.preferredWidth: 48
-                text: qsTr("GPU")
-                font.pixelSize: root.labelPixelSize
-                color: palette.windowText
-                opacity: 0.7
-            }
-            ProgressBar {
-                Layout.fillWidth: true
-                height: root.barHeight
-                from: 0
-                to: 1
-                value: SystemInfo.gpuAvailable ? SystemInfo.gpuUsage : 0
-            }
-            Text {
-                Layout.preferredWidth: 40
-                horizontalAlignment: Text.AlignRight
-                text: SystemInfo.gpuAvailable
-                    ? Math.round(SystemInfo.gpuUsage * 100) + "%" : qsTr("N/A")
-                font.pixelSize: root.labelPixelSize
-                color: palette.windowText
-                opacity: SystemInfo.gpuAvailable ? 1.0 : 0.5
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: root.showNpu
-            spacing: 8
-
-            Text {
-                Layout.preferredWidth: 48
-                text: qsTr("NPU")
-                font.pixelSize: root.labelPixelSize
-                color: palette.windowText
-                opacity: 0.7
-            }
-            ProgressBar {
-                Layout.fillWidth: true
-                height: root.barHeight
-                from: 0
-                to: 1
-                value: SystemInfo.npuAvailable ? SystemInfo.npuUsage : 0
-            }
-            Text {
-                Layout.preferredWidth: 40
-                horizontalAlignment: Text.AlignRight
-                text: SystemInfo.npuAvailable
-                    ? Math.round(SystemInfo.npuUsage * 100) + "%" : qsTr("N/A")
-                font.pixelSize: root.labelPixelSize
-                color: palette.windowText
-                opacity: SystemInfo.npuAvailable ? 1.0 : 0.5
+                    metricId: modelData.id
+                    label: modelData.label
+                    width: metricsGrid.columns > 1
+                        ? (metricsGrid.width - metricsGrid.spacing) / 2
+                        : metricsGrid.width
+                    height: {
+                        var rows = Math.max(1,
+                            Math.ceil(root.metrics.length / metricsGrid.columns))
+                        var compactRows = !root.dualColumn && root.metrics.length > 4
+                        var minHeight = compactRows ? 20 : 24
+                        return Math.max(minHeight,
+                            (metricsGrid.height - metricsGrid.spacing * (rows - 1)) / rows)
+                    }
+                }
             }
         }
 
         Text {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: !root.showCpu && !root.showMem && !root.showDisk
-                && !root.showGpu && !root.showNpu
+            width: parent.width
+            height: metricsGrid.height
+            visible: root.metrics.length === 0
             verticalAlignment: Text.AlignVCenter
             horizontalAlignment: Text.AlignHCenter
             text: qsTr("No metrics enabled")
-            font.pixelSize: root.titlePixelSize
+            font: root.hostRows >= 4 ? DTK.fontManager.t5 : DTK.fontManager.t6
             color: palette.windowText
             opacity: 0.6
         }

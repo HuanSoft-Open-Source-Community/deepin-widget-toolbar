@@ -19,6 +19,7 @@ PanelPopup {
     property string instanceId: ""
     property string widgetId: ""
     property var schema: []
+    property var visibleSchema: []
     property var values: ({})
     property var zoneOptions: []
     property var usedZones: []
@@ -36,9 +37,37 @@ PanelPopup {
         control.widgetId = Panel.widgetManager.instanceWidgetId(instance)
         control.schema = Panel.widgetManager.widgetSettingsSchema(control.widgetId)
         control.values = Panel.widgetManager.instanceConfig(instance)
-        control.zoneOptions = Timezones.zoneOptions()
-        control.usedZones = WidgetHost.usedZones(control.instanceId)
+        if (control.needsTimezones()) {
+            control.zoneOptions = Timezones.zoneOptions()
+            control.usedZones = WidgetHost.usedZones(control.instanceId)
+        } else {
+            control.zoneOptions = []
+            control.usedZones = []
+        }
+        control.rebuildVisibleSchema()
         control.open()
+    }
+
+    function needsTimezones() {
+        for (var i = 0; i < control.schema.length; ++i) {
+            if (control.schema[i].type === "timezoneList")
+                return true
+        }
+        return false
+    }
+
+    function rebuildVisibleSchema() {
+        var cols = Panel.widgetManager.instanceCols(control.instanceId)
+        var result = []
+        for (var i = 0; i < control.schema.length; ++i) {
+            var item = control.schema[i]
+            if (control.widgetId === "systemmonitor" && item.key === "dualColumn"
+                && cols < 4) {
+                continue
+            }
+            result.push(item)
+        }
+        control.visibleSchema = result
     }
 
     function commit(key, value) {
@@ -388,6 +417,20 @@ PanelPopup {
         radius: DTK.platformTheme.windowRadius
         color: "transparent"
 
+        Connections {
+            target: Panel.widgetManager
+            function onInstancesChanged() { control.rebuildVisibleSchema() }
+            function onLayoutChanged() { control.rebuildVisibleSchema() }
+        }
+
+        Connections {
+            target: Timezones
+            function onZoneOptionsChanged() {
+                if (control.needsTimezones())
+                    control.zoneOptions = Timezones.zoneOptions()
+            }
+        }
+
         ColumnLayout {
             id: contentColumn
             anchors.fill: parent
@@ -424,7 +467,7 @@ PanelPopup {
 
                     Text {
                         Layout.fillWidth: true
-                        visible: control.schema.length === 0
+                        visible: control.visibleSchema.length === 0
                         text: qsTr("This widget has no configurable options")
                         font: DTK.fontManager.t6
                         color: palette.windowText
@@ -433,7 +476,7 @@ PanelPopup {
                     }
 
                     Repeater {
-                        model: control.schema
+                        model: control.visibleSchema
                         delegate: RowLayout {
                             required property var modelData
                             required property int index
@@ -457,6 +500,8 @@ PanelPopup {
 
                             Switch {
                                 Layout.fillWidth: true
+                                // DTK Switch 的 indicator 比控件隐式高度高，
+                                // 必须预留完整高度，避免 RowLayout 的 clip 裁掉底部。
                                 Layout.preferredHeight: indicator.implicitHeight
                                 visible: type === "boolean"
                                 checked: control.values[key] === true
@@ -736,7 +781,12 @@ PanelPopup {
                                 }
 
                                 Repeater {
-                                    model: control.values[key]
+                                    // 只有 timezoneList 类型的行才有数组型 dials 配置；
+                                    // 其它行（如 refreshInterval=5000 这类数值）会把
+                                    // 数字误当成 Repeater 的重复次数，瞬间实例化几千个
+                                    // 委托导致 dde-shell GUI 线程卡死。统一走 dialList()
+                                    // 保证模型始终是数组或空数组。
+                                    model: control.dialList(key)
                                     delegate: RowLayout {
                                         required property int index
 
@@ -750,9 +800,9 @@ PanelPopup {
                                             textRole: "label"
                                             currentIndex: control.zoneIndex(key, index)
                                             onActivated: function (i) {
-                                                if (i >= 0 && i < control.zoneOptions.length)
-                                                    control.setDialZone(key, index,
-                                                        control.zoneOptions[i].value)
+                                                var row = control.rowOptions(key, index)
+                                                if (i >= 0 && i < row.length)
+                                                    control.setDialZone(key, index, row[i].value)
                                             }
                                         }
 

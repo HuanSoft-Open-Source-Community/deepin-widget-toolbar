@@ -13,6 +13,8 @@ Item {
     property int margin: 10
     property int hostCols: 0
     property int hostRows: 0
+    // 宿主注入的实例数据目录；由主面板的 Binding 写入，供持久化组件使用。
+    property string dataDir: ""
     default property alias contentData: contentContainer.data
 
     clip: true
