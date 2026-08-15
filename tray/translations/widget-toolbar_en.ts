@@ -33,8 +33,8 @@
     </message>
     <message>
         <location filename="../widgettoolbartrayplugin.cpp" line="98"/>
-        <source>Auto arrange</source>
-        <translation>Auto arrange</translation>
+        <source>Arrange</source>
+        <translation>Arrange</translation>
     </message>
 </context>
 </TS>

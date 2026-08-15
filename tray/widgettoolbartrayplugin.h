@@ -30,7 +30,7 @@ public:
     Dock::PluginFlags flags() const override;
     // 控制中心"个性化 → 桌面和任务栏 → 插件区域"显示图标
     QIcon icon(Dock::IconType dockPart, Dock::ThemeType themeType) const override;
-    // 右键菜单：设置 / 关于 / 添加组件 / 一键自动整理（JSON 协议）
+    // 右键菜单：设置 / 关于 / 添加组件 / 自动整理（JSON 协议）
     const QString itemContextMenu(const QString &itemKey) override;
     void invokedMenuItem(const QString &itemKey, const QString &menuId, const bool checked) override;
 

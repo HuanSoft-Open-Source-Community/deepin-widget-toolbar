@@ -195,8 +195,8 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Auto arrange</source>
-        <translation type="unfinished"></translation>
+        <source>Arrange</source>
+        <translation>整理</translation>
     </message>
     <message>
         <source>Add widget</source>

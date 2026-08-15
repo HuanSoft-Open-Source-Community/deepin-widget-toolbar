@@ -107,7 +107,7 @@ const QString WidgetToolbarTrayPlugin::itemContextMenu(const QString &itemKey)
     items.append(makeItem("open-settings", tr("Settings")));
     items.append(makeItem("show-about", tr("About")));
     items.append(makeItem("add-widget", tr("Add widget")));
-    items.append(makeItem("auto-arrange", tr("Auto arrange")));
+    items.append(makeItem("auto-arrange", tr("Arrange")));
 
     QVariantMap menu;
     menu.insert("items", items);

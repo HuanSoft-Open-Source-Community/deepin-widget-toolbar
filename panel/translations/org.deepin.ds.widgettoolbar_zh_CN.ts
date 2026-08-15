@@ -135,8 +135,8 @@
         <translation>添加</translation>
     </message>
     <message>
-        <source>Auto arrange</source>
-        <translation>一键自动排列</translation>
+        <source>Arrange</source>
+        <translation>整理</translation>
     </message>
     <message>
         <source>System Monitor</source>

@@ -313,7 +313,7 @@ Window {
         root.dragGrabOffsetY = 0
     }
 
-    // 一键自动整理：压实布局并回到顶部（整理按钮与右键菜单共用）
+    // 自动整理：压实布局并回到顶部（整理按钮与右键菜单共用）
     function autoArrangeNow() {
         Panel.widgetManager.autoArrangeAll()
         gridFlickable.contentY = 0
@@ -771,7 +771,7 @@ Window {
             }
             width: 88
             height: 32
-            text: qsTr("Auto arrange")
+            text: qsTr("Arrange")
             onClicked: autoArrangeNow()
         }
 
@@ -799,7 +799,7 @@ Window {
             onTriggered: openPanelPopup(addPopup)
         }
         MenuItem {
-            text: qsTr("Auto arrange")
+            text: qsTr("Arrange")
             onTriggered: autoArrangeNow()
         }
         MenuSeparator { }

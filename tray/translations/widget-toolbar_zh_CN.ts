@@ -40,8 +40,8 @@
     </message>
     <message>
         <location filename="../widgettoolbartrayplugin.cpp" line="98"/>
-        <source>Auto arrange</source>
-        <translation>一键自动整理</translation>
+        <source>Arrange</source>
+        <translation>整理</translation>
     </message>
 </context>
 </TS>
