@@ -4,6 +4,7 @@
 
 import QtQuick
 import org.deepin.dtk 1.0
+import org.deepin.ds 1.0
 import org.deepin.widgettoolbar 1.0
 import "../components" as Components
 
@@ -22,6 +23,9 @@ Components.WidgetCard {
     property var widgetConfig: ({})
     property string instanceId: ""
     property bool analogMode: widgetConfig && widgetConfig.clockMode === "analog"
+    property bool preloadTime: widgetConfig && widgetConfig.preloadTime !== undefined
+        ? widgetConfig.preloadTime : true
+    property bool panelVisible: Panel.visible
     property bool showLabels: widgetConfig && widgetConfig.showLabels !== undefined
         ? widgetConfig.showLabels : true
     property bool highlightLocal: widgetConfig && widgetConfig.highlightLocal !== undefined
@@ -48,9 +52,14 @@ Components.WidgetCard {
     property int titlePixelSize: Math.max(11, Math.min(20, Math.round(content.width * 0.04)))
     property int cityPixelSize: Math.max(8, Math.min(18, Math.round(rowHeight * 0.42)))
 
+    function nowMs() {
+        return root.preloadTime ? ClockTime.epochMs : Date.now()
+    }
+
     function cityTime(offset) {
-        var now = new Date()
-        var utcMs = now.getTime() + now.getTimezoneOffset() * 60000
+        var ms = root.nowMs()
+        var local = new Date(ms)
+        var utcMs = ms + local.getTimezoneOffset() * 60000
         return new Date(utcMs + offset * 3600000)
     }
 
@@ -181,6 +190,9 @@ Components.WidgetCard {
     onHostColsChanged: root.scheduleResize()
     onHostRowsChanged: root.scheduleResize()
     onWidgetConfigChanged: root.rebuildDials()
+    onPreloadTimeChanged: if (!root.analogMode) root.updateTimes()
+    onVisibleChanged: if (visible && !root.analogMode) root.updateTimes()
+    onPanelVisibleChanged: if (panelVisible && !root.analogMode) root.updateTimes()
     Component.onCompleted: {
         root.rebuildDials()
         // 宿主对 hostCols/hostRows 的首次注入可能晚于 onCompleted，
@@ -298,6 +310,8 @@ Components.WidgetCard {
                     highlighted: root.highlightLocal
                         && Math.abs(modelData.offset - root.localOffset) < 0.001
                     accentColor: palette.highlight
+                    preloadTime: root.preloadTime
+                    active: root.analogMode && root.panelVisible
                 }
             }
         }
@@ -306,9 +320,17 @@ Components.WidgetCard {
     Timer {
         interval: 1000
         repeat: true
-        running: !root.analogMode
-        triggeredOnStart: true
+        running: !root.analogMode && !root.preloadTime && root.panelVisible && root.visible
         onTriggered: root.updateTimes()
+    }
+
+    Connections {
+        target: ClockTime
+        enabled: root.preloadTime && root.panelVisible && root.visible
+        function onEpochMsChanged() {
+            if (!root.analogMode)
+                root.updateTimes()
+        }
     }
 
     // DST 切换会改变表盘当前偏移，每小时重算渲染信息

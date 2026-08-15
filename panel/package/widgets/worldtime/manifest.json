@@ -30,6 +30,13 @@
             ]
         },
         {
+            "key": "preloadTime",
+            "type": "boolean",
+            "label": "Preload time mode",
+            "label[zh_CN]": "预加载时间模式",
+            "default": true
+        },
+        {
             "key": "dials",
             "type": "timezoneList",
             "label": "Dials",

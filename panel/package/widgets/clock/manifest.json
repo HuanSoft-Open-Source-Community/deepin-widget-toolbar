@@ -28,6 +28,13 @@
                 { "value": "digital", "label": "Digital", "label[zh_CN]": "数字" },
                 { "value": "analog", "label": "Analog", "label[zh_CN]": "指针" }
             ]
+        },
+        {
+            "key": "preloadTime",
+            "type": "boolean",
+            "label": "Preload time mode",
+            "label[zh_CN]": "预加载时间模式",
+            "default": true
         }
     ],
     "builtin": true

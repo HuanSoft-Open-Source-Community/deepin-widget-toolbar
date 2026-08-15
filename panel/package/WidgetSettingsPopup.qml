@@ -457,13 +457,14 @@ PanelPopup {
                 Layout.fillHeight: true
                 clip: true
                 contentWidth: width
-                contentHeight: settingsColumn.implicitHeight
+                // 底部保留余量：设置项可滚动时最后一行不会紧贴可视区下缘，
+                // 避免 DTK Switch 等控件底部因亚像素/DPR 取整被裁掉几行像素。
+                contentHeight: settingsColumn.implicitHeight + 12
 
                 ColumnLayout {
                     id: settingsColumn
                     width: parent.width
                     spacing: 12
-                    clip: true
 
                     Text {
                         Layout.fillWidth: true
@@ -487,7 +488,6 @@ PanelPopup {
 
                             Layout.fillWidth: true
                             spacing: 8
-                            clip: true
 
                             Text {
                                 Layout.preferredWidth: 88
@@ -500,9 +500,11 @@ PanelPopup {
 
                             Switch {
                                 Layout.fillWidth: true
-                                // DTK Switch 的 indicator 比控件隐式高度高，
-                                // 必须预留完整高度，避免 RowLayout 的 clip 裁掉底部。
-                                Layout.preferredHeight: indicator.implicitHeight
+                                // DTK Switch 的 indicator 比控件隐式高度高；
+                                // 再多留 6px 安全高度，覆盖阴影、焦点描边与 DPR 取整。
+                                Layout.preferredHeight: Math.max(
+                                    implicitHeight,
+                                    (indicator ? indicator.implicitHeight : 0) + 6)
                                 visible: type === "boolean"
                                 checked: control.values[key] === true
                                 onToggled: control.commit(key, checked)
