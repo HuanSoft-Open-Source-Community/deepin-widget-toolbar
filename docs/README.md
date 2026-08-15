@@ -21,7 +21,7 @@ A Vista-style widget toolbar for the deepin desktop, built on the dde-shell plug
 - **🖱️ Drag & Arrange**: long-press to drag a widget to any cell (including off the first column); positions persist with no forced reflow; while dragging, occupied widgets move aside live in both directions (multiple widgets coordinated, animated), snapping back on cancel; the bottom-left Arrange button packs widgets to the top-left
 - **➕ Add Panel**: The "Add" button at the bottom opens a popup (translucent blur, system corner radius, round close button, no title bar) listing built-in and added widgets, with `.dwpkg` (tar.xz) import and third-party uninstall
 - **🖱️ Widget Context Menu**: right-click any widget to switch between manifest-declared sizes (`1×1` / `2×2` / `4×2` / `4×4`), open its per-instance settings, or remove it
-- **🕐 Built-in Widgets**: Clock (digital/analog), Calendar, System Monitor (configurable CPU/MEM/DISK IO/GPU/NPU rows and refresh interval), Sticky Note (per-instance persisted data), World Time (digital list or resizable analog dial grid; timezones and localized names follow the control-center time settings), and a Ter-Music Lyrics widget with configurable font and color
+- **🕐 Built-in Widgets**: Clock (digital/analog), Calendar, System Monitor (CPU/MEM/DISK/GPU/NPU switches on every size; 2×2 stays single-column, while 4×2 and 4×4 default to dual-column; every size can show all enabled CPU/MEM/DISK IO/GPU/NPU rows with compact single-column rows when needed, configurable 1/2/5-second refresh defaulting to 5 seconds, on-demand background sampling, lightweight static progress bars), Sticky Note (per-instance persisted data), World Time (digital list or resizable analog dial grid; timezones and localized names follow the control-center time settings), and a Ter-Music Lyrics widget with configurable font and color
 - **🔌 Open API**: manifest (`sizes` + `settings`) + instance context injection (`dataDir`/`instanceId`/`widgetConfig`) + host capability proxies (`FileIO`/`SystemInfo`/`Lyrics`); spec in [widget-api.md](widget-api.md)
 - **📌 Pin / Unpin**: A DTK pin button in the header toggles between *pinned* (always above other windows, `LayerOverlay`) and *unpinned* (covered by normal windows, `LayerButtom`)
 - **🔘 Dock Trigger Button**: A dde-dock tray plugin toggles the panel visibility — the only way to show or hide it, no auto-hide on focus loss
@@ -89,6 +89,7 @@ systemctl --user restart dde-shell@DDE
 - Clicking outside the panel never closes it.
 - Right-clicking a widget offers only the sizes declared by its manifest; resizing persists and avoids other widgets; Remove deletes the instance.
 - Per-instance clock and lyrics settings apply immediately and survive a restart.
+- The system monitor uses lightweight progress bars without continuous animations; 2×2 stays single-column, while 4×2 and 4×4 support dual-column (enabled by default), and every size can display all enabled CPU/MEM/DISK IO/GPU/NPU rows with compact single-column rows when needed; sampling defaults to 5 seconds, runs on a background thread only while visible, and stops when the panel is hidden; the dual-column switch appears on 4×2 and 4×4 instances.
 - States persist across restarts.
 
 ## 📁 Directory Layout

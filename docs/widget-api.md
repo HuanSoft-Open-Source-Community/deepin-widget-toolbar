@@ -1,7 +1,7 @@
-# 小组件接口规范（v1.2）
+# 小组件接口规范（v1.3）
 
 > 本文档定义 deepin-widget-toolbar 面板（宿主）与小组件之间的开放接口契约。
-> 当前宿主接口版本：1.2；同时兼容 1.0/1.1 小组件。
+> 当前宿主接口版本：1.3；同时兼容 1.0/1.1/1.2 小组件。
 
 ## 1. 架构
 
@@ -33,7 +33,7 @@
 | `description` | string | 否 | 一句话描述 |
 | `icon` | string | 否 | 主题图标名（如 `appointment-new`），面板列表中显示 |
 | `version` | string | 是 | 语义化版本号，如 `1.0.0` |
-| `apiVersion` | string | 是 | 所需接口版本，当前为 `1.2`；宿主兼容所有 `1.x`，不兼容则拒绝加载 |
+| `apiVersion` | string | 是 | 所需接口版本，当前为 `1.3`；宿主兼容所有 `1.x`，不兼容则拒绝加载 |
 | `author` | string | 否 | 作者 |
 | `runtime` | string | 否 | 渲染运行时，当前仅支持 `qml`（默认值） |
 | `entry` | string | 是 | 入口文件（相对小组件目录），如 `main.qml` |
@@ -104,7 +104,16 @@
 
 指标口径、sysfs/NVML 数据源与降级策略详见 [system-monitor.md](system-monitor.md)。
 
-信号：`refreshed()`（默认每秒刷新；可用 `setRefreshInterval(ms)` 调整，下限 200ms）。
+采样在宿主后台线程执行，不阻塞 dde-shell 主线程。系统监视小组件使用
+`updateMonitor(clientId, active, metrics, intervalMs)` 声明自身实例的指标需求，
+并在销毁时调用 `releaseMonitor(clientId)`。SystemInfo 会合并所有活动客户端的指标并集，
+按其中最小刷新间隔采样；任一客户端释放不会影响其他客户端。
+指标 id 为 `cpu` / `mem` / `disk` / `gpu` / `npu`（兼容项 `diskUsed`）。
+旧接口 `setMonitoringActive(bool)`、`setMonitoredMetrics(metrics)`、`setRefreshInterval(ms)`
+继续兼容第三方小组件；刷新间隔下限为 1000ms，默认 5000ms。
+
+信号：各属性都有独立变化信号（如 `cpuUsageChanged`）；`refreshed()` 作为任一指标
+变化的兼容信号，仅在采样值变化达到展示阈值或可用状态变化时发出。
 
 ### Lyrics（端闱乐部歌词数据）
 
@@ -148,9 +157,10 @@
 | `offsetSeconds` | `int offsetSeconds(string zoneId)` | 当前 UTC 偏移秒（与控制中心口径一致，DST 生效期间为 DST 偏移） |
 | `zoneIds` | `string[] zoneIds()` | 控制中心时区选择器使用的完整时区列表（`GetZoneList` 顺序） |
 | `firstZoneForOffset` | `string firstZoneForOffset(int offsetHours, string[] excludeZones)` | 当前偏移等于给定小时数的时区中，按 `GetZoneList` 顺序、跳过 `excludeZones` 后取第一个 id；无则空串 |
-| `zoneOptions` | `var zoneOptions()` | 时区下拉选项 `[{value, label}]`（本地化地区名，首次调用后缓存） |
+| `zoneOptions` | `var zoneOptions()` | 时区下拉选项 `[{value, label}]`（本地化地区名）；首次调用返回当前缓存并触发后台加载，加载完成后发出 `zoneOptionsChanged()` |
 
-信号：`availableChanged()`、`systemTimezoneChanged()`、`userTimezonesChanged()`。
+信号：`availableChanged()`、`systemTimezoneChanged()`、`userTimezonesChanged()`、
+`zoneOptionsChanged()`（后台时区选项加载完成）。
 地区名与时差直接来自控制中心的本地化数据，因此无需在小组件 ts 中维护时区名。
 
 ### WidgetHost（实例配置回写）
@@ -185,7 +195,7 @@
 
 - 小组件声明 `apiVersion`；宿主加载时校验，不兼容则拒绝加载并提示，不静默失败。
 - 宿主新增接口走次版本递增，不破坏既有小组件（1.0 小组件仍可加载）。
-- 当前宿主实现：`apiVersion = "1.2"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控）。
+- 当前宿主实现：`apiVersion = "1.3"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控）。
 
 ## 10. 生命周期（当前范围）
 
