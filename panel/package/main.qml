@@ -733,6 +733,10 @@ Window {
 
                                 onPressed: function(mouse) {
                                     suppressClick = false
+                                    var pressedWidget = widgetLoader.item
+                                    if (pressedWidget
+                                        && typeof pressedWidget.handleHostPressed === "function")
+                                        pressedWidget.handleHostPressed(mouse.x, mouse.y)
                                 }
                                 onPressAndHold: function(mouse) {
                                     suppressClick = true
@@ -745,17 +749,35 @@ Window {
                                         root.updateDrag(p.x, p.y)
                                         return
                                     }
+                                    var hoverWidget = widgetLoader.item
+                                    if (hoverWidget
+                                        && typeof hoverWidget.handleHostHover === "function")
+                                        hoverWidget.handleHostHover(mouse.x, mouse.y)
                                 }
                                 onReleased: function(mouse) {
+                                    var releasedWidget = widgetLoader.item
+                                    if (releasedWidget
+                                        && typeof releasedWidget.handleHostReleased === "function")
+                                        releasedWidget.handleHostReleased(mouse.x, mouse.y)
                                     if (root.dragging)
                                         root.endDrag()
                                     else
                                         suppressClick = false
                                 }
                                 onCanceled: function(mouse) {
+                                    var canceledWidget = widgetLoader.item
+                                    if (canceledWidget
+                                        && typeof canceledWidget.handleHostReleased === "function")
+                                        canceledWidget.handleHostReleased(mouse.x, mouse.y)
                                     suppressClick = false
                                     if (root.dragging)
                                         root.endDrag()
+                                }
+                                onExited: function() {
+                                    var hoverWidget = widgetLoader.item
+                                    if (hoverWidget
+                                        && typeof hoverWidget.handleHostHover === "function")
+                                        hoverWidget.handleHostHover(-1, -1)
                                 }
                                 onClicked: function(mouse) {
                                     if (suppressClick) {
