@@ -717,19 +717,71 @@ Window {
                                 hoverEnabled: true
                                 acceptedButtons: Qt.LeftButton
                                 propagateComposedEvents: true
-                                pressAndHoldInterval: 500
-                                onPressAndHold: function(mouse) {
-                                    var p = widgetDragArea.mapToItem(gridCanvas, mouse.x, mouse.y)
-                                    root.startDrag(widgetHost, p.x, p.y)
+
+                                // 按下列为“未接受”并放行给组件内容（如便签 TextArea 取焦），
+                                // 拖拽改用自管理定时器：长按 500ms 才开始，不依赖 pressAndHold。
+                                property bool dragPressActive: false
+                                property point dragPressPoint: Qt.point(0, 0)
+                                property point dragLastPoint: Qt.point(0, 0)
+
+                                onPressed: function(mouse) {
+                                    if (root.dragging)
+                                        return
+                                    dragPressActive = true
+                                    dragPressPoint = Qt.point(mouse.x, mouse.y)
+                                    dragLastPoint = dragPressPoint
+                                    widgetDragHoldTimer.restart()
+                                    mouse.accepted = false
                                 }
                                 onPositionChanged: function(mouse) {
-                                    if (!root.dragging)
+                                    if (root.dragging) {
+                                        var p = widgetDragArea.mapToItem(gridCanvas, mouse.x, mouse.y)
+                                        root.updateDrag(p.x, p.y)
                                         return
-                                    var p = widgetDragArea.mapToItem(gridCanvas, mouse.x, mouse.y)
-                                    root.updateDrag(p.x, p.y)
+                                    }
+                                    if (!dragPressActive)
+                                        return
+                                    dragLastPoint = Qt.point(mouse.x, mouse.y)
+                                    // 明显移动视为普通点击/滚动，不再触发长按拖拽
+                                    if (Math.abs(mouse.x - dragPressPoint.x) > 10
+                                            || Math.abs(mouse.y - dragPressPoint.y) > 10)
+                                        widgetDragHoldTimer.stop()
                                 }
-                                onReleased: if (root.dragging) root.endDrag()
-                                onCanceled: if (root.dragging) root.endDrag()
+                                onReleased: function(mouse) {
+                                    dragPressActive = false
+                                    widgetDragHoldTimer.stop()
+                                    if (root.dragging)
+                                        root.endDrag()
+                                    else
+                                        mouse.accepted = false
+                                }
+                                onCanceled: function(mouse) {
+                                    dragPressActive = false
+                                    widgetDragHoldTimer.stop()
+                                    if (root.dragging)
+                                        root.endDrag()
+                                }
+                                onClicked: function(mouse) {
+                                    // 普通点击放行给组件内容（如便签编辑），长按仍用于拖拽
+                                    if (!root.dragging)
+                                        mouse.accepted = false
+                                }
+
+                                Timer {
+                                    id: widgetDragHoldTimer
+                                    interval: 500
+                                    repeat: false
+                                    onTriggered: {
+                                        if (!widgetDragArea.dragPressActive)
+                                            return
+                                        var p = widgetDragArea.mapToItem(
+                                            gridCanvas,
+                                            widgetDragArea.dragLastPoint.x,
+                                            widgetDragArea.dragLastPoint.y)
+                                        root.startDrag(widgetHost, p.x, p.y)
+                                    }
+                                }
+
                             }
 
                             // 右键菜单层：只接收右键，不影响左键点击与长按拖拽
