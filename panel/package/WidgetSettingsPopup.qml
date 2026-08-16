@@ -191,12 +191,18 @@ PanelPopup {
     function addDial(key) {
         var list = control.dialList(key).slice()
         var used = control.usedZoneSet()
+        // 本实例已用地区也不能重复添加：先加了当前时区后，
+        // 下一次添加应缺省到别的时区
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] && typeof list[i].zone === "string" && list[i].zone.length > 0)
+                used[list[i].zone] = true
+        }
         var defaultZone = Timezones.systemTimezone
         if (defaultZone.length === 0 || used[defaultZone] !== undefined) {
             defaultZone = ""
-            for (var i = 0; i < control.zoneOptions.length; i++) {
-                if (used[control.zoneOptions[i].value] === undefined) {
-                    defaultZone = control.zoneOptions[i].value
+            for (var j = 0; j < control.zoneOptions.length; j++) {
+                if (used[control.zoneOptions[j].value] === undefined) {
+                    defaultZone = control.zoneOptions[j].value
                     break
                 }
             }
