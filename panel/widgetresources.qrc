@@ -31,5 +31,7 @@
         <file alias="player/icons/music-dark.svg">package/widgets/player/icons/music-dark.svg</file>
         <file alias="player/icons/na-light.svg">package/widgets/player/icons/na-light.svg</file>
         <file alias="player/icons/na-dark.svg">package/widgets/player/icons/na-dark.svg</file>
+        <file alias="spectrum/main.qml">package/widgets/spectrum/main.qml</file>
+        <file alias="spectrum/manifest.json">package/widgets/spectrum/manifest.json</file>
     </qresource>
 </RCC>

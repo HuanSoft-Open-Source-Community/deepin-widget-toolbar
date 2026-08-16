@@ -1,0 +1,63 @@
+{
+    "id": "spectrum",
+    "name": "Spectrum Panel",
+    "name[zh_CN]": "频谱面板",
+    "description": "Animated spectrum of the audio playing on the system",
+    "description[zh_CN]": "跟随系统播放音频跃动的频谱面板",
+    "version": "1.0.0",
+    "apiVersion": "1.5",
+    "author": "deepin-widget-toolbar",
+    "icon": "audio-volume-high",
+    "runtime": "qml",
+    "entry": "main.qml",
+    "defaultSize": { "cols": 4, "rows": 2 },
+    "sizes": [
+        { "cols": 2, "rows": 2 },
+        { "cols": 4, "rows": 2 },
+        { "cols": 4, "rows": 4 }
+    ],
+    "settings": [
+        {
+            "key": "transparentBackground",
+            "type": "boolean",
+            "label": "Transparent background",
+            "label[zh_CN]": "透明背景",
+            "default": false
+        },
+        {
+            "key": "backgroundColor",
+            "type": "color",
+            "label": "Background color",
+            "label[zh_CN]": "背景颜色",
+            "default": "#C8E6C9",
+            "options": [
+                { "value": "#C8E6C9", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "barColor",
+            "type": "color",
+            "label": "Spectrum color",
+            "label[zh_CN]": "频谱颜色",
+            "default": "",
+            "options": [
+                { "value": "", "label": "Theme color", "label[zh_CN]": "主题色" }
+            ]
+        },
+        {
+            "key": "amplitude",
+            "type": "integer",
+            "label": "Amplitude",
+            "label[zh_CN]": "跃动幅度",
+            "default": 100
+        },
+        {
+            "key": "showPeaks",
+            "type": "boolean",
+            "label": "Show peaks",
+            "label[zh_CN]": "显示峰值",
+            "default": true
+        }
+    ],
+    "builtin": true
+}

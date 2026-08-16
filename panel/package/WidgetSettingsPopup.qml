@@ -750,7 +750,12 @@ PanelPopup {
                                             width: 24
                                             height: 24
                                             radius: 12
-                                            color: modelData.value
+                                            // 空串色值 = “跟随主题色”（如频谱面板 barColor 缺省），
+                                            // 色块按当前主题高亮色渲染，避免空色显示为黑块
+                                            color: String(modelData.value).length > 0
+                                                ? modelData.value
+                                                : (DTK.themeType === ApplicationHelper.DarkType
+                                                    ? "#4d8cff" : "#0081ff")
                                             border.width: 1
                                             border.color: Qt.rgba(0, 0, 0, 0.25)
                                             transformOrigin: Item.Center
