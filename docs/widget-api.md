@@ -1,7 +1,7 @@
-# 小组件接口规范（v1.4）
+# 小组件接口规范（v1.5）
 
 > 本文档定义 deepin-widget-toolbar 面板（宿主）与小组件之间的开放接口契约。
-> 当前宿主接口版本：1.4；同时兼容 1.0/1.1/1.2/1.3 小组件。
+> 当前宿主接口版本：1.5；同时兼容 1.0/1.1/1.2/1.3/1.4 小组件。
 
 ## 1. 架构
 
@@ -241,6 +241,43 @@
 | `saveConfig` | `bool saveConfig(string instanceId, object values)` | 保存该实例的配置；仅允许 manifest `settings` 中声明的 key，供小组件在运行期（如缩放补位）持久化设置 |
 | `usedZones` | `string[] usedZones(string excludingInstanceId)` | 其它实例 `dials` 配置中已使用的时区 id（世界时间跨实例地区唯一性用） |
 
+### AudioVisualizer（系统音频频谱）
+
+> **音频服务能力代理**：小组件不允许直接访问音频服务（PulseAudio/PipeWire/ALSA）。
+> 宿主在独立线程以 `dlopen` 方式按优先级动态选择后端，记录**系统正在播放的
+> 音频回环**，对 PCM 做 FFT 后输出 32 带 0..100 频谱快照。频谱面板小组件经
+> 本代理实现随系统音频自由跃动的可视化。
+>
+> **后端动态选择**（纯自动，故障降级 / 恢复）：
+> - `PulseAudio`：`dlopen libpulse.so.0`，记录默认 sink 的 monitor 源，覆盖
+>   纯 PulseAudio 与 PipeWire+pipewire-pulse 系统（deepin/UOS 均为此类）；
+> - `PipeWire`：`dlopen libpipewire-0.3.so.0`，注册表枚举真实 Audio/Sink 节点，
+>   以 sink 节点为 target 创建 input 流（路由到其 monitor 端口），用于无
+>   pipewire-pulse 的系统；
+> - `ALSA`：`dlopen libasound.so.2`，**仅**在检测到 `snd-aloop` 的 Loopback
+>   卡时启用并采集回环设备，用于纯 ALSA 回环环境。
+>
+> **安全边界**：
+> - 采集目标只能是输出回环：Pulse 侧只接受以 `.monitor` 结尾的源，PipeWire
+>   侧只枚举 `Audio/Sink` 节点，ALSA 侧只接受 Loopback 卡；**任何情况下绝不
+>   回退到麦克风等输入源**（不触碰 `alsa_input.*` / `Audio/Source`）。
+> - 仅暴露只读数值接口，小组件拿不到原始 PCM，也没有任何写入口；
+> - 采集仅在有实例可见且面板可见时进行（`setActive` 引用计数），全部实例
+>   释放后立即停流停分析；分析节流约 30Hz，FFT 固定 128 点，开销极小；
+> - 数据仅内存计算，不落盘、不联网、不触发任何系统 D-Bus 调用。
+
+| 属性/方法 | 类型 | 说明 |
+|---|---|---|
+| `available` | bool | 采集流是否就绪（可捕获系统音频）；音频服务缺失/无默认 sink monitor 时为 false |
+| `bandCount` | int | 频谱带数（固定 32） |
+| `levels` | var | 最近一帧频谱快照（32 个 0..100 整数，约 30Hz 更新，`levelsChanged()` 通知） |
+| `active` | bool | 是否有实例正在采集（任一侧栏实例可见且面板可见） |
+| `setActive(clientId, active)` | void | 实例注册/注销采集需求；clientId 通常为实例 UUID，按引用计数，重复调用幂等 |
+
+信号：`availableChanged()`（采集就绪状态翻转）、`levelsChanged()`（新一帧频谱）、
+`activeChanged()`（采集开/停）。小组件应在可见时 `setActive(instanceId, true)`、
+隐藏/销毁时 `setActive(instanceId, false)`，避免无谓采集。
+
 ## 7. 面板 API（预留）
 
 以下接口为本规范预留，尚未实现，未来版本按此契约提供：
@@ -266,7 +303,7 @@
 
 - 小组件声明 `apiVersion`；宿主加载时校验，不兼容则拒绝加载并提示，不静默失败。
 - 宿主新增接口走次版本递增，不破坏既有小组件（1.0 小组件仍可加载）。
-- 当前宿主实现：`apiVersion = "1.4"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型）。
+- 当前宿主实现：`apiVersion = "1.5"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型；1.5 新增 `AudioVisualizer` 系统音频频谱代理）。
 
 ## 10. 生命周期（当前范围）
 
@@ -279,6 +316,6 @@
 
 - 网格支持长按拖放调整位置；右键菜单可切换 `sizes` 声明的占位尺寸，切换时冲突实例联动避让并持久化。
 - 小组件设置页由 manifest `settings` schema 自动生成，支持列出的基础类型及 `timezoneList`。
-- 网络请求未开放；小组件不允许直接访问系统 D-Bus，只能使用宿主能力代理
-  （`FileIO` / `SystemInfo` / `Lyrics` / `Timezones` / `ClockTime` / `WidgetHost` / `MediaPlayers` / `MediaPlayer`）。
+- 网络请求未开放；小组件不允许直接访问系统 D-Bus 与音频服务，只能使用宿主能力代理
+  （`FileIO` / `SystemInfo` / `Lyrics` / `Timezones` / `ClockTime` / `WidgetHost` / `MediaPlayers` / `MediaPlayer` / `AudioVisualizer`）。
 - 小组件间事件总线（`bus.emit/on`）未实现。

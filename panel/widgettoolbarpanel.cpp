@@ -4,6 +4,7 @@
 
 #include "widgettoolbarpanel.h"
 
+#include "audiovisualizer.h"
 #include "clocktime.h"
 #include "fileio.h"
 #include "lyricssource.h"
@@ -78,6 +79,10 @@ bool WidgetToolbarPanel::init()
     // 配置回写代理：小组件经它持久化自身实例配置（如世界时间的缩放补位）
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "WidgetHost",
                                  new WidgetHost(m_widgetManager, this));
+    // 系统音频频谱代理：频谱面板经它读取默认 sink monitor 回环的 32 带频谱，
+    // 内部在独立线程采集（dlopen libpulse），仅输出只读数值，绝不触麦克风
+    qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "AudioVisualizer",
+                                 new AudioVisualizer(this));
 
     // 读取持久化状态（默认显示 + 默认置顶，Vista 侧栏风格）
     m_config = DConfig::create("org.deepin.dde.shell", "org.deepin.ds.widgettoolbar");

@@ -33,10 +33,29 @@ add_library(ds-widget-toolbar SHARED
     timezones.h
     widgethost.cpp
     widgethost.h
+    audiovisualizer.cpp
+    audiovisualizer.h
+    spectrumcapture.cpp
+    spectrumcapture.h
+    audiobackend.h
+    pulsebackend.cpp
+    pulsebackend.h
+    pipewirebackend.cpp
+    pipewirebackend.h
+    alsabackend.cpp
+    alsabackend.h
     widgetresources.qrc
 )
 
-target_link_libraries(ds-widget-toolbar PRIVATE Dde::Shell Qt6::Qml Qt6::DBus Qt6::Concurrent)
+target_link_libraries(ds-widget-toolbar PRIVATE Dde::Shell Qt6::Qml Qt6::DBus Qt6::Concurrent m)
+
+# PipeWire 后端的 SPA POD 使用官方 inline builder（仅需头文件，无链接依赖）；
+# 头文件缺失时回退手写 POD（pipewirebackend.cpp 内 HAVE_SPA_POD_BUILDER=0）
+find_path(SPA_INCLUDE_DIR spa/pod/builder.h HINTS /usr/include/spa-0.2)
+if(SPA_INCLUDE_DIR)
+    target_include_directories(ds-widget-toolbar PRIVATE ${SPA_INCLUDE_DIR})
+    target_compile_definitions(ds-widget-toolbar PRIVATE HAVE_SPA_POD_BUILDER=1)
+endif()
 
 dtk_add_config_meta_files(APPID "org.deepin.dde.shell" FILES configs/org.deepin.ds.widgettoolbar.json)
 
