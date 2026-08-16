@@ -91,6 +91,7 @@ systemctl --user restart dde-shell@DDE
 - Per-instance clock and lyrics settings apply immediately and survive a restart.
 - The system monitor uses lightweight progress bars without continuous animations; 2×2 stays single-column, while 4×2 and 4×4 support dual-column (enabled by default), and every size can display all enabled CPU/MEM/DISK IO/GPU/NPU rows with compact single-column rows when needed; sampling defaults to 5 seconds, runs on a background thread only while visible, and stops when the panel is hidden; the dual-column switch appears on 4×2 and 4×4 instances.
 - Clock and World Time use preloaded time by default: every visible clock instance shares the host's single second ticker, and analog dials only update hand rotations instead of repainting whole canvases; disabling the setting falls back to per-instance timers.
+- A new World Time instance defaults to analog mode with four dials: the current timezone plus three of the classic four (Beijing/Tokyo/London/New York); clearing all dials in settings is respected and not re-seeded.
 - Built-in widgets apply their default theme colors on first use; changing any color or enabling transparent background takes effect immediately and survives a restart, and invalid color values fall back to defaults safely.
 - States persist across restarts.
 

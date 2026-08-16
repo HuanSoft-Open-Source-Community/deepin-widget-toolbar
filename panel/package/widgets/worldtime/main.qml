@@ -13,6 +13,10 @@ import "../components" as Components
 // 无需维护偏移文本框。表盘列表按实例持久化（widgetConfig.dials，
 // 元素为 {zone, auto}），数字模式显示全部表盘，指针模式显示前
 // hostCols*hostRows 个表盘，表盘可少于格子数并留空。
+// 新实例缺省为指针模式并预置四块表盘（默认 2×2 恰好放满）：当前时区一块，
+// 其余三块取旧版四城市（北京/东京/伦敦/纽约）中不与当前时区重复的前三个。
+// 预置仅在实例尚无任何已保存配置（config 文件不存在）时生成并持久化；
+// 用户在设置中清空表盘后不再自动补回。
 // 只有“调整小组件尺寸”事件会在指针模式下补满格子：缩小先删尾部补位表盘
 // （auto=true），用户表盘保留；放大从末位偏移 +1 小时、越过 +14 回绕到 -12、
 // 按偏移去重，取该偏移下 GetZoneList 顺序的第一个时区生成补位表盘（auto=true）；
@@ -60,6 +64,17 @@ Components.WidgetCard {
     property int lastSlotCount: -1
     property bool resizePending: false
 
+    // 旧版固定四城市（北京/东京/伦敦/纽约）对应的控制中心时区 id，
+    // 新实例缺省四表盘中“老四样之三”的来源
+    property var legacyFourZones: [
+        "Asia/Shanghai",
+        "Asia/Tokyo",
+        "Europe/London",
+        "America/New_York"
+    ]
+    // 本实例缺省表盘已预置（或确认无需预置），避免反复补回
+    property bool defaultDialsSeeded: false
+
     property int layoutSpacing: 6
     property int rowHeight: Math.max(18,
         Math.floor((content.height - 28 - layoutSpacing * (zoneInfos.length + 1))
@@ -89,6 +104,56 @@ Components.WidgetCard {
 
     function zoneOffset(zoneId) {
         return Timezones.offsetSeconds(zoneId) / 3600
+    }
+
+    // 缺省四表盘：当前时区一块 + 老四样中不与当前时区重复的前三个
+    function defaultDialList() {
+        var system = Timezones.systemTimezone
+        if (system.length === 0 && Timezones.userTimezones.length > 0)
+            system = Timezones.userTimezones[0]
+        var zones = []
+        if (system.length > 0)
+            zones.push(system)
+        for (var i = 0; i < root.legacyFourZones.length && zones.length < 4; i++) {
+            if (root.legacyFourZones[i] !== system)
+                zones.push(root.legacyFourZones[i])
+        }
+        var list = []
+        for (var j = 0; j < zones.length; j++)
+            list.push({ "zone": zones[j], "auto": false })
+        return list
+    }
+
+    // 实例配置文件路径；dataDir/instanceId 由宿主注入，就绪前返回空
+    function configFilePath() {
+        if (root.instanceId.length === 0 || root.dataDir.length === 0)
+            return ""
+        return root.dataDir + "/" + root.instanceId + ".config.json"
+    }
+
+    // 新实例缺省预置四表盘并持久化；已有任何已保存配置（含用户清空）则不再补。
+    // 时区代理未就绪（systemTimezone 为空）时留待 systemTimezoneChanged 重试。
+    function seedDefaultDials() {
+        if (root.defaultDialsSeeded)
+            return
+        var path = root.configFilePath()
+        if (path.length === 0)
+            return
+        if (FileIO.exists(path)) {
+            root.defaultDialsSeeded = true
+            return
+        }
+        if (Timezones.systemTimezone.length === 0
+            && Timezones.userTimezones.length === 0)
+            return
+        var list = root.defaultDialList()
+        if (list.length === 0)
+            return
+        if (WidgetHost.saveConfig(root.instanceId, { "dials": list })) {
+            root.defaultDialsSeeded = true
+            // 保存成功后先本地生效，避免宿主回写前的空窗期显示“暂无表盘”
+            root.applyDials(list)
+        }
     }
 
     function updateTimes() {
@@ -139,6 +204,10 @@ Components.WidgetCard {
                 }
             }
         }
+        // 尚无任何表盘时尝试预置缺省四表盘（首次加载的兜底入口；
+        // 时区/注入未就绪时由下方信号处理重试）
+        if (list.length === 0)
+            root.seedDefaultDials()
         root.applyDials(list)
     }
 
@@ -224,6 +293,9 @@ Components.WidgetCard {
     onPreloadTimeChanged: if (!root.analogMode) root.updateTimes()
     onVisibleChanged: if (visible && !root.analogMode) root.updateTimes()
     onPanelVisibleChanged: if (panelVisible && !root.analogMode) root.updateTimes()
+    // 注入/时区代理就绪后重试缺省表盘预置
+    onInstanceIdChanged: root.seedDefaultDials()
+    onDataDirChanged: root.seedDefaultDials()
     Component.onCompleted: {
         root.rebuildDials()
         // 宿主对 hostCols/hostRows 的首次注入可能晚于 onCompleted，
@@ -366,6 +438,14 @@ Components.WidgetCard {
         function onEpochMsChanged() {
             if (!root.analogMode)
                 root.updateTimes()
+        }
+    }
+
+    // 时区代理异步就绪后重试缺省表盘预置
+    Connections {
+        target: Timezones
+        function onSystemTimezoneChanged() {
+            root.seedDefaultDials()
         }
     }
 

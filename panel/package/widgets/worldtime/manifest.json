@@ -30,7 +30,7 @@
             "type": "enum",
             "label": "Clock mode",
             "label[zh_CN]": "时钟模式",
-            "default": "digital",
+            "default": "analog",
             "options": [
                 { "value": "digital", "label": "Digital", "label[zh_CN]": "数字" },
                 { "value": "analog", "label": "Analog", "label[zh_CN]": "指针" }
