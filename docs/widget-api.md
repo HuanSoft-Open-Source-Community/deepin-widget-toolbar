@@ -54,7 +54,14 @@
 
 颜色类配置值统一为 `#RRGGBB` 或 `#AARRGGBB`（`AARRGGBB` 用于带透明度的默认色）。宿主/小组件在渲染前必须校验：
 非法值回退到 manifest 默认色，避免脏配置导致渲染异常。内置小组件统一提供
-`transparentBackground`（boolean，默认 `false`）开关：开启时隐藏卡片与内部区域底色（日历/便签等含区域底色的组件一并透明），文字与内容仍保留。
+`transparentBackground`（boolean，默认 `false`）开关：开启时卡片底显示半透明叠层
+（暗色 `rgba(1,1,1,0.08)`、亮色 `rgba(0,0,0,0.05)`，与面板毛玻璃叠加透出背景）而非不透明底色，
+内部区域底色（日历/便签等含区域底色的组件）一并透明，文字与内容仍保留。
+宿主面板另提供全局"卡片透明模式"开关（面板设置，默认关闭）：开启时所有卡片底一律显示半透明叠层，
+与小组件自身的 `transparentBackground` 相互独立——小组件无需感知，卡片底与内部区域透明度由
+`transparentBackground || hostCardTransparent`（`effectiveTransparent`）共同决定；任一开关开启时，
+日历/便签等含区域底色的组件按配色模式改造前的无底色样式渲染（主题自适应文字、无内部色块），
+时钟/世界时间表盘不再绘制表盘底色。
 
 `timezoneList` 的值形如 `[{ "zone": "Asia/Shanghai", "auto": false }]`：
 `zone` 为控制中心时区 id，`auto` 标记是否为缩放补位生成。宿主配置面板渲染为
