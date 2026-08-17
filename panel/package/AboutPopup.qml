@@ -60,7 +60,7 @@ PanelPopup {
 
             Text {
                 Layout.fillWidth: true
-                text: qsTr("Version") + ": 0.1.0"
+                text: qsTr("Version") + ": 0.1.0.0"
                 font: DTK.fontManager.t6
                 color: palette.windowText
                 opacity: 0.8
