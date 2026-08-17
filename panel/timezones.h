@@ -4,9 +4,9 @@
 
 #pragma once
 
+#include "timezonedb.h"
+
 #include <QFutureWatcher>
-#include <QDate>
-#include <QHash>
 #include <QObject>
 #include <QStringList>
 
@@ -66,36 +66,16 @@ private Q_SLOTS:
     void onPropertiesChanged(const QDBusMessage &message);
 
 private:
-    struct ZoneDetails
-    {
-        QString displayName;
-        int standardOffsetSeconds = 0;
-        qint64 dstEnter = 0;
-        qint64 dstLeave = 0;
-        int dstOffsetSeconds = 0;
-        bool valid = false;
-    };
-
-    ZoneDetails fetchZoneDetails(const QString &zoneId);
-    ZoneDetails details(const QString &zoneId);
-    int currentOffsetSeconds(const ZoneDetails &details) const;
-    QStringList zonesForOffset(int offsetHours);
-    void ensureFreshCaches();
     void startZoneOptionsLoad();
-    static QString prettifyName(QString name);
 
+    // 数据读取与缓存已拆分到 TimezoneDb（m_db 必须声明在 m_timedate 之后）
     QDBusInterface *m_timedate = nullptr;
     QDBusServiceWatcher *m_watcher = nullptr;
+    TimezoneDb m_db;
     bool m_available = false;
     QString m_systemTimezone;
     QStringList m_userTimezones;
-    QStringList m_zoneIds;
-    bool m_zoneIdsLoaded = false;
-    QHash<QString, ZoneDetails> m_detailsCache;
-    QHash<int, QStringList> m_offsetZonesCache;
     QVariantList m_zoneOptions;
-    QDate m_detailsDate;
-    int m_offsetCacheHour = -1;
     QFutureWatcher<QVariantList> *m_zoneOptionsWatcher = nullptr;
     bool m_zoneOptionsLoading = false;
     bool m_zoneOptionsRequested = false;

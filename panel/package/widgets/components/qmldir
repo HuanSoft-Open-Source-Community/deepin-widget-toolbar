@@ -1,3 +1,9 @@
 WidgetCard 1.0 WidgetCard.qml
 AnalogClock 1.0 AnalogClock.qml
+WidgetHostItem 1.0 WidgetHostItem.qml
+DockMarginHelper 1.0 DockMarginHelper.qml
+SettingsRow 1.0 SettingsRow.qml
+ColorPickerDialog 1.0 ColorPickerDialog.qml
+ControlsBar 1.0 ControlsBar.qml
+CoverArt 1.0 CoverArt.qml
 singleton ColorUtils 1.0 ColorUtils.qml

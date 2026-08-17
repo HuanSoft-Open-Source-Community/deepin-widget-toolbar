@@ -4,102 +4,31 @@
 
 #include "widgetmanager.h"
 
+#include "widgetgrid.h"
+#include "widgetpackage.h"
+#include "widgetschema.h"
+
 #include <QDebug>
 #include <QDir>
-#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QJsonValue>
-#include <QLocale>
-#include <QProcess>
 #include <QRect>
-#include <QRegularExpression>
 #include <QStandardPaths>
-#include <QTemporaryDir>
 #include <QUuid>
 #include <QUrl>
 #include <QVariantMap>
 
 #include <algorithm>
 
-static constexpr int kGridColumns = 4;
+// 网格列数统一取自 WidgetGrid::kColumns
 static const char kManifestFile[] = "manifest.json";
 static const char kInstancesFile[] = "installed.json";
 static const char kWidgetsDirName[] = "widgets";
 static const char kBuiltinPrefix[] = ":/widgets";
-
-static QString localeKey(const QString &base)
-{
-    // manifest 多语言字段：name[zh_CN] 形式
-    const QString locale = QLocale::system().name();   // 如 zh_CN / en_US
-    if (!locale.isEmpty())
-        return base + "[" + locale + "]";
-    return base;
-}
-
-// 将 manifest 配置项 schema 转为 QML 可消费的 QVariantList，
-// 并把 label[zh_CN] 等本地化字段展开为 label。
-static QVariantList parseSettingsSchema(const QJsonArray &entries)
-{
-    QVariantList result;
-    const QString localizedLabel = localeKey("label");
-
-    for (const QJsonValue &value : entries) {
-        if (!value.isObject())
-            continue;
-        const QJsonObject obj = value.toObject();
-        QVariantMap item = obj.toVariantMap();
-        if (obj.contains(localizedLabel))
-            item.insert(QStringLiteral("label"), obj.value(localizedLabel).toString());
-
-        const QJsonArray options = obj.value("options").toArray();
-        if (!options.isEmpty()) {
-            QVariantList localizedOptions;
-            for (const QJsonValue &option : options) {
-                if (!option.isObject())
-                    continue;
-                const QJsonObject optionObj = option.toObject();
-                QVariantMap optionMap = optionObj.toVariantMap();
-                if (optionObj.contains(localizedLabel))
-                    optionMap.insert(QStringLiteral("label"), optionObj.value(localizedLabel).toString());
-                localizedOptions.append(optionMap);
-            }
-            item.insert(QStringLiteral("options"), localizedOptions);
-        }
-
-        if (!item.value(QStringLiteral("key")).toString().isEmpty()
-            && !item.value(QStringLiteral("type")).toString().isEmpty()) {
-            result.append(item);
-        }
-    }
-    return result;
-}
-
-static QStringList schemaKeys(const QVariantList &schema)
-{
-    QStringList keys;
-    for (const QVariant &item : schema) {
-        const QString key = item.toMap().value(QStringLiteral("key")).toString();
-        if (!key.isEmpty() && !keys.contains(key))
-            keys.append(key);
-    }
-    return keys;
-}
-
-static QVariantMap defaultConfig(const QVariantList &schema)
-{
-    QVariantMap config;
-    for (const QVariant &item : schema) {
-        const QVariantMap entry = item.toMap();
-        const QString key = entry.value(QStringLiteral("key")).toString();
-        if (!key.isEmpty() && entry.contains(QStringLiteral("default")))
-            config.insert(key, entry.value(QStringLiteral("default")));
-    }
-    return config;
-}
 
 static bool writeJsonAtomically(const QString &path, const QJsonObject &object)
 {
@@ -254,7 +183,7 @@ bool WidgetManager::canDrop(const QString &instanceId, int gridX, int gridY) con
     if (gridX < 0 || gridY < 0)
         return false;
 
-    return gridX + qBound(1, inst->cols, kGridColumns) <= kGridColumns;
+    return gridX + qBound(1, inst->cols, WidgetGrid::kColumns) <= WidgetGrid::kColumns;
 }
 
 bool WidgetManager::moveInstance(const QString &instanceId, int gridX, int gridY)
@@ -265,7 +194,7 @@ bool WidgetManager::moveInstance(const QString &instanceId, int gridX, int gridY
 
     const QList<Instance> backup = m_instances;
     // 双向联动避让：计算避让布局后把拖拽实例落位到目标格
-    QList<Instance> newLayout = computeAvoidance(m_instances, instanceId, gridX, gridY);
+    QList<Instance> newLayout = WidgetGrid::computeAvoidance(m_instances, instanceId, gridX, gridY);
     for (Instance &entry : newLayout) {
         if (entry.instanceId == instanceId) {
             entry.gridX = gridX;
@@ -290,7 +219,7 @@ QVariantList WidgetManager::previewMove(const QString &instanceId, int gridX, in
         return QVariantList();
 
     // 纯计算：不改动 m_instances，返回避让后的完整布局供 QML 实时预览
-    const QList<Instance> layout = computeAvoidance(m_instances, instanceId, gridX, gridY);
+    const QList<Instance> layout = WidgetGrid::computeAvoidance(m_instances, instanceId, gridX, gridY);
     QVariantList result;
     result.reserve(layout.size());
     for (const Instance &inst : layout) {
@@ -320,7 +249,7 @@ void WidgetManager::autoArrangeAll()
     QList<Instance> packed = m_instances;
     for (const Instance &inst : ordered) {
         Instance copy = inst;
-        placeFirstFree(copy, placed);
+        WidgetGrid::placeFirstFree(copy, placed);
         placed.append(copy);
         for (Instance &target : packed) {
             if (target.instanceId == copy.instanceId) {
@@ -332,7 +261,7 @@ void WidgetManager::autoArrangeAll()
     }
 
     // 已经按同样规则压实：不重写文件、不发布局信号，避免“明明整齐还重排”。
-    if (layoutEquals(m_instances, packed))
+    if (WidgetGrid::layoutEquals(m_instances, packed))
         return;
 
     m_instances = packed;
@@ -367,7 +296,7 @@ bool WidgetManager::isSizeSupported(const QString &widgetId, int cols, int rows)
     const WidgetInfo *w = findWidget(widgetId);
     if (!w)
         return false;
-    return w->supportedSizes.contains(QSize(qBound(1, cols, kGridColumns), qMax(1, rows)));
+    return w->supportedSizes.contains(QSize(qBound(1, cols, WidgetGrid::kColumns), qMax(1, rows)));
 }
 
 bool WidgetManager::setInstanceSize(const QString &instanceId, int cols, int rows)
@@ -378,14 +307,14 @@ bool WidgetManager::setInstanceSize(const QString &instanceId, int cols, int row
     if (!isSizeSupported(inst->widgetId, cols, rows))
         return false;
 
-    cols = qBound(1, cols, kGridColumns);
+    cols = qBound(1, cols, WidgetGrid::kColumns);
     rows = qMax(1, rows);
     if (inst->cols == cols && inst->rows == rows)
         return true;
 
     const QList<Instance> backup = m_instances;
     QList<Instance> newLayout = m_instances;
-    int targetX = inst->gridX < 0 ? 0 : qMin(inst->gridX, kGridColumns - cols);
+    int targetX = inst->gridX < 0 ? 0 : qMin(inst->gridX, WidgetGrid::kColumns - cols);
     int targetY = qMax(0, inst->gridY);
 
     for (Instance &entry : newLayout) {
@@ -397,7 +326,7 @@ bool WidgetManager::setInstanceSize(const QString &instanceId, int cols, int row
     }
 
     // 以新的目标矩形做双向联动避让，保证扩大尺寸时不与其它实例重叠。
-    newLayout = computeAvoidance(newLayout, instanceId, targetX, targetY);
+    newLayout = WidgetGrid::computeAvoidance(newLayout, instanceId, targetX, targetY);
     for (Instance &entry : newLayout) {
         if (entry.instanceId == instanceId) {
             entry.gridX = targetX;
@@ -440,8 +369,8 @@ QVariantMap WidgetManager::instanceConfig(const QString &instanceId) const
     if (!w)
         return QVariantMap();
 
-    QVariantMap config = defaultConfig(w->settingsSchema);
-    const QStringList allowedKeys = schemaKeys(w->settingsSchema);
+    QVariantMap config = WidgetSchema::defaultConfig(w->settingsSchema);
+    const QStringList allowedKeys = WidgetSchema::schemaKeys(w->settingsSchema);
     const QString path = instanceConfigPath(instanceId);
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly))
@@ -467,7 +396,7 @@ bool WidgetManager::saveInstanceConfig(const QString &instanceId, const QVariant
     if (!w)
         return false;
 
-    const QStringList allowedKeys = schemaKeys(w->settingsSchema);
+    const QStringList allowedKeys = WidgetSchema::schemaKeys(w->settingsSchema);
     QVariantMap config = instanceConfig(instanceId);
     for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
         if (allowedKeys.contains(it.key()))
@@ -538,7 +467,7 @@ bool WidgetManager::addWidget(const QString &widgetId)
     inst.rows = w->defaultSize.height();
 
     // 放入首个空闲格，不移动现有实例
-    placeFirstFree(inst, m_instances);
+    WidgetGrid::placeFirstFree(inst, m_instances);
     m_instances.append(inst);
     if (!saveInstances()) {
         m_instances.removeLast();
@@ -598,11 +527,9 @@ bool WidgetManager::uninstallWidget(const QString &widgetId)
     }
 
     // 删除小组件目录；失败则恢复实例清单
-    QDir dir(w->dir);
-    if (!dir.removeRecursively()) {
+    if (!WidgetPackage::removeWidgetDir(w->dir)) {
         m_instances = backup;
         saveInstances();
-        qWarning() << "uninstallWidget: failed to remove dir" << w->dir;
         return false;
     }
 
@@ -615,105 +542,11 @@ bool WidgetManager::uninstallWidget(const QString &widgetId)
 
 bool WidgetManager::installFromFile(const QString &packagePath)
 {
-    const QFileInfo pkg(packagePath);
-    if (!pkg.exists() || !pkg.isFile()) {
-        qWarning() << "installFromFile: invalid package path" << packagePath;
+    const WidgetPackage::InstallResult result = WidgetPackage::install(
+        packagePath, m_widgetsDir,
+        [this](const QString &widgetId) { return findWidget(widgetId) != nullptr; });
+    if (!result.ok)
         return false;
-    }
-
-    QTemporaryDir tmp;
-    if (!tmp.isValid()) {
-        qWarning() << "installFromFile: cannot create temp dir";
-        return false;
-    }
-
-    // 1. 列出包内容，拒绝路径穿越（.. 或绝对路径）
-    QProcess listProc;
-    listProc.start("tar", {"-tJf", packagePath});
-    if (!listProc.waitForFinished(15000) || listProc.exitCode() != 0) {
-        qWarning() << "installFromFile: tar list failed" << listProc.readAllStandardError();
-        return false;
-    }
-    const QStringList entries = QString::fromUtf8(listProc.readAllStandardOutput()).split('\n', Qt::SkipEmptyParts);
-    for (const QString &e : entries) {
-        if (e.startsWith('/') || e.contains("..")) {
-            qWarning() << "installFromFile: unsafe path in package:" << e;
-            return false;
-        }
-    }
-
-    // 2. 解压到临时目录
-    QProcess extractProc;
-    extractProc.start("tar", {"-xJf", packagePath, "-C", tmp.path()});
-    if (!extractProc.waitForFinished(30000) || extractProc.exitCode() != 0) {
-        qWarning() << "installFromFile: tar extract failed" << extractProc.readAllStandardError();
-        return false;
-    }
-
-    // 2.5 解压后校验：所有条目 canonical 路径必须位于临时目录内
-    //（防包内 symlink/hardlink 前缀逃逸，如 CVE-2016-6321 一类）
-    {
-        const QString tmpCanonical = QDir(tmp.path()).canonicalPath();
-        QDirIterator it(tmp.path(), QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
-        while (it.hasNext()) {
-            const QString canonical = QFileInfo(it.next()).canonicalFilePath();
-            if (canonical.isEmpty() || (!canonical.startsWith(tmpCanonical + "/") && canonical != tmpCanonical)) {
-                qWarning() << "installFromFile: entry escapes temp dir:" << canonical;
-                return false;
-            }
-        }
-    }
-
-    // 3. 在解压结果中查找 manifest.json（包根或第一层子目录）
-    QString manifestPath;
-    const QString rootManifest = tmp.path() + "/" + kManifestFile;
-    if (QFile::exists(rootManifest)) {
-        manifestPath = rootManifest;
-    } else {
-        const QDir root(tmp.path());
-        const QStringList subDirs = root.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const QString &sub : subDirs) {
-            const QString candidate = tmp.path() + "/" + sub + "/" + kManifestFile;
-            if (QFile::exists(candidate)) {
-                manifestPath = candidate;
-                break;
-            }
-        }
-    }
-    if (manifestPath.isEmpty()) {
-        qWarning() << "installFromFile: manifest.json not found in package";
-        return false;
-    }
-
-    // 4. 校验 manifest 中的 id 合法性
-    QFile mf(manifestPath);
-    if (!mf.open(QIODevice::ReadOnly)) {
-        qWarning() << "installFromFile: cannot read manifest";
-        return false;
-    }
-    const QJsonDocument doc = QJsonDocument::fromJson(mf.readAll());
-    const QJsonObject obj = doc.object();
-    const QString widgetId = obj.value("id").toString();
-    static const QRegularExpression idRe(QStringLiteral("^[A-Za-z0-9._-]+$"));
-    if (!idRe.match(widgetId).hasMatch()) {
-        qWarning() << "installFromFile: invalid widget id in manifest:" << widgetId;
-        return false;
-    }
-    if (findWidget(widgetId)) {
-        qWarning() << "installFromFile: widget already exists:" << widgetId;
-        return false;
-    }
-
-    // 5. 移动到安装目录
-    const QFileInfo mfInfo(manifestPath);
-    const QString sourceDir = mfInfo.absolutePath();
-    const QString targetDir = m_widgetsDir + "/" + widgetId;
-    QDir().mkpath(m_widgetsDir);
-    QDir src(sourceDir);
-    if (!src.rename(sourceDir, targetDir)) {
-        qWarning() << "installFromFile: move to" << targetDir << "failed";
-        return false;
-    }
 
     scanWidgets();
     Q_EMIT widgetsChanged();
@@ -811,7 +644,7 @@ WidgetManager::WidgetInfo WidgetManager::readManifest(const QString &dir, bool b
 
     const QJsonObject sizeObj = obj.value("defaultSize").toObject();
     // 钳制尺寸范围：cols ∈ [1,4]，rows ≥ 1
-    info.defaultSize = QSize(qBound(1, sizeObj.value("cols").toInt(2), kGridColumns),
+    info.defaultSize = QSize(qBound(1, sizeObj.value("cols").toInt(2), WidgetGrid::kColumns),
                              qMax(1, sizeObj.value("rows").toInt(2)));
 
     // 可选尺寸列表：旧 manifest 未声明时只允许默认尺寸。
@@ -822,7 +655,7 @@ WidgetManager::WidgetInfo WidgetManager::readManifest(const QString &dir, bool b
         const QJsonObject entry = value.toObject();
         const int cols = entry.value("cols").toInt(0);
         const int rows = entry.value("rows").toInt(0);
-        if (cols < 1 || cols > kGridColumns || rows < 1)
+        if (cols < 1 || cols > WidgetGrid::kColumns || rows < 1)
             continue;
         const QSize candidate(cols, rows);
         if (!info.supportedSizes.contains(candidate)) {
@@ -832,10 +665,10 @@ WidgetManager::WidgetInfo WidgetManager::readManifest(const QString &dir, bool b
     if (!info.supportedSizes.contains(info.defaultSize))
         info.supportedSizes.prepend(info.defaultSize);
 
-    info.settingsSchema = parseSettingsSchema(obj.value("settings").toArray());
+    info.settingsSchema = WidgetSchema::parseSettingsSchema(obj.value("settings").toArray());
 
     // 多语言名称：name[zh_CN] 等
-    const QString lk = localeKey("name");
+    const QString lk = WidgetSchema::localeKey("name");
     if (obj.contains(lk))
         info.name = obj.value(lk).toString();
 
@@ -889,169 +722,6 @@ bool WidgetManager::saveInstances() const
     return QFile::rename(tmpFile, m_instancesFile);
 }
 
-QRect WidgetManager::instanceRect(const Instance &inst)
-{
-    return QRect(inst.gridX, inst.gridY,
-                 qBound(1, inst.cols, kGridColumns),
-                 qMax(1, inst.rows));
-}
-
-bool WidgetManager::layoutEquals(const QList<Instance> &a, const QList<Instance> &b)
-{
-    if (a.size() != b.size())
-        return false;
-    for (int i = 0; i < a.size(); ++i) {
-        const Instance &x = a.at(i);
-        const Instance &y = b.at(i);
-        if (x.instanceId != y.instanceId || x.gridX != y.gridX
-            || x.gridY != y.gridY || x.cols != y.cols || x.rows != y.rows)
-            return false;
-    }
-    return true;
-}
-
-void WidgetManager::placeFirstFree(Instance &inst, const QList<Instance> &others) const
-{
-    inst.cols = qBound(1, inst.cols, kGridColumns);
-    inst.rows = qMax(1, inst.rows);
-
-    // 纵向不限行：扫描上界 = 现有内容最底行 + 待放置行数 + 1，保证一定能放下
-    int maxBottom = 0;
-    for (const Instance &other : others)
-        maxBottom = qMax(maxBottom, other.gridY + qMax(1, other.rows));
-    const int scanLimit = maxBottom + inst.rows + 1;
-
-    for (int y = 0; y <= scanLimit; ++y) {
-        for (int x = 0; x + inst.cols <= kGridColumns; ++x) {
-            const QRect candidate(x, y, inst.cols, inst.rows);
-            bool free = true;
-            for (const Instance &other : others) {
-                if (instanceRect(other).intersects(candidate)) {
-                    free = false;
-                    break;
-                }
-            }
-            if (free) {
-                inst.gridX = x;
-                inst.gridY = y;
-                return;
-            }
-        }
-    }
-
-    // 兜底：追加到现有内容最底行下方
-    inst.gridX = 0;
-    inst.gridY = maxBottom;
-}
-
-QList<WidgetManager::Instance> WidgetManager::computeAvoidance(
-    const QList<Instance> &instances, const QString &fixedId, int targetX, int targetY)
-{
-    QList<Instance> result = instances;
-    int fixedIndex = -1;
-    for (int i = 0; i < result.size(); ++i) {
-        if (result.at(i).instanceId == fixedId) {
-            fixedIndex = i;
-            break;
-        }
-    }
-    if (fixedIndex < 0)
-        return instances;
-
-    // 固定实例（拖拽源）在返回布局中保持原位置，落位前不移动自身；
-    // 避让冲突按目标矩形计算，其原占位视为可让出的空间（预览时表现为被让开的洞）。
-    const Instance &fixedInst = result.at(fixedIndex);
-    const QRect fixedRect(targetX, targetY,
-                          qBound(1, fixedInst.cols, kGridColumns),
-                          qMax(1, fixedInst.rows));
-
-    int maxBottom = 0;
-    for (const Instance &inst : result)
-        maxBottom = qMax(maxBottom, inst.gridY + qMax(1, inst.rows));
-    // 扫描上限覆盖现有内容与固定目标矩形：保证任何冲突实例都能在界内找到向下候选
-    const int scanLimit = qMax(maxBottom, fixedRect.y() + fixedRect.height())
-        + result.size() + 2;
-
-    // 是否与固定目标或其它实例（不含固定实例自身）冲突
-    auto hasConflict = [&](int index) {
-        const QRect cur = instanceRect(result.at(index));
-        if (cur.intersects(fixedRect))
-            return true;
-        for (int j = 0; j < result.size(); ++j) {
-            if (j == index || j == fixedIndex)
-                continue;
-            if (cur.intersects(instanceRect(result.at(j))))
-                return true;
-        }
-        return false;
-    };
-
-    // 最近空闲行：同距离优先偏好方向（中心在目标中心上方→上，否则→下）
-    auto findFreeY = [&](int selfIndex, bool preferredUp) {
-        const Instance &inst = result.at(selfIndex);
-        const int rows = qMax(1, inst.rows);
-        const int cols = qBound(1, inst.cols, kGridColumns);
-        for (int dy = 1; dy <= scanLimit; ++dy) {
-            for (int dir = 0; dir < 2; ++dir) {
-                const bool up = dir == 0 ? preferredUp : !preferredUp;
-                const int candidateY = up ? inst.gridY - dy : inst.gridY + dy;
-                if (candidateY < 0 || candidateY > scanLimit)
-                    continue;
-                const QRect candidate(inst.gridX, candidateY, cols, rows);
-                if (candidate.intersects(fixedRect))
-                    continue;
-                bool free = true;
-                for (int j = 0; j < result.size() && free; ++j) {
-                    if (j == selfIndex || j == fixedIndex)
-                        continue;
-                    free = !candidate.intersects(instanceRect(result.at(j)));
-                }
-                if (free)
-                    return candidateY;
-            }
-        }
-        return -1;
-    };
-
-    // 迭代松弛：所有冲突实例在同一轮同步找最近空闲行，直到无冲突
-    const int maxPasses = 2 * result.size() + 1;
-    for (int pass = 0; pass < maxPasses; ++pass) {
-        bool changed = false;
-        for (int i = 0; i < result.size(); ++i) {
-            if (i == fixedIndex || !hasConflict(i))
-                continue;
-            const bool preferredUp =
-                instanceRect(result.at(i)).center().y() < fixedRect.center().y();
-            const int newY = findFreeY(i, preferredUp);
-            if (newY >= 0 && newY != result.at(i).gridY) {
-                result[i].gridY = newY;
-                changed = true;
-            }
-        }
-        if (!changed)
-            return result;
-    }
-
-    // 兜底：仍冲突的实例依次堆到当前最底行下方（保证无冲突）
-    int bottom = 0;
-    for (const Instance &inst : result)
-        bottom = qMax(bottom, inst.gridY + qMax(1, inst.rows));
-    bottom = qMax(bottom, fixedRect.y() + fixedRect.height());
-    for (int pass = 0; pass < maxPasses; ++pass) {
-        bool changed = false;
-        for (int i = 0; i < result.size(); ++i) {
-            if (i == fixedIndex || !hasConflict(i))
-                continue;
-            result[i].gridY = bottom;
-            bottom += qMax(1, result.at(i).rows);
-            changed = true;
-        }
-        if (!changed)
-            return result;
-    }
-    return result;
-}
-
 void WidgetManager::normalizeLayout()
 {
     const QList<Instance> before = m_instances;
@@ -1062,16 +732,16 @@ void WidgetManager::normalizeLayout()
         Instance copy = inst;
         // 兼容旧清单或 manifest 变更：不支持的尺寸回退到组件默认尺寸。
         if (const WidgetInfo *w = findWidget(copy.widgetId)) {
-            if (!w->supportedSizes.contains(QSize(qBound(1, copy.cols, kGridColumns),
+            if (!w->supportedSizes.contains(QSize(qBound(1, copy.cols, WidgetGrid::kColumns),
                                                  qMax(1, copy.rows)))) {
                 copy.cols = w->defaultSize.width();
                 copy.rows = w->defaultSize.height();
             }
         }
-        const QRect rect = instanceRect(copy);
+        const QRect rect = WidgetGrid::instanceRect(copy);
         if (copy.gridX < 0 || copy.gridY < 0
-            || copy.gridX + rect.width() > kGridColumns) {
-            placeFirstFree(copy, fixed);
+            || copy.gridX + rect.width() > WidgetGrid::kColumns) {
+            WidgetGrid::placeFirstFree(copy, fixed);
         }
         fixed.append(copy);
     }
@@ -1085,9 +755,9 @@ void WidgetManager::normalizeLayout()
         int anchorX = 0;
         int anchorY = 0;
         for (int i = 0; i < m_instances.size() && !overlap; ++i) {
-            const QRect a = instanceRect(m_instances.at(i));
+            const QRect a = WidgetGrid::instanceRect(m_instances.at(i));
             for (int j = i + 1; j < m_instances.size(); ++j) {
-                if (a.intersects(instanceRect(m_instances.at(j)))) {
+                if (a.intersects(WidgetGrid::instanceRect(m_instances.at(j)))) {
                     anchorId = m_instances.at(i).instanceId;
                     anchorX = m_instances.at(i).gridX;
                     anchorY = m_instances.at(i).gridY;
@@ -1098,10 +768,10 @@ void WidgetManager::normalizeLayout()
         }
         if (!overlap)
             break;
-        m_instances = computeAvoidance(m_instances, anchorId, anchorX, anchorY);
+        m_instances = WidgetGrid::computeAvoidance(m_instances, anchorId, anchorX, anchorY);
     }
 
-    if (!layoutEquals(before, m_instances))
+    if (!WidgetGrid::layoutEquals(before, m_instances))
         saveInstances();
 }
 

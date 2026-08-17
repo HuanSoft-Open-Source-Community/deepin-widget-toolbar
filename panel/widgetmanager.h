@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "widgettypes.h"
+
 #include <QJsonObject>
 #include <QList>
 #include <QObject>
@@ -13,44 +15,19 @@
 #include <QVariant>
 #include <QVariantMap>
 
-// 小组件宿主（Panel）侧的管理器：
+// 小组件宿主（Panel）侧的管理器（编排层）：
 //  - 扫描内置（qrc:/widgets/）与第三方（~/.local/share/org.deepin.ds.widgettoolbar/widgets/）小组件
 //  - 解析 manifest.json，维护已添加实例清单 installed.json
-//  - 4 列网格空闲槽分配
-//  - .dwpkg（tar.xz）导入与第三方卸载（内置禁止卸载）
+//  - 4 列网格空闲槽分配与双向避让（算法在 WidgetGrid）
+//  - .dwpkg（tar.xz）导入与第三方卸载（文件操作在 WidgetPackage）
+// 基础类型（WidgetInfo/WidgetInstance）定义在 WidgetTypes。
 class WidgetManager : public QObject
 {
     Q_OBJECT
 public:
-    // 小组件静态元数据（来自 manifest.json）
-    struct WidgetInfo {
-        QString id;
-        QString name;
-        QString icon;
-        QString description;
-        QString version;
-        QString apiVersion;
-        QString author;
-        QString runtime;   // "qml"
-        QString entry;     // 相对 widget 目录的入口，如 "main.qml"
-        QSize defaultSize;            // 格数 {cols, rows}
-        QList<QSize> supportedSizes;  // manifest 允许的占位尺寸（至少含 defaultSize）
-        QVariantList settingsSchema;  // manifest 声明的配置项 schema（供配置面板渲染）
-        bool builtin = false;
-        QString dir;       // 绝对路径或 qrc 前缀（如 ":/widgets/clock"）
-
-        bool isValid() const { return !id.isEmpty() && !entry.isEmpty(); }
-    };
-
-    // 已添加实例（installed.json 中的一条）
-    struct Instance {
-        QString instanceId;
-        QString widgetId;
-        int gridX = -1;
-        int gridY = -1;
-        int cols = 2;
-        int rows = 2;
-    };
+    // 兼容别名：外部代码仍可用 WidgetManager::WidgetInfo / WidgetManager::Instance
+    using WidgetInfo = WidgetTypes::WidgetInfo;
+    using Instance = WidgetTypes::WidgetInstance;
 
     explicit WidgetManager(QObject *parent = nullptr);
 
@@ -128,17 +105,9 @@ private:
     WidgetInfo readManifest(const QString &dir, bool builtin) const;
     bool loadInstances();
     bool saveInstances() const;
-    // 把 inst 放入首个空闲矩形（不移动其它实例），放不下时追加到最底行下方
-    void placeFirstFree(Instance &inst, const QList<Instance> &others) const;
-    // 双向联动避让：返回避让后的实例列表；fixedId 实例保持原位置（预览用），
-    // 其它实例保持 gridX，只调 gridY，向最近空闲行移动（中心在上→优先向上，否则向下）
-    static QList<Instance> computeAvoidance(const QList<Instance> &instances,
-                                            const QString &fixedId,
-                                            int targetX, int targetY);
-    // 加载后一次性规范化（越界/重叠修复），仅在布局变化时写回
+    // 加载后一次性规范化（越界/重叠修复），仅在布局变化时写回；
+    // 空闲槽搜索与双向避让算法在 WidgetGrid
     void normalizeLayout();
-    static QRect instanceRect(const Instance &inst);
-    static bool layoutEquals(const QList<Instance> &a, const QList<Instance> &b);
     const WidgetInfo *findWidget(const QString &widgetId) const;
     WidgetInfo *findWidget(const QString &widgetId);
     const Instance *findInstance(const QString &instanceId) const;

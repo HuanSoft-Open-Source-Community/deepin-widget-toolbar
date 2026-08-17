@@ -66,14 +66,14 @@ Components.WidgetCard {
     property int hoveredControl: -1
     property int pressedControl: -1
 
-    // 当前可见的控制条 Loader（中/宽/大三选一）
+    // 当前可见的控制条（中/宽/大三选一）
     function currentControlsRow() {
-        if (root.medium && mediumControls.active)
-            return mediumControls.item
-        if (root.wideCard && wideControls.active)
-            return wideControls.item
-        if (root.large && largeControls.active)
-            return largeControls.item
+        if (root.medium && mediumControls.visible)
+            return mediumControls
+        if (root.wideCard && wideControls.visible)
+            return wideControls
+        if (root.large && largeControls.visible)
+            return largeControls
         return null
     }
 
@@ -125,137 +125,7 @@ Components.WidgetCard {
         }
     }
 
-    // 圆角封面容器：真实封面与 N/A 回退共用
-    Component {
-        id: coverComponent
-
-        Item {
-            id: coverRoot
-            anchors.fill: parent
-
-            property bool coverFailed: false
-
-            Image {
-                id: coverImage
-                anchors.fill: parent
-                // source 只跟随 artUrl；coverFailed 只控制占位图标显示，
-                // 避免 source 依赖 coverFailed 又在其变化时复位造成绑定循环。
-                source: root.showCover ? player.artUrl : ""
-                fillMode: Image.PreserveAspectCrop
-                smooth: true
-                visible: root.showCover
-                // 仅在有真实封面时启用圆角遮罩图层，避免无封面时无谓离屏 FBO
-                layer.enabled: root.showCover && player.artUrl.length > 0
-                layer.smooth: true
-                layer.effect: OpacityMask {
-                    maskSource: Rectangle {
-                        width: coverImage.width
-                        height: coverImage.height
-                        radius: 6
-                    }
-                }
-                onStatusChanged: {
-                    if (status === Image.Error)
-                        coverRoot.coverFailed = true
-                }
-                onSourceChanged: coverRoot.coverFailed = false
-            }
-
-            Image {
-                id: fallbackCover
-                anchors.centerIn: parent
-                width: root.coverSize * 0.56
-                height: root.coverSize * 0.56
-                source: root.icon("na")
-                sourceSize.width: root.coverSize * 0.56
-                sourceSize.height: root.coverSize * 0.56
-                visible: !root.showCover || player.artUrl.length === 0 || coverRoot.coverFailed
-                opacity: 0.55
-            }
-        }
-    }
-
-    // 完整控制三件套：上一曲/播放暂停/下一曲（中、大尺寸共用）
-    Component {
-        id: controlsComponent
-
-        Item {
-            width: root.controlSize * 3 + root.controlSpacing * 2
-            height: root.controlSize
-
-            Row {
-                anchors.centerIn: parent
-                spacing: root.controlSpacing
-
-                Item {
-                    width: root.controlSize
-                    height: root.controlSize
-                    enabled: player.canGoPrevious
-                    opacity: enabled ? 1.0 : 0.3
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: width / 2
-                        color: root.pressedControl === 0 ? root.pressFill
-                            : (root.hoveredControl === 0 ? root.hoverFill : "transparent")
-                        Behavior on color { ColorAnimation { duration: 120 } }
-                    }
-
-                    Image {
-                        anchors.fill: parent
-                        source: root.icon("prev")
-                        sourceSize.width: root.controlSize
-                        sourceSize.height: root.controlSize
-                    }
-                }
-
-                Item {
-                    width: root.controlSize
-                    height: root.controlSize
-                    enabled: player.canControl && (player.canPlay || player.canPause)
-                    opacity: enabled ? 1.0 : 0.3
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: width / 2
-                        color: root.pressedControl === 1 ? root.pressFill
-                            : (root.hoveredControl === 1 ? root.hoverFill : "transparent")
-                        Behavior on color { ColorAnimation { duration: 120 } }
-                    }
-
-                    Image {
-                        anchors.fill: parent
-                        source: player.playbackStatus === "Playing"
-                            ? root.icon("pause") : root.icon("play")
-                        sourceSize.width: root.controlSize
-                        sourceSize.height: root.controlSize
-                    }
-                }
-
-                Item {
-                    width: root.controlSize
-                    height: root.controlSize
-                    enabled: player.canGoNext
-                    opacity: enabled ? 1.0 : 0.3
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: width / 2
-                        color: root.pressedControl === 2 ? root.pressFill
-                            : (root.hoveredControl === 2 ? root.hoverFill : "transparent")
-                        Behavior on color { ColorAnimation { duration: 120 } }
-                    }
-
-                    Image {
-                        anchors.fill: parent
-                        source: root.icon("next")
-                        sourceSize.width: root.controlSize
-                        sourceSize.height: root.controlSize
-                    }
-                }
-            }
-        }
-    }
+    // 封面与控制条已拆分为 Components.CoverArt / Components.ControlsBar
 
     // 无媒体占位：没有播放曲目时始终显示
     Column {
@@ -288,23 +158,37 @@ Components.WidgetCard {
         spacing: root.verticalSpacing
         visible: root.hasMedia && root.medium
 
-        Loader {
+        Components.CoverArt {
             anchors.horizontalCenter: parent.horizontalCenter
-            sourceComponent: coverComponent
-            active: root.showCover
             visible: root.showCover
             width: root.coverSize
             height: root.coverSize
+            artUrl: player.artUrl
+            showCover: root.showCover
+            iconSource: root.icon("na")
+            coverSize: root.coverSize
         }
 
-        Loader {
+        Components.ControlsBar {
             id: mediumControls
             anchors.horizontalCenter: parent.horizontalCenter
-            sourceComponent: controlsComponent
-            active: root.showControls
             visible: root.showControls
-            width: root.controlSize * 3 + root.controlSpacing * 2
-            height: root.controlSize
+            controlSize: root.controlSize
+            controlSpacing: root.controlSpacing
+            hoveredControl: root.hoveredControl
+            pressedControl: root.pressedControl
+            hoverFill: root.hoverFill
+            pressFill: root.pressFill
+            canGoPrevious: player.canGoPrevious
+            canControl: player.canControl
+            canPlay: player.canPlay
+            canPause: player.canPause
+            canGoNext: player.canGoNext
+            playing: player.playbackStatus === "Playing"
+            prevIcon: root.icon("prev")
+            playIcon: root.icon("play")
+            pauseIcon: root.icon("pause")
+            nextIcon: root.icon("next")
         }
     }
 
@@ -314,13 +198,15 @@ Components.WidgetCard {
         spacing: 12
         visible: root.hasMedia && root.wideCard
 
-        Loader {
-            sourceComponent: coverComponent
-            active: root.showCover
+        Components.CoverArt {
             visible: root.showCover
             Layout.preferredWidth: root.coverSize
             Layout.preferredHeight: root.coverSize
             Layout.alignment: Qt.AlignVCenter
+            artUrl: player.artUrl
+            showCover: root.showCover
+            iconSource: root.icon("na")
+            coverSize: root.coverSize
         }
 
         ColumnLayout {
@@ -358,13 +244,27 @@ Components.WidgetCard {
                 Layout.minimumHeight: 0
             }
 
-            Loader {
+            Components.ControlsBar {
                 id: wideControls
-                sourceComponent: controlsComponent
-                active: root.showControls
                 visible: root.showControls
                 width: root.controlSize * 3 + root.controlSpacing * 2
                 height: root.controlSize
+                controlSize: root.controlSize
+                controlSpacing: root.controlSpacing
+                hoveredControl: root.hoveredControl
+                pressedControl: root.pressedControl
+                hoverFill: root.hoverFill
+                pressFill: root.pressFill
+                canGoPrevious: player.canGoPrevious
+                canControl: player.canControl
+                canPlay: player.canPlay
+                canPause: player.canPause
+                canGoNext: player.canGoNext
+                playing: player.playbackStatus === "Playing"
+                prevIcon: root.icon("prev")
+                playIcon: root.icon("play")
+                pauseIcon: root.icon("pause")
+                nextIcon: root.icon("next")
             }
         }
     }
@@ -375,13 +275,15 @@ Components.WidgetCard {
         spacing: root.verticalSpacing
         visible: root.hasMedia && root.large
 
-        Loader {
+        Components.CoverArt {
             anchors.horizontalCenter: parent.horizontalCenter
-            sourceComponent: coverComponent
-            active: root.showCover
             visible: root.showCover
             width: root.coverSize
             height: root.coverSize
+            artUrl: player.artUrl
+            showCover: root.showCover
+            iconSource: root.icon("na")
+            coverSize: root.coverSize
         }
 
         Text {
@@ -410,14 +312,28 @@ Components.WidgetCard {
             maximumLineCount: 1
         }
 
-        Loader {
+        Components.ControlsBar {
             id: largeControls
             anchors.horizontalCenter: parent.horizontalCenter
-            sourceComponent: controlsComponent
-            active: root.showControls
             visible: root.showControls
             width: root.controlSize * 3 + root.controlSpacing * 2
             height: root.controlSize
+            controlSize: root.controlSize
+            controlSpacing: root.controlSpacing
+            hoveredControl: root.hoveredControl
+            pressedControl: root.pressedControl
+            hoverFill: root.hoverFill
+            pressFill: root.pressFill
+            canGoPrevious: player.canGoPrevious
+            canControl: player.canControl
+            canPlay: player.canPlay
+            canPause: player.canPause
+            canGoNext: player.canGoNext
+            playing: player.playbackStatus === "Playing"
+            prevIcon: root.icon("prev")
+            playIcon: root.icon("play")
+            pauseIcon: root.icon("pause")
+            nextIcon: root.icon("next")
         }
     }
 }

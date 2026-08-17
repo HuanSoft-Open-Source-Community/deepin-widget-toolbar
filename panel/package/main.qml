@@ -9,6 +9,7 @@ import Qt5Compat.GraphicalEffects
 import org.deepin.dtk 1.0
 import org.deepin.dtk.style 1.0 as DStyle
 import org.deepin.ds 1.0
+import "widgets/components" as Components
 
 Window {
     id: root
@@ -31,108 +32,7 @@ Window {
         return Qt.application.screens[0]
     }
 
-    // 动态跟随任务栏位置：面板与任务栏在 上/右/下 三边保持 contentPadding 间距
-    // （dock 在底部→面板在其上方、顶部→面板在其下方、右侧→面板整体左移；dock 在其它屏幕时不处理）
-    // dock 位置枚举与 dde-shell dock 一致：0=Top 1=Right 2=Bottom 3=Left
-    function windowMargin(position) {
-        let dockApplet = DS.applet("org.deepin.ds.dock")
-        if (!dockApplet) {
-            return 0
-        }
-
-        // dock 代理属性可能晚于窗口创建就绪（值为 undefined/null）：
-        // 全部判空后返回 0，避免任何属性访问抛 TypeError 导致绑定被禁用
-        // （绑定禁用后 margin 永不更新、面板被拉满全高）。
-        let dockScreen = dockApplet.screenName
-        if (typeof dockScreen !== "string" || dockScreen.length === 0) {
-            return 0
-        }
-        if (!root.screen) {
-            return 0
-        }
-        if (dockScreen !== root.screen.name) {
-            return 0
-        }
-
-        let dockPosition = dockApplet.position
-        if (typeof dockPosition !== "number" || dockPosition !== position) {
-            return 0
-        }
-
-        // frontendWindowRect 为物理像素，除以 dpr 得到逻辑尺寸
-        let frontendRect = dockApplet.frontendWindowRect
-        if (!frontendRect
-            || typeof frontendRect.x !== "number"
-            || typeof frontendRect.y !== "number"
-            || typeof frontendRect.width !== "number"
-            || typeof frontendRect.height !== "number") {
-            return 0
-        }
-        let dpr = root.screen.devicePixelRatio
-        let dockGeometry = Qt.rect(
-            frontendRect.x / dpr,
-            frontendRect.y / dpr,
-            frontendRect.width / dpr,
-            frontendRect.height / dpr
-        )
-
-        let screenGeometry = Qt.rect(
-            root.screen.virtualX,
-            root.screen.virtualY,
-            root.screen.width,
-            root.screen.height
-        )
-
-        switch (position) {
-            case 0: { // DOCK_TOP：面板在任务栏下方留间距
-                let visibleHeight = Math.max(0, dockGeometry.y + dockGeometry.height - screenGeometry.y)
-                return Math.min(visibleHeight, dockGeometry.height)
-            }
-            case 1: { // DOCK_RIGHT：面板整体左移
-                let visibleWidth = Math.max(0, screenGeometry.x + screenGeometry.width - dockGeometry.x)
-                return Math.min(visibleWidth, dockGeometry.width)
-            }
-            case 2: { // DOCK_BOTTOM：面板在任务栏上方留间距
-                let visibleHeight = Math.max(0, screenGeometry.y + screenGeometry.height - dockGeometry.y)
-                return Math.min(visibleHeight, dockGeometry.height)
-            }
-        }
-        // dock 在左侧（position=3）或未知位置：面板在屏幕右侧不与任务栏重叠，无需处理
-        return 0
-    }
-
-    // Wayland 下任务栏自身通过 exclusionZone 排布可用区域，与通知中心一致不额外处理
-    function layerShellMargin(position) {
-        if (Qt.platform.pluginName === "wayland") {
-            return 0
-        }
-        return windowMargin(position)
-    }
-
-    // dock 数据是否已可用于边距计算。DS.applet() 的返回值不是 QML 可跟踪依赖，
-    // 只能靠轮询重绑感知就绪时机；dock 在其它屏幕时也算就绪（无需继续等待）。
-    function dockDataReady() {
-        let dockApplet = DS.applet("org.deepin.ds.dock")
-        if (!dockApplet || typeof dockApplet.screenName !== "string"
-            || dockApplet.screenName.length === 0 || !root.screen) {
-            return false
-        }
-        if (dockApplet.screenName !== root.screen.name) {
-            return true
-        }
-        let frontendRect = dockApplet.frontendWindowRect
-        if (!frontendRect
-            || typeof frontendRect.x !== "number"
-            || typeof frontendRect.y !== "number"
-            || typeof frontendRect.width !== "number"
-            || typeof frontendRect.height !== "number") {
-            return false
-        }
-        return true
-    }
-
-    // 与任务栏之间的间距与其他边缘一致（contentPadding），不再额外追加：
-    // 面板距 dock 的空隙 = 距屏幕其他边缘的空隙，视觉对称。
+    // 与任务栏之间的间距计算与轮询已迁移到 components/DockMarginHelper.qml
     function blendColorAlpha(fallback) {
         var appearance = DS.applet("org.deepin.ds.dde-appearance")
         if (!appearance || appearance.opacity < 0)
@@ -267,9 +167,9 @@ Window {
         if (root.dragging)
             return
         root.dragging = true
-        root.dragInstanceId = host.modelData
-        root.dragCols = Panel.widgetManager.instanceCols(host.modelData)
-        root.dragRows = Panel.widgetManager.instanceRows(host.modelData)
+        root.dragInstanceId = host.instanceId
+        root.dragCols = Panel.widgetManager.instanceCols(host.instanceId)
+        root.dragRows = Panel.widgetManager.instanceRows(host.instanceId)
         root.dragGrabOffsetX = pointerX - host.x
         root.dragGrabOffsetY = pointerY - host.y
         // 快照拖拽前的已提交布局，供取消/失败时动画回弹
@@ -458,11 +358,10 @@ Window {
     onVisibleChanged: {
         if (visible) {
             applyLayerFlags()
-            // 每次显示都重建 margin 绑定：dock 数据（DS.applet 返回值）不是
-            // QML 可跟踪依赖，窗口重建后必须重新求值，否则边距保持旧值/0。
-            // 同时启动轮询，兜底 dock 代理异步就绪晚于窗口创建的场景。
-            refreshMargins()
-            restartMarginRefresh()
+            // 每次显示都重启边距轮询：dock 数据（DS.applet 返回值）不是
+            // QML 可跟踪依赖，窗口重建后必须重新求值，否则边距保持旧值/0，
+            // 同时兜底 dock 代理异步就绪晚于窗口创建的场景。
+            dockMargin.restart()
         }
     }
     Component.onCompleted: {
@@ -470,8 +369,7 @@ Window {
             applyLayerFlags()
         }
         updateGridPositions()
-        refreshMargins()
-        restartMarginRefresh()
+        dockMargin.restart()
     }
     function applyLayerFlags() {
         // X11 下用 flags 直接表达层级：置顶 = WindowStaysOnTopHint（_NET_WM_STATE_ABOVE，
@@ -485,49 +383,11 @@ Window {
             : Qt.WindowStaysOnTopHint | Qt.Tool | Qt.FramelessWindowHint
     }
 
-    // 四周统一边距：contentPadding + dock 边补偿（windowMargin）。
-    // dock 边的补偿只覆盖 dock 自身高度，面板距 dock 的空隙 = contentPadding =
-    // 距屏幕其他边缘的空隙，视觉对称。
-    function desiredMargin(position) {
-        return layerShellMargin(position) + contentPadding
-    }
-
-    // 直接赋值三条 margin：DS.applet() 的返回值不是 QML 可跟踪依赖，
-    // 因此由轮询定时重算赋值（值不变时 setter 无操作，变化时触发 marginsChanged），
-    // 避免 Qt.binding 重绑在 dock 数据迟到时失效导致边距保持旧值。
-    function refreshMargins() {
-        DLayerShellWindow.topMargin = desiredMargin(0)
-        DLayerShellWindow.rightMargin = desiredMargin(1)
-        DLayerShellWindow.bottomMargin = desiredMargin(2)
-    }
-    // 轮询刷新直到 dock 数据就绪且边距连续两次稳定，避免一次性延时错过
-    // dock 插件晚于面板加载的窗口期（最多约 10s，之后静默保留当前边距）。
-    property int marginRefreshTicks: 0
-    function restartMarginRefresh() {
-        marginRefreshTicks = 0
-        marginRefreshTimer.restart()
-    }
-    Timer {
-        id: marginRefreshTimer
-        interval: 250
-        repeat: true
-        onTriggered: {
-            marginRefreshTicks++
-            if (marginRefreshTicks > 40) {
-                stop()
-                return
-            }
-            const beforeTop = DLayerShellWindow.topMargin
-            const beforeRight = DLayerShellWindow.rightMargin
-            const beforeBottom = DLayerShellWindow.bottomMargin
-            refreshMargins()
-            if (dockDataReady()
-                && DLayerShellWindow.topMargin === beforeTop
-                && DLayerShellWindow.rightMargin === beforeRight
-                && DLayerShellWindow.bottomMargin === beforeBottom) {
-                stop()
-            }
-        }
+    // 与任务栏间距：计算与轮询在 DockMarginHelper，输出属性供绑定消费
+    Components.DockMarginHelper {
+        id: dockMargin
+        screenRef: root.screen
+        contentPadding: root.contentPadding
     }
     width: contentWidth + contentPadding * 2
 
@@ -541,9 +401,9 @@ Window {
     // 图标避让无效。置底时仅保留 LayerButtom 层语义，不再向合成器声明排除区域。
     DLayerShellWindow.anchors: DLayerShellWindow.AnchorRight
         | DLayerShellWindow.AnchorTop | DLayerShellWindow.AnchorBottom
-    DLayerShellWindow.topMargin: desiredMargin(0)
-    DLayerShellWindow.rightMargin: desiredMargin(1)
-    DLayerShellWindow.bottomMargin: desiredMargin(2)
+    DLayerShellWindow.topMargin: dockMargin.topMargin
+    DLayerShellWindow.rightMargin: dockMargin.rightMargin
+    DLayerShellWindow.bottomMargin: dockMargin.bottomMargin
     DLayerShellWindow.keyboardInteractivity: DLayerShellWindow.KeyboardInteractivityOnDemand
 
     palette: DTK.palette
@@ -688,204 +548,39 @@ Window {
 
                     Repeater {
                         model: root.instanceIds
-                        delegate: Item {
-                            id: widgetHost
-                            required property string modelData
-
-                            x: root.cellX(modelData)
-                            y: root.cellY(modelData)
-                            width: {
+                        delegate: Components.WidgetHostItem {
+                            instanceId: modelData
+                            gridX: root.cellX(modelData)
+                            gridY: root.cellY(modelData)
+                            cols: {
                                 let version = root.layoutVersion
-                                return Panel.widgetManager.instanceCols(modelData) * cellWidth
-                                    + (Panel.widgetManager.instanceCols(modelData) - 1) * cellSpacing
+                                return Panel.widgetManager.instanceCols(modelData)
                             }
-                            height: {
+                            rows: {
                                 let version = root.layoutVersion
-                                return Panel.widgetManager.instanceRows(modelData) * cellHeight
-                                    + (Panel.widgetManager.instanceRows(modelData) - 1) * cellSpacing
+                                return Panel.widgetManager.instanceRows(modelData)
                             }
-                            // 拖拽中淡化原实例，预览快照随指针移动
-                            opacity: root.dragging && modelData === root.dragInstanceId ? 0.35 : 1.0
-                            // 位置变化动画：拖拽中其它实例实时让位、松手落位、整理、回弹都走这里
-                            Behavior on x {
-                                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
-                            }
-                            Behavior on y {
-                                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
-                            }
-                            // 尺寸切换动画：让组件在 1×1/2×2/4×2/4×4 之间平滑缩放
-                            Behavior on width {
-                                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
-                            }
-                            Behavior on height {
-                                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
-                            }
-                            // 拖拽中淡化的原实例也平滑过渡
-                            Behavior on opacity {
-                                NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
-                            }
+                            cellWidth: root.cellWidth
+                            cellSpacing: root.cellSpacing
+                            dimmed: root.dragging && modelData === root.dragInstanceId
+                            panelDragging: root.dragging
+                            dragSurface: gridCanvas
+                            menuSurface: root.contentItem
 
-                            // 小组件渲染入口（qrc 或本地文件），由宿主按 widgetId 解析。
-                            // 面板隐藏时卸载小组件对象树（释放 QML 对象与纹理内存），
-                            // 显示时异步重建；各小组件 Component.onDestruction 已实现
-                            // 采集/监控清理（setActive(false)/releaseMonitor 等）。
-                            Loader {
-                                id: widgetLoader
-                                anchors.fill: parent
-                                active: Panel.visible
-                                asynchronous: true
-                                source: Panel.widgetManager.entryUrl(Panel.widgetManager.instanceWidgetId(modelData))
+                            // 拖拽事件：坐标已在网格画布空间
+                            onDragStartRequested: function(host, x, y) {
+                                root.startDrag(host, x, y)
                             }
-
-                            // 拖放层：普通点击透传给组件内容，长按进入拖拽
-                            MouseArea {
-                                id: widgetDragArea
-                                anchors.fill: parent
-                                z: widgetLoader.z + 1
-                                hoverEnabled: true
-                                acceptedButtons: Qt.LeftButton
-                                pressAndHoldInterval: 500
-                                // 普通点击转交组件内容处理（如便签取焦），拖拽由 pressAndHold 接管。
-                                // 按下必须被本层接受以持有鼠标抓取，否则避让时卡片移开后松开事件会丢失。
-                                property bool suppressClick: false
-
-                                onPressed: function(mouse) {
-                                    suppressClick = false
-                                    var pressedWidget = widgetLoader.item
-                                    if (pressedWidget
-                                        && typeof pressedWidget.handleHostPressed === "function")
-                                        pressedWidget.handleHostPressed(mouse.x, mouse.y)
-                                }
-                                onPressAndHold: function(mouse) {
-                                    suppressClick = true
-                                    var p = widgetDragArea.mapToItem(gridCanvas, mouse.x, mouse.y)
-                                    root.startDrag(widgetHost, p.x, p.y)
-                                }
-                                onPositionChanged: function(mouse) {
-                                    if (root.dragging) {
-                                        var p = widgetDragArea.mapToItem(gridCanvas, mouse.x, mouse.y)
-                                        root.updateDrag(p.x, p.y)
-                                        return
-                                    }
-                                    var hoverWidget = widgetLoader.item
-                                    if (hoverWidget
-                                        && typeof hoverWidget.handleHostHover === "function")
-                                        hoverWidget.handleHostHover(mouse.x, mouse.y)
-                                }
-                                onReleased: function(mouse) {
-                                    var releasedWidget = widgetLoader.item
-                                    if (releasedWidget
-                                        && typeof releasedWidget.handleHostReleased === "function")
-                                        releasedWidget.handleHostReleased(mouse.x, mouse.y)
-                                    if (root.dragging)
-                                        root.endDrag()
-                                    else
-                                        suppressClick = false
-                                }
-                                onCanceled: function(mouse) {
-                                    var canceledWidget = widgetLoader.item
-                                    if (canceledWidget
-                                        && typeof canceledWidget.handleHostReleased === "function")
-                                        canceledWidget.handleHostReleased(mouse.x, mouse.y)
-                                    suppressClick = false
-                                    if (root.dragging)
-                                        root.endDrag()
-                                }
-                                onExited: function() {
-                                    var hoverWidget = widgetLoader.item
-                                    if (hoverWidget
-                                        && typeof hoverWidget.handleHostHover === "function")
-                                        hoverWidget.handleHostHover(-1, -1)
-                                }
-                                onClicked: function(mouse) {
-                                    if (suppressClick) {
-                                        suppressClick = false
-                                        return
-                                    }
-                                    if (root.dragging)
-                                        return
-                                    // 把普通点击转交给组件内容（如便签 TextArea 取焦），
-                                    // 避免按下已被拖放层接收后组件无法编辑。
-                                    var widget = widgetLoader.item
-                                    if (widget && typeof widget.handleHostClick === "function")
-                                        widget.handleHostClick(mouse.x, mouse.y)
-                                }
+                            onDragMoveRequested: function(host, x, y) {
+                                root.updateDrag(x, y)
                             }
-
-                            // 右键菜单层：只接收右键，不影响左键点击与长按拖拽
-                            MouseArea {
-                                id: widgetContextArea
-                                anchors.fill: parent
-                                z: widgetDragArea.z + 1
-                                acceptedButtons: Qt.RightButton
-                                onClicked: function(mouse) {
-                                    var p = widgetContextArea.mapToItem(
-                                        root.contentItem, mouse.x, mouse.y)
-                                    root.openWidgetMenu(widgetHost.modelData, p.y)
-                                }
+                            onDragEndRequested: function(host) {
+                                root.endDrag()
                             }
-
-                            // 实例配置对象：初始加载时注入，保存后由 Connections 刷新
-                            property var widgetConfig: Panel.widgetManager.instanceConfig(widgetHost.modelData)
-                            property int hostCols: {
-                                let version = root.layoutVersion
-                                return Panel.widgetManager.instanceCols(widgetHost.modelData)
+                            // 右键菜单：坐标已在窗口内容区空间
+                            onContextMenuRequested: function(x, y) {
+                                root.openWidgetMenu(instanceId, y)
                             }
-                            property int hostRows: {
-                                let version = root.layoutVersion
-                                return Panel.widgetManager.instanceRows(widgetHost.modelData)
-                            }
-
-                            Connections {
-                                target: Panel.widgetManager
-                                function onInstanceConfigChanged(instanceId) {
-                                    if (instanceId === widgetHost.modelData) {
-                                        widgetHost.widgetConfig =
-                                            Panel.widgetManager.instanceConfig(instanceId)
-                                    }
-                                }
-                            }
-
-                            // 注入实例上下文（开放接口的一部分）：
-                            // dataDir 为宿主隔离的实例数据目录，instanceId 标识实例。
-                            // 用 Binding 注入：小组件根对象创建后即生效并持续同步
-                            //（onLoaded 注入晚于小组件 Component.onCompleted，会导致初始读取失效）。
-                            Binding {
-                                target: widgetLoader.item
-                                property: "dataDir"
-                                value: widgetHost.dataDir
-                            }
-                            Binding {
-                                target: widgetLoader.item
-                                property: "instanceId"
-                                value: widgetHost.modelData
-                            }
-                            Binding {
-                                target: widgetLoader.item
-                                property: "widgetConfig"
-                                value: widgetHost.widgetConfig
-                            }
-                            Binding {
-                                target: widgetLoader.item
-                                property: "hostCols"
-                                value: widgetHost.hostCols
-                            }
-                            Binding {
-                                target: widgetLoader.item
-                                property: "hostRows"
-                                value: widgetHost.hostRows
-                            }
-                            // 面板级"卡片透明模式"：与实例自身透明开关解耦，
-                            // 只作用于 WidgetCard 背景层
-                            Binding {
-                                target: widgetLoader.item
-                                property: "hostCardTransparent"
-                                value: Panel.cardTransparent
-                            }
-
-                            // 小组件实例数据目录（示例：todo 便签持久化）
-                            property string dataDir: Panel.widgetManager.widgetDataDir(
-                                Panel.widgetManager.instanceWidgetId(modelData))
                         }
                     }
 

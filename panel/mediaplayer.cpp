@@ -4,6 +4,7 @@
 
 #include "mediaplayer.h"
 
+#include "mprisparsing.h"
 #include "mediaplayerregistry.h"
 
 #include <QDBusArgument>
@@ -26,16 +27,7 @@ constexpr auto kPlayerInterface = "org.mpris.MediaPlayer2.Player";
 constexpr auto kPropertiesInterface = "org.freedesktop.DBus.Properties";
 constexpr double kMaxPlaybackRate = 16.0;
 
-bool isAllowedArtUrl(const QString &url)
-{
-    if (url.isEmpty())
-        return false;
-    const QUrl parsed(url);
-    const QString scheme = parsed.scheme().toLower();
-    return scheme == QLatin1String("file")
-        || scheme == QLatin1String("http")
-        || scheme == QLatin1String("https");
-}
+// artUrl 白名单与 Metadata 解析已拆分到 MprisParsing
 }
 
 MediaPlayer::MediaPlayer(QObject *parent)
@@ -473,30 +465,13 @@ void MediaPlayer::applyProperties(const QVariantMap &props)
 
 void MediaPlayer::parseMetadata(const QVariant &metadata)
 {
-    QVariantMap map;
-    if (metadata.canConvert<QVariantMap>()) {
-        map = metadata.toMap();
-    } else if (metadata.canConvert<QDBusArgument>()) {
-        map = qdbus_cast<QVariantMap>(metadata.value<QDBusArgument>());
-    } else {
-        return;
-    }
-
-    m_title = map.value(QStringLiteral("xesam:title")).toString();
-    const QVariant artistValue = map.value(QStringLiteral("xesam:artist"));
-    if (artistValue.canConvert<QStringList>()) {
-        m_artist = artistValue.toStringList().join(QStringLiteral(", "));
-    } else if (artistValue.canConvert<QString>()) {
-        m_artist = artistValue.toString();
-    } else {
-        m_artist.clear();
-    }
-    m_artUrl = map.value(QStringLiteral("mpris:artUrl")).toString();
-    if (!isAllowedArtUrl(m_artUrl))
-        m_artUrl.clear();
-    m_lengthMs = map.value(QStringLiteral("mpris:length")).toLongLong() / 1000;
-    m_trackId = map.value(QStringLiteral("mpris:trackid")).value<QDBusObjectPath>().path();
-    m_hasTrack = !m_title.isEmpty() || !m_artist.isEmpty() || !m_trackId.isEmpty();
+    const MprisParsing::TrackMetadata parsed = MprisParsing::parseMetadata(metadata);
+    m_title = parsed.title;
+    m_artist = parsed.artist;
+    m_artUrl = parsed.artUrl;
+    m_lengthMs = parsed.lengthMs;
+    m_trackId = parsed.trackId;
+    m_hasTrack = parsed.hasTrack;
 }
 
 void MediaPlayer::resetState()

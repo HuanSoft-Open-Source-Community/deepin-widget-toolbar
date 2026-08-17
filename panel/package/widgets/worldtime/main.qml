@@ -7,6 +7,7 @@ import org.deepin.dtk 1.0
 import org.deepin.ds 1.0
 import org.deepin.widgettoolbar 1.0
 import "../components" as Components
+import "dialslogic.js" as DialsLogic
 
 // 内置小组件：世界时间（逐表盘自定义）。
 // 每块表盘由控制中心时区下拉定义：地区名与 UTC 偏移都由所选时区决定，
@@ -107,22 +108,10 @@ Components.WidgetCard {
         return Timezones.offsetSeconds(zoneId) / 3600
     }
 
-    // 缺省四表盘：当前时区一块 + 老四样中不与当前时区重复的前三个
+    // 表盘列表纯计算（缺省预置/补位/收缩）在 dialslogic.js
     function defaultDialList() {
-        var system = Timezones.systemTimezone
-        if (system.length === 0 && Timezones.userTimezones.length > 0)
-            system = Timezones.userTimezones[0]
-        var zones = []
-        if (system.length > 0)
-            zones.push(system)
-        for (var i = 0; i < root.legacyFourZones.length && zones.length < 4; i++) {
-            if (root.legacyFourZones[i] !== system)
-                zones.push(root.legacyFourZones[i])
-        }
-        var list = []
-        for (var j = 0; j < zones.length; j++)
-            list.push({ "zone": zones[j], "auto": false })
-        return list
+        return DialsLogic.defaultDialList(Timezones.systemTimezone,
+            Timezones.userTimezones, root.legacyFourZones)
     }
 
     // 实例配置文件路径；dataDir/instanceId 由宿主注入，就绪前返回空
@@ -213,48 +202,18 @@ Components.WidgetCard {
     }
 
     function fillDials(target) {
-        var list = root.dials.slice()
-        var usedZones = {}
-        var usedOffsets = {}
-        for (var i = 0; i < list.length; i++) {
-            usedZones[list[i].zone] = true
-            usedOffsets[root.zoneOffset(list[i].zone)] = true
-        }
-
-        // 跨实例唯一性：其它实例已用地区不参与补位
-        var otherUsed = root.instanceId.length > 0
-            ? WidgetHost.usedZones(root.instanceId) : []
-        for (var o = 0; o < otherUsed.length; o++)
-            usedZones[otherUsed[o]] = true
-        var excludeZones = []
-        for (var used in usedZones)
-            excludeZones.push(used)
-
-        var cursor = list.length > 0
-            ? Math.round(root.zoneOffset(list[list.length - 1].zone)) : 0
-        var guard = 0
-        while (list.length < target && guard < 200) {
-            guard++
-            cursor = cursor >= 14 ? -12 : cursor + 1
-            if (usedOffsets[cursor] !== undefined)
-                continue
-            var zoneId = Timezones.firstZoneForOffset(cursor, excludeZones)
-            if (zoneId.length === 0 || usedZones[zoneId] !== undefined)
-                continue
-            usedZones[zoneId] = true
-            excludeZones.push(zoneId)
-            usedOffsets[cursor] = true
-            list.push({ "zone": zoneId, "auto": true })
-        }
-        return list
+        return DialsLogic.fillDials(root.dials, target, {
+            "zoneOffset": function (zoneId) { return root.zoneOffset(zoneId) },
+            "firstZoneForOffset": function (offsetHours, excludeZones) {
+                return Timezones.firstZoneForOffset(offsetHours, excludeZones)
+            },
+            "otherUsedZones": root.instanceId.length > 0
+                ? WidgetHost.usedZones(root.instanceId) : []
+        })
     }
 
     function shrinkDials() {
-        var list = root.dials.slice()
-        var target = root.hostCols * root.hostRows
-        while (list.length > target && list[list.length - 1].auto === true)
-            list.pop()
-        return list
+        return DialsLogic.shrinkDials(root.dials, root.hostCols * root.hostRows)
     }
 
     function persistDials(list) {
@@ -328,105 +287,39 @@ Components.WidgetCard {
         wrapMode: Text.Wrap
     }
 
-    Column {
+    // 数字模式列表视图（拆分至 DigitalList.qml）
+    DigitalList {
         id: content
-        visible: !root.analogMode && root.zoneInfos.length > 0
-        anchors.fill: parent
-        spacing: root.layoutSpacing
-
-        Text {
-            text: qsTr("World Time")
-            font.pixelSize: root.titlePixelSize
-            color: root.effectiveTransparent ? root.themeTextColor : palette.windowText
-        }
-
-        Repeater {
-            model: root.zoneInfos
-            delegate: Item {
-                required property var modelData
-                required property int index
-
-                width: content.width
-                height: root.rowHeight
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 4
-                    visible: root.highlightLocal
-                        && Math.abs(modelData.offset - root.localOffset) < 0.001
-                    color: palette.highlight
-                    opacity: 0.16
-                }
-
-                Text {
-                    anchors {
-                        left: parent.left
-                        top: parent.top
-                        bottom: parent.bottom
-                    }
-                    width: content.width / 2 - 4
-                    text: modelData.name
-                    font.pixelSize: root.cityPixelSize
-                    color: root.effectiveTransparent ? root.themeTextColor : palette.windowText
-                    opacity: 0.8
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    anchors {
-                        right: parent.right
-                        top: parent.top
-                        bottom: parent.bottom
-                    }
-                    width: content.width / 2 - 4
-                    horizontalAlignment: Text.AlignRight
-                    text: index < root.times.length ? root.times[index] : "--:--"
-                    font.pixelSize: root.cityPixelSize
-                    color: root.effectiveTransparent ? root.themeTextColor : palette.windowText
-                }
-            }
-        }
+        visible: !root.analogMode
+        zoneInfos: root.zoneInfos
+        times: root.times
+        layoutSpacing: root.layoutSpacing
+        rowHeight: root.rowHeight
+        titlePixelSize: root.titlePixelSize
+        cityPixelSize: root.cityPixelSize
+        highlightLocal: root.highlightLocal
+        localOffset: root.localOffset
+        textColor: root.textColor
+        effectiveTransparent: root.effectiveTransparent
+        themeTextColor: root.themeTextColor
     }
 
-    Grid {
+    // 指针模式表盘网格视图（拆分至 DialGrid.qml）
+    DialGrid {
         id: analogGrid
-        visible: root.analogMode && root.zoneInfos.length > 0
-        anchors.fill: parent
-        columns: root.hostCols
-        rows: root.hostRows
-        spacing: 2
-
-        Repeater {
-            model: root.zoneInfos.slice(0, root.dialCount)
-            delegate: Item {
-                required property var modelData
-
-                width: Math.max(1,
-                    (analogGrid.width - (root.hostCols - 1) * analogGrid.spacing) / root.hostCols)
-                height: Math.max(1,
-                    (analogGrid.height - (root.hostRows - 1) * analogGrid.spacing) / root.hostRows)
-
-                Components.AnalogClock {
-                    anchors.fill: parent
-                    utcOffset: modelData.offset
-                    label: modelData.name
-                    showLabels: root.showLabels
-                    highlighted: root.highlightLocal
-                        && Math.abs(modelData.offset - root.localOffset) < 0.001
-                    accentColor: root.highlightColor
-                    faceBackgroundColor: modelData.dialBackground
-                    // 透明模式下不绘制表盘底色（配色模式前样式）
-                    transparentFace: root.effectiveTransparent
-                    dialColor: modelData.dialColor
-                    hourMinuteHandColor: modelData.hourMinuteColor
-                    secondHandColor: modelData.secondColor
-                    // 表盘标签：透明模式用主题自适应文字色（默认 #ffffff 是为黑底设计的）
-                    textColor: root.effectiveTransparent ? root.themeTextColor : root.textColor
-                    preloadTime: root.preloadTime
-                    active: root.analogMode && root.panelVisible
-                }
-            }
-        }
+        visible: root.analogMode
+        zoneInfos: root.zoneInfos
+        hostCols: root.hostCols
+        hostRows: root.hostRows
+        showLabels: root.showLabels
+        highlightLocal: root.highlightLocal
+        localOffset: root.localOffset
+        highlightColor: root.highlightColor
+        textColor: root.textColor
+        effectiveTransparent: root.effectiveTransparent
+        themeTextColor: root.themeTextColor
+        preloadTime: root.preloadTime
+        active: root.panelVisible
     }
 
     Timer {

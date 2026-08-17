@@ -4,24 +4,21 @@
 
 #pragma once
 
-#include <QHash>
+#include "gpuhelper.h"
+#include "npuhelper.h"
+
 #include <QObject>
 #include <QSet>
 #include <QStringList>
 #include <QTimer>
 
 // 在独立线程中读取系统硬件指标的工作对象。
-// 只采样被 setState() 请求的指标，并在 GPU/NPU 首次定位后缓存来源路径。
+// 只采样被 setState() 请求的指标；GPU/NPU 的采样器在 GpuHelper/NpuHelper
+//（来源定位与缓存由采样器自身维护）。
 class SystemInfoWorker : public QObject
 {
     Q_OBJECT
 public:
-    // 累积计数器采样（GPU Xe idle / NPU busy 共用）
-    struct CumulativeSample {
-        quint64 value = 0;
-        qint64 timeUs = 0;
-    };
-
     explicit SystemInfoWorker(QObject *parent = nullptr);
 
 public Q_SLOTS:
@@ -37,9 +34,6 @@ private Q_SLOTS:
     void sample();
 
 private:
-    enum class GpuSource { None, Nvml, PercentPath, XeIdlePath };
-    enum class NpuSource { None, PercentPath, CumulativePath };
-
     bool metricEnabled(const QString &metricId) const;
 
     void readCpu();
@@ -50,10 +44,6 @@ private:
     void readNpu();
 
     void refreshDiskDevices();
-    bool readCachedGpu();
-    bool readCachedNpu();
-    bool scanGpu();
-    bool scanNpu();
 
     // 必须在工作线程内创建：SystemInfoWorker 在主线程构造后被 moveToThread，
     // 若 QTimer 在构造时创建，它会保持主线程亲和性，随后在工作线程 start()
@@ -80,13 +70,6 @@ private:
     QSet<QString> m_diskDevices;
     qint64 m_diskDevicesRefreshedUs = 0;
 
-    // key 为 sysfs 文件路径；GPU(Xe idle) 与 NPU 的累积计数器共用
-    QHash<QString, CumulativeSample> m_cumulativeSamples;
-
-    GpuSource m_gpuSource = GpuSource::None;
-    QString m_gpuPath;
-    qint64 m_gpuLastScanUs = 0;
-    NpuSource m_npuSource = NpuSource::None;
-    QString m_npuPath;
-    qint64 m_npuLastScanUs = 0;
+    GpuHelper m_gpu;
+    NpuHelper m_npu;
 };

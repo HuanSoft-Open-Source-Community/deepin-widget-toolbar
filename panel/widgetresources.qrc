@@ -4,6 +4,13 @@
         <file alias="components/WidgetCard.qml">package/widgets/components/WidgetCard.qml</file>
         <file alias="components/AnalogClock.qml">package/widgets/components/AnalogClock.qml</file>
         <file alias="components/ColorUtils.qml">package/widgets/components/ColorUtils.qml</file>
+        <file alias="components/WidgetHostItem.qml">package/widgets/components/WidgetHostItem.qml</file>
+        <file alias="components/DockMarginHelper.qml">package/widgets/components/DockMarginHelper.qml</file>
+        <file alias="components/SettingsRow.qml">package/widgets/components/SettingsRow.qml</file>
+        <file alias="components/ColorPickerDialog.qml">package/widgets/components/ColorPickerDialog.qml</file>
+        <file alias="components/dialslogic.js">package/widgets/components/dialslogic.js</file>
+        <file alias="components/ControlsBar.qml">package/widgets/components/ControlsBar.qml</file>
+        <file alias="components/CoverArt.qml">package/widgets/components/CoverArt.qml</file>
         <file alias="components/qmldir">package/widgets/components/qmldir</file>
         <file alias="clock/main.qml">package/widgets/clock/main.qml</file>
         <file alias="clock/manifest.json">package/widgets/clock/manifest.json</file>
@@ -15,6 +22,9 @@
         <file alias="todo/manifest.json">package/widgets/todo/manifest.json</file>
         <file alias="worldtime/main.qml">package/widgets/worldtime/main.qml</file>
         <file alias="worldtime/manifest.json">package/widgets/worldtime/manifest.json</file>
+        <file alias="worldtime/dialslogic.js">package/widgets/worldtime/dialslogic.js</file>
+        <file alias="worldtime/DialGrid.qml">package/widgets/worldtime/DialGrid.qml</file>
+        <file alias="worldtime/DigitalList.qml">package/widgets/worldtime/DigitalList.qml</file>
         <file alias="lyrics/main.qml">package/widgets/lyrics/main.qml</file>
         <file alias="lyrics/manifest.json">package/widgets/lyrics/manifest.json</file>
         <file alias="player/main.qml">package/widgets/player/main.qml</file>

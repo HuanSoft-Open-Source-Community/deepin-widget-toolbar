@@ -13,6 +13,27 @@ add_library(ds-widget-toolbar SHARED
     widgettoolbarpanel.h
     widgetmanager.cpp
     widgetmanager.h
+    widgettypes.h
+    widgetgrid.cpp
+    widgetgrid.h
+    widgetpackage.cpp
+    widgetpackage.h
+    widgetschema.cpp
+    widgetschema.h
+    sysfsreader.cpp
+    sysfsreader.h
+    nvmlhelper.cpp
+    nvmlhelper.h
+    gpuhelper.cpp
+    gpuhelper.h
+    npuhelper.cpp
+    npuhelper.h
+    timezonedb.cpp
+    timezonedb.h
+    windowguard.cpp
+    windowguard.h
+    mprisparsing.cpp
+    mprisparsing.h
     widgetmodel.cpp
     widgetmodel.h
     fileio.cpp
