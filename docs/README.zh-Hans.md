@@ -118,10 +118,24 @@ deepin-widget-toolbar/
 ├── panel/                  # dde-shell DPanel 插件
 │   ├── CMakeLists.txt      # 面板构建（Dde::Shell + 翻译 + 安装）
 │   ├── widgettoolbarpanel.*# DPanel + D-Bus 服务（显隐/置顶/菜单动作）+ 小组件宿主
-│   ├── widgetmanager.*     # 小组件扫描 / installed.json / 网格槽 / .dwpkg 导入
+│   ├── windowguard.*       # X11 窗口层级/几何守护（无边框恢复 + 边距轮询）
+│   ├── widgetmanager.*     # 小组件扫描 / installed.json / 网格槽位 / .dwpkg 导入（编排层）
+│   ├── widgettypes.h       # 共享基础类型（WidgetInfo / WidgetInstance）
+│   ├── widgetgrid.*        # 4 列网格纯算法（空闲槽 / 双向避让）
+│   ├── widgetpackage.*     # .dwpkg 校验 / 安装 / 卸载
+│   ├── widgetschema.*      # manifest 配置 schema 工具（QML 转换 / 默认值）
 │   ├── widgetmodel.*       # 小组件列表模型（添加面板）
 │   ├── fileio.*            # 宿主能力代理：文件读写（QML 单例）
 │   ├── systeminfo.*        # 宿主能力代理：CPU/内存/磁盘 IO/GPU/NPU（QML 单例）
+│   ├── systeminfoworker.*  # 后台指标采样器（CPU/内存/磁盘编排）
+│   ├── sysfsreader.*       # sysfs 指标读取工具 + 累积计数器
+│   ├── nvmlhelper.*        # NVIDIA NVML 运行时加载器（GPU）
+│   ├── gpuhelper.*         # GPU 利用率采样器（NVML/sysfs/Xe idle）
+│   ├── npuhelper.*         # NPU 利用率采样器（sysfs）
+│   ├── timezones.*         # 时区 D-Bus 代理（QML 单例）
+│   ├── timezonedb.*        # 时区数据读取 + DST/缓存层
+│   ├── mediaplayer.*       # MPRIS 播放器代理（D-Bus 会话 + 控制）
+│   ├── mprisparsing.*      # MPRIS 元数据解析 + 封面来源白名单
 │   ├── lyricssource.*      # 宿主能力代理：端闱乐部歌词（A/B 双缓冲，QML 单例）
 │   ├── clocktime.*         # 宿主预加载时间源：按整秒对齐的唯一秒级广播（QML 单例）
 │   ├── widgetresources.qrc # 内置小组件资源注册
@@ -137,7 +151,11 @@ deepin-widget-toolbar/
 │       ├── PopupHeader.qml  # 弹出面板共用标题栏
 │       ├── PinButton.qml   # 置顶按钮
 │       ├── icons/          # 置顶/取消置顶图钉图标
-│       └── widgets/        # 内置小组件与共用 WidgetCard / ColorUtils 组件
+│       └── widgets/        # 内置小组件
+│           ├── components/ # 共用组件：WidgetCard / ColorUtils / WidgetHostItem /
+│           │               #   DockMarginHelper / SettingsRow / ColorPickerDialog /
+│           │               #   ControlsBar / CoverArt / AnalogClock（含 dialslogic.js）
+│           └── <widget>/   # 各小组件目录（main.qml + manifest.json）
 └── tray/                   # dde-tray-loader 插件
     ├── CMakeLists.txt      # 托盘插件构建（Qt6 + DTK6 + 翻译 + 安装）
     ├── metadata.json       # 插件元数据（api 2.0.0）

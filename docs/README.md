@@ -118,10 +118,24 @@ deepin-widget-toolbar/
 ├── panel/                  # dde-shell DPanel plugin
 │   ├── CMakeLists.txt      # panel build (Dde::Shell + translations + install)
 │   ├── widgettoolbarpanel.*# DPanel + D-Bus service (visibility/pin/menu actions) + widget host
-│   ├── widgetmanager.*     # widget scanning / installed.json / grid slot / .dwpkg import
+│   ├── windowguard.*       # X11 window layer/geometry guard (frameless + margin polling)
+│   ├── widgetmanager.*     # widget scanning / installed.json / grid slot / .dwpkg import (orchestration)
+│   ├── widgettypes.h       # shared WidgetInfo / WidgetInstance types
+│   ├── widgetgrid.*        # 4-column grid pure algorithm (free slot / avoidance)
+│   ├── widgetpackage.*     # .dwpkg validation / install / uninstall
+│   ├── widgetschema.*      # manifest settings schema helpers (QML conversion / defaults)
 │   ├── widgetmodel.*       # widget list model (add panel)
 │   ├── fileio.*            # host capability proxy: file I/O (QML singleton)
 │   ├── systeminfo.*        # host capability proxy: CPU/mem/disk IO/GPU/NPU (QML singleton)
+│   ├── systeminfoworker.*  # background metric sampler (CPU/MEM/DISK orchestration)
+│   ├── sysfsreader.*       # sysfs metric readers + cumulative counters
+│   ├── nvmlhelper.*        # NVIDIA NVML runtime loader (GPU)
+│   ├── gpuhelper.*         # GPU usage sampler (NVML/sysfs/Xe idle)
+│   ├── npuhelper.*         # NPU usage sampler (sysfs)
+│   ├── timezones.*         # timezone D-Bus proxy (QML singleton)
+│   ├── timezonedb.*        # timezone data reading + DST/cache layer
+│   ├── mediaplayer.*       # MPRIS player proxy (D-Bus session + controls)
+│   ├── mprisparsing.*      # MPRIS metadata parsing + art URL whitelist
 │   ├── lyricssource.*      # host capability proxy: Ter-Music lyrics A/B buffer (QML singleton)
 │   ├── clocktime.*         # host preloaded time source: one aligned second ticker (QML singleton)
 │   ├── widgetresources.qrc # built-in widget resource registration
@@ -137,7 +151,11 @@ deepin-widget-toolbar/
 │       ├── PopupHeader.qml  # shared popup title bar
 │       ├── PinButton.qml   # pin button
 │       ├── icons/          # pin/unpin icon assets
-│       └── widgets/        # built-in widgets and shared WidgetCard / ColorUtils components
+│       └── widgets/        # built-in widgets
+│           ├── components/ # shared components: WidgetCard / ColorUtils / WidgetHostItem /
+│           │               #   DockMarginHelper / SettingsRow / ColorPickerDialog /
+│           │               #   ControlsBar / CoverArt / AnalogClock (+ dialslogic.js)
+│           └── <widget>/   # per-widget dirs (main.qml + manifest.json)
 └── tray/                   # dde-tray-loader plugin
     ├── CMakeLists.txt      # tray plugin build (Qt6 + DTK6 + translations + install)
     ├── metadata.json       # plugin metadata (api 2.0.0)

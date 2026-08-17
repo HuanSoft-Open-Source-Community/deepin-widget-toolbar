@@ -124,10 +124,24 @@ deepin-widget-toolbar/
 ├── panel/                  # dde-shell DPanel 插件
 │   ├── CMakeLists.txt      # 欄之構建（Dde::Shell + 翻譯 + 安裝）
 │   ├── widgettoolbarpanel.*# DPanel + D-Bus 之務（顯隱/置頂/菜單之動）+ 組件之宿主
-│   ├── widgetmanager.*     # 組件之掃 / installed.json / 網格槽 / .dwpkg 之入
+│   ├── windowguard.*       # X11 窗之層級/幾何之護（無框之復 + 邊距輪詢）
+│   ├── widgetmanager.*     # 組件之掃 / installed.json / 網格槽 / .dwpkg 之入（編排之層）
+│   ├── widgettypes.h       # 共基之型（WidgetInfo / WidgetInstance）
+│   ├── widgetgrid.*        # 四列網格之純算（空槽 / 雙向避讓）
+│   ├── widgetpackage.*     # .dwpkg 之驗 / 裝 / 卸
+│   ├── widgetschema.*      # manifest 配置 schema 之具（QML 之轉 / 默值）
 │   ├── widgetmodel.*       # 組件清單之模（添加面板）
 │   ├── fileio.*            # 宿主之能：文之讀寫（QML 單例）
 │   ├── systeminfo.*        # 宿主之能：CPU/內存/磁盤 IO/GPU/NPU（QML 單例）
+│   ├── systeminfoworker.*  # 後台指標之采（CPU/內存/磁盤編排）
+│   ├── sysfsreader.*       # sysfs 指標讀取之具 + 累積計數
+│   ├── nvmlhelper.*        # NVIDIA NVML 運行時載入（GPU）
+│   ├── gpuhelper.*         # GPU 用率之采（NVML/sysfs/Xe idle）
+│   ├── npuhelper.*         # NPU 用率之采（sysfs）
+│   ├── timezones.*         # 時區 D-Bus 之代（QML 單例）
+│   ├── timezonedb.*        # 時區數據之讀 + DST/緩存之層
+│   ├── mediaplayer.*       # MPRIS 播放之代（D-Bus 會話 + 控制）
+│   ├── mprisparsing.*      # MPRIS 元數據之析 + 封面來源白名單
 │   ├── lyricssource.*      # 宿主之能：端闈樂部歌詞（A/B 雙緩，QML 單例）
 │   ├── clocktime.*         # 宿主預載時源：按整秒而齊之唯一秒鐘（QML 單例）
 │   ├── widgetresources.qrc # 內置組件資源之註
@@ -143,7 +157,11 @@ deepin-widget-toolbar/
 │       ├── PopupHeader.qml  # 面板共用之題欄
 │       ├── PinButton.qml   # 置頂之鈕
 │       ├── icons/          # 置頂/置底圖釘之圖
-│       └── widgets/        # 內置組件與共用 WidgetCard / ColorUtils 之件
+│       └── widgets/        # 內置組件
+│           ├── components/ # 共用之件：WidgetCard / ColorUtils / WidgetHostItem /
+│           │               #   DockMarginHelper / SettingsRow / ColorPickerDialog /
+│           │               #   ControlsBar / CoverArt / AnalogClock（含 dialslogic.js）
+│           └── <widget>/   # 各組件之目（main.qml + manifest.json）
 └── tray/                   # dde-tray-loader 插件
     ├── CMakeLists.txt      # 托盤插件構建（Qt6 + DTK6 + 翻譯 + 安裝）
     ├── metadata.json       # 插件元數據（api 2.0.0）
