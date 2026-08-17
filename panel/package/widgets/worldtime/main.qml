@@ -321,7 +321,7 @@ Components.WidgetCard {
         visible: root.zoneInfos.length === 0
         text: qsTr("No dials yet. Add timezones in widget settings.")
         font: DTK.fontManager.t5
-        color: palette.windowText
+        color: root.effectiveTransparent ? root.themeTextColor : palette.windowText
         opacity: 0.6
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.Wrap
@@ -336,7 +336,7 @@ Components.WidgetCard {
         Text {
             text: qsTr("World Time")
             font.pixelSize: root.titlePixelSize
-            color: palette.windowText
+            color: root.effectiveTransparent ? root.themeTextColor : palette.windowText
         }
 
         Repeater {
@@ -366,7 +366,7 @@ Components.WidgetCard {
                     width: content.width / 2 - 4
                     text: modelData.name
                     font.pixelSize: root.cityPixelSize
-                    color: palette.windowText
+                    color: root.effectiveTransparent ? root.themeTextColor : palette.windowText
                     opacity: 0.8
                     elide: Text.ElideRight
                 }
@@ -381,7 +381,7 @@ Components.WidgetCard {
                     horizontalAlignment: Text.AlignRight
                     text: index < root.times.length ? root.times[index] : "--:--"
                     font.pixelSize: root.cityPixelSize
-                    color: palette.windowText
+                    color: root.effectiveTransparent ? root.themeTextColor : palette.windowText
                 }
             }
         }
@@ -414,10 +414,13 @@ Components.WidgetCard {
                         && Math.abs(modelData.offset - root.localOffset) < 0.001
                     accentColor: root.highlightColor
                     faceBackgroundColor: modelData.dialBackground
+                    // 透明模式下不绘制表盘底色（配色模式前样式）
+                    transparentFace: root.effectiveTransparent
                     dialColor: modelData.dialColor
                     hourMinuteHandColor: modelData.hourMinuteColor
                     secondHandColor: modelData.secondColor
-                    textColor: root.textColor
+                    // 表盘标签：透明模式用主题自适应文字色（默认 #ffffff 是为黑底设计的）
+                    textColor: root.effectiveTransparent ? root.themeTextColor : root.textColor
                     preloadTime: root.preloadTime
                     active: root.analogMode && root.panelVisible
                 }

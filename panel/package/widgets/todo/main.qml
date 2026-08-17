@@ -67,17 +67,23 @@ Components.WidgetCard {
         noteArea.cursorPosition = Math.max(0, pos)
     }
 
+    // 标题区高度：透明模式为纯文字（配色模式前样式），无标题条占位
+    property int titleBarHeight: root.effectiveTransparent
+        ? root.titlePixelSize : root.titlePixelSize + 8
+
     Column {
         id: content
         anchors.fill: parent
         spacing: 4
 
+        // 标题条：仅非透明模式显示
         Rectangle {
             id: titleBar
             width: parent.width
             height: root.titlePixelSize + 8
             radius: 4
-            color: root.transparentBackground ? "transparent" : root.titleBackgroundColor
+            visible: !root.effectiveTransparent
+            color: root.titleBackgroundColor
 
             Text {
                 anchors.centerIn: parent
@@ -87,21 +93,31 @@ Components.WidgetCard {
             }
         }
 
+        // 透明模式标题：配色模式前样式——无底色条，主题自适应文字
+        Text {
+            visible: root.effectiveTransparent
+            text: qsTr("Sticky Note")
+            font.pixelSize: root.titlePixelSize
+            color: root.themeTextColor
+        }
+
         Item {
             width: parent.width
-            height: parent.height - titleBar.height - content.spacing
+            height: parent.height - root.titleBarHeight - content.spacing
 
+            // 内容底色：仅非透明模式显示
             Rectangle {
                 anchors.fill: parent
                 radius: DTK.platformTheme.windowRadius
-                color: root.transparentBackground ? "transparent" : root.contentBackgroundColor
+                visible: !root.effectiveTransparent
+                color: root.contentBackgroundColor
             }
 
             TextArea {
                 id: noteArea
                 anchors.fill: parent
                 font.pixelSize: root.notePixelSize
-                color: root.textColor
+                color: root.effectiveTransparent ? root.themeTextColor : root.textColor
                 placeholderText: qsTr("Write something…")
                 FontMetrics {
                     id: noteFontMetrics
@@ -118,8 +134,11 @@ Components.WidgetCard {
                         var ctx = getContext("2d")
                         if (!ctx)
                             return
+                        // 透明模式为配色模式前样式：无行底线
+                        if (root.effectiveTransparent)
+                            return
                         ctx.reset()
-                        ctx.strokeStyle = root.transparentBackground ? "transparent" : root.lineColor
+                        ctx.strokeStyle = root.lineColor
                         ctx.globalAlpha = 0.7
                         ctx.lineWidth = 1
 

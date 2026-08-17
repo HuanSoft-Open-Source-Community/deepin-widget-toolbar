@@ -55,7 +55,7 @@ Components.WidgetCard {
             id: timeText
             anchors.horizontalCenter: parent.horizontalCenter
             font.pixelSize: root.timePixelSize
-            color: palette.windowText
+            color: root.effectiveTransparent ? root.themeTextColor : palette.windowText
         }
 
         Text {
@@ -63,7 +63,7 @@ Components.WidgetCard {
             anchors.horizontalCenter: parent.horizontalCenter
             visible: !root.compact
             font.pixelSize: root.datePixelSize
-            color: palette.windowText
+            color: root.effectiveTransparent ? root.themeTextColor : palette.windowText
             opacity: 0.7
         }
     }
@@ -76,6 +76,8 @@ Components.WidgetCard {
         showLabels: false
         accentColor: root.highlightColor
         faceBackgroundColor: root.dialBackgroundColor
+        // 透明模式下不绘制表盘底色（配色模式前样式）
+        transparentFace: root.effectiveTransparent
         dialColor: root.dialColor
         hourMinuteHandColor: root.hourMinuteHandColor
         secondHandColor: root.secondHandColor

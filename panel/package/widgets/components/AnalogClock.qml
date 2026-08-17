@@ -24,6 +24,8 @@ Item {
     property bool highlighted: false
     property color accentColor: palette.highlight
     property color faceBackgroundColor: "#ffffff"
+    // 透明表盘：开启时不绘制表盘底色（配色模式改造前即无底色），圆环/刻度/指针保留
+    property bool transparentFace: false
     property color dialColor: "#000000"
     property color hourMinuteHandColor: "#000000"
     property color secondHandColor: "#ff4d4f"
@@ -69,6 +71,7 @@ Item {
     onPaletteChanged: dialCanvas.requestPaint()
     onShowLabelsChanged: dialCanvas.requestPaint()
     onFaceBackgroundColorChanged: dialCanvas.requestPaint()
+    onTransparentFaceChanged: dialCanvas.requestPaint()
     onDialColorChanged: dialCanvas.requestPaint()
     onHourMinuteHandColorChanged: dialCanvas.requestPaint()
     onSecondHandColorChanged: dialCanvas.requestPaint()
@@ -125,11 +128,13 @@ Item {
                 var radius = root.radius
                 var tickCount = radius < 28 ? 4 : 12
 
-                // 表盘底色
-                ctx.fillStyle = root.faceBackgroundColor
-                ctx.beginPath()
-                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
-                ctx.fill()
+                // 表盘底色（透明表盘不绘制，露出卡片/背景）
+                if (!root.transparentFace) {
+                    ctx.fillStyle = root.faceBackgroundColor
+                    ctx.beginPath()
+                    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
+                    ctx.fill()
+                }
 
                 ctx.lineCap = "round"
                 ctx.strokeStyle = root.dialColor

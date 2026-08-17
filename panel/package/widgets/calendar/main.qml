@@ -62,8 +62,10 @@ Components.WidgetCard {
     // 避免 Math.floor 取整后右侧露出网格底色竖线。
     property real cellWidth: Math.max(12,
         (content.width - 6 * root.gridSpacing) / 7)
+    // 透明模式下标题/星期条不占位（配色模式前的 42 常量），保证网格仍填满
     property int cellHeight: Math.max(14,
-        Math.min(Math.round(cellWidth * 0.85), Math.round((content.height - 64) / 6)))
+        Math.min(Math.round(cellWidth * 0.85),
+            Math.round((content.height - (root.effectiveTransparent ? 42 : 64)) / 6)))
     property int titlePixelSize: Math.max(10, Math.min(24, Math.round(content.width * 0.045)))
     property int weekdayPixelSize: Math.max(8, Math.min(16, Math.round(content.width * 0.032)))
     property int dayPixelSize: Math.max(8, Math.min(18, Math.round(content.width * 0.038)))
@@ -73,11 +75,13 @@ Components.WidgetCard {
         anchors.fill: parent
         spacing: 4
 
+        // 标题条：仅非透明模式显示（配色模式前的透明样式为纯文字）
         Rectangle {
             width: parent.width
             height: root.titlePixelSize + 8
             radius: 4
-            color: root.transparentBackground ? "transparent" : root.titleBackgroundColor
+            visible: !root.effectiveTransparent
+            color: root.titleBackgroundColor
 
             Text {
                 anchors.centerIn: parent
@@ -87,11 +91,22 @@ Components.WidgetCard {
             }
         }
 
+        // 透明模式标题：配色模式前样式——无底色条，主题自适应文字
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: root.effectiveTransparent
+            text: Qt.formatDate(root.current, qsTr("yyyy MMMM"))
+            font.pixelSize: root.titlePixelSize
+            color: root.themeTextColor
+        }
+
+        // 星期条：仅非透明模式显示
         Rectangle {
             width: parent.width
             height: root.weekdayPixelSize + 6
             radius: 4
-            color: root.transparentBackground ? "transparent" : root.weekdayBackgroundColor
+            visible: !root.effectiveTransparent
+            color: root.weekdayBackgroundColor
 
             Row {
                 width: parent.width
@@ -109,16 +124,35 @@ Components.WidgetCard {
             }
         }
 
+        // 透明模式星期行：配色模式前样式——无底色条，半透明主题文字
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: root.effectiveTransparent
+            spacing: root.gridSpacing
+            Repeater {
+                model: root.weekDays
+                delegate: Text {
+                    width: root.cellWidth
+                    horizontalAlignment: Text.AlignHCenter
+                    text: modelData
+                    font.pixelSize: root.weekdayPixelSize
+                    color: root.themeTextColor
+                    opacity: 0.6
+                }
+            }
+        }
+
         Item {
             width: content.width
             height: Math.ceil(root.cells.length / 7) * root.cellHeight
                 + (Math.ceil(root.cells.length / 7) - 1) * root.gridSpacing
 
-            // 灰色网格底色：Grid 用 1px 间距透出，形成网格线
+            // 灰色网格底色：Grid 用 1px 间距透出，形成网格线；透明模式不画
             Rectangle {
                 anchors.fill: parent
                 radius: 4
-                color: root.transparentBackground ? "transparent" : root.gridColor
+                visible: !root.effectiveTransparent
+                color: root.gridColor
             }
 
             Grid {
@@ -130,11 +164,11 @@ Components.WidgetCard {
                     delegate: Rectangle {
                         width: root.cellWidth
                         height: root.cellHeight
-                        color: root.transparentBackground ? "transparent"
-                            : (root.highlightToday
-                                && modelData === root.current.getDate()
-                                && root.month === root.current.getMonth()
-                                ? root.highlightColor : root.backgroundColor)
+                        color: root.highlightToday
+                            && modelData === root.current.getDate()
+                            && root.month === root.current.getMonth()
+                            ? root.highlightColor
+                            : (root.effectiveTransparent ? "transparent" : root.backgroundColor)
 
                         Text {
                             anchors.centerIn: parent
@@ -143,7 +177,8 @@ Components.WidgetCard {
                             color: root.highlightToday
                                 && modelData === root.current.getDate()
                                 && root.month === root.current.getMonth()
-                                ? root.highlightedTextColor : root.textColor
+                                ? root.highlightedTextColor
+                                : (root.effectiveTransparent ? root.themeTextColor : root.textColor)
                         }
                     }
                 }
