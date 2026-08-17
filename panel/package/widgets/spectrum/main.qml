@@ -33,6 +33,9 @@ Components.WidgetCard {
     property bool showPeaks: widgetConfig && widgetConfig.showPeaks !== undefined
         ? widgetConfig.showPeaks : true
     property bool panelVisible: Panel.visible
+    // 尺寸命名与右键菜单一致：大=4×4（唯一 4 行档）；其余尺寸（2×2/4×2）倒影占 1/3
+    readonly property bool large: root.hostRows >= 4
+    readonly property real reflectRatio: root.large ? 0.5 : 1.0 / 3.0
 
     // 需要采集的条件：实例可见且面板可见
     readonly property bool captureActive: root.visible && root.panelVisible
@@ -103,6 +106,7 @@ Components.WidgetCard {
     onAmplitudeChanged: spectrumCanvas.requestPaint()
     onShowPeaksChanged: spectrumCanvas.requestPaint()
     onPaletteChanged: spectrumCanvas.requestPaint()
+    onHostRowsChanged: spectrumCanvas.requestPaint()
     Component.onCompleted: root.syncCapture()
     Component.onDestruction: {
         if (root.instanceId.length > 0)
@@ -171,10 +175,19 @@ Components.WidgetCard {
                 root.barPeaks = fresh
             }
 
-            var baseY = h - 2
-            var maxBarH = h - 4
+            // 活动区：频谱上移，底部 reflectRatio 留给倒影（大尺寸 1/2，其余 1/3）
+            var activeH = h * (1 - root.reflectRatio)
+            var baseY = activeH
+            var maxBarH = Math.max(1, activeH - 2)
+            // 倒影压缩比：倒影区高度 / 活动区高度（1/3 倒影→0.5，1/2 倒影→1.0）
+            var reflectScale = root.reflectRatio / (1 - root.reflectRatio)
             var color = root.barColor
             var col = 0
+
+            // 倒影渐变：镜像线（活动区底）较强 → 画布底完全淡出（透明近似模糊）
+            var refGrad = ctx.createLinearGradient(0, baseY, 0, h)
+            refGrad.addColorStop(0, Qt.rgba(color.r, color.g, color.b, 0.35))
+            refGrad.addColorStop(1, Qt.rgba(color.r, color.g, color.b, 0))
 
             // 空闲快路径：扁平矩形 + 低速呼吸，跳过渐变/圆角路径（软件渲染大头）。
             // 空闲柱体仅 4%-14% 高度，实色填充观感与渐变几乎一致。
@@ -186,6 +199,14 @@ Components.WidgetCard {
                     var bh = Math.max(1, maxBarH * (0.04 + 0.10 * wave))
                     ctx.fillRect(bi * (barW + gap), baseY - bh, barW, bh)
                     root.barPeaks[bi] = 0
+                }
+                // 倒影：同款呼吸波形镜像到基线下方，渐变淡出
+                ctx.fillStyle = refGrad
+                for (var ri = 0; ri < n; ri++) {
+                    var rw = 0.5 + 0.5 * Math.sin(now * 0.6 + ri * 0.45)
+                    var rbh = Math.max(1, maxBarH * (0.04 + 0.10 * rw)) * reflectScale
+                    if (rbh >= 1)
+                        ctx.fillRect(ri * (barW + gap), baseY, barW, rbh)
                 }
                 return
             }
@@ -213,6 +234,14 @@ Components.WidgetCard {
                 ctx.fillStyle = grad
                 root.roundedBar(ctx, x, y, barW, barH, Math.min(4, barW * 0.4))
                 ctx.fill()
+
+                // 倒影：活动区底线的镜像，高度按反射区比例压缩，渐变淡出
+                var rbh = barH * reflectScale
+                if (rbh >= 1) {
+                    ctx.fillStyle = refGrad
+                    root.roundedBar(ctx, x, baseY, barW, rbh, Math.min(4, barW * 0.4))
+                    ctx.fill()
+                }
 
                 // 峰值帽：本柱历史峰值（升立即跟随、降缓慢衰减）
                 if (root.showPeaks && !idle) {
