@@ -23,6 +23,17 @@
             "description[zh_CN]": "保持小组件工具栏在其他窗口之上",
             "permissions": "readwrite",
             "visibility": "private"
+        },
+        "cardTransparent": {
+            "value": false,
+            "serial": 0,
+            "flags": [],
+            "name": "Card transparent mode",
+            "name[zh_CN]": "卡片透明模式",
+            "description": "Use translucent card backgrounds for all widgets; independent of each widget's own transparent-background setting",
+            "description[zh_CN]": "所有小组件卡片使用半透明底色；与小组件自身的透明背景开关相互独立",
+            "permissions": "readwrite",
+            "visibility": "private"
         }
     }
 }

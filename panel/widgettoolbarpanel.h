@@ -25,6 +25,8 @@ class WidgetToolbarPanel : public DPanel
     Q_CLASSINFO("D-Bus Interface", "org.deepin.dde.widgettoolbar")
     Q_PROPERTY(bool visible READ visible WRITE setVisible NOTIFY visibleChanged FINAL)
     Q_PROPERTY(bool pinned READ pinned WRITE setPinned NOTIFY pinnedChanged FINAL)
+    // 面板级"卡片透明模式"：全局卡片底半透明叠层，与小组件自身 transparentBackground 解耦
+    Q_PROPERTY(bool cardTransparent READ cardTransparent WRITE setCardTransparent NOTIFY cardTransparentChanged FINAL)
     // 小组件宿主接口：QML 通过 Panel.widgetManager / Panel.widgetListModel 访问
     Q_PROPERTY(WidgetManager *widgetManager READ widgetManager CONSTANT)
     Q_PROPERTY(WidgetListModel *widgetListModel READ widgetListModel CONSTANT)
@@ -39,6 +41,8 @@ public:
     void setVisible(bool visible);
     bool pinned() const;
     void setPinned(bool pinned);
+    bool cardTransparent() const;
+    void setCardTransparent(bool cardTransparent);
 
     WidgetManager *widgetManager() const;
     WidgetListModel *widgetListModel() const;
@@ -57,6 +61,7 @@ public Q_SLOTS:
 Q_SIGNALS:
     void visibleChanged(bool visible);
     void pinnedChanged(bool pinned);
+    void cardTransparentChanged(bool cardTransparent);
     // 菜单动作信号（D-Bus ExportAllSignals 导出，QML Connections 监听）
     void settingsRequested();
     void aboutRequested();
@@ -82,6 +87,7 @@ private:
     DConfig *m_config = nullptr;
     bool m_visible = true;
     bool m_pinned = true;
+    bool m_cardTransparent = false;
 
     WidgetManager *m_widgetManager = nullptr;
     WidgetListModel *m_widgetListModel = nullptr;

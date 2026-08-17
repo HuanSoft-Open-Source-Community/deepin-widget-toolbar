@@ -93,6 +93,11 @@
 <context>
     <name>SettingsDialog</name>
     <message>
+        <source>Card transparent mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+
+    <message>
         <source>Settings</source>
         <translation type="unfinished"></translation>
     </message>

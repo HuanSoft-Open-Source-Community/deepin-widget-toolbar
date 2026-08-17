@@ -875,6 +875,13 @@ Window {
                                 property: "hostRows"
                                 value: widgetHost.hostRows
                             }
+                            // 面板级"卡片透明模式"：与实例自身透明开关解耦，
+                            // 只作用于 WidgetCard 背景层
+                            Binding {
+                                target: widgetLoader.item
+                                property: "hostCardTransparent"
+                                value: Panel.cardTransparent
+                            }
 
                             // 小组件实例数据目录（示例：todo 便签持久化）
                             property string dataDir: Panel.widgetManager.widgetDataDir(

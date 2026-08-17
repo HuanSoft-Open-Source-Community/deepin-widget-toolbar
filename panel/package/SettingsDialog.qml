@@ -82,6 +82,28 @@ PanelPopup {
                     onToggled: Panel.pinned = checked
                 }
             }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("Card transparent mode")
+                    font: DTK.fontManager.t6
+                    color: palette.windowText
+                }
+
+                Switch {
+                    Layout.preferredHeight: Math.max(
+                        implicitHeight,
+                        (indicator ? indicator.implicitHeight : 0) + 6)
+                    // 面板级全局卡片透明：与小组件自身的透明背景开关相互独立，
+                    // 只作用于卡片背景叠层，经 Panel 属性持久化到 DConfig
+                    checked: Panel.cardTransparent
+                    onToggled: Panel.cardTransparent = checked
+                }
+            }
         }
     }
 }

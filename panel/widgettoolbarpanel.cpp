@@ -89,8 +89,9 @@ bool WidgetToolbarPanel::init()
     if (m_config && m_config->isValid()) {
         m_visible = m_config->value("visible", true).toBool();
         m_pinned = m_config->value("pinned", true).toBool();
+        m_cardTransparent = m_config->value("cardTransparent", false).toBool();
     } else {
-        qWarning() << "DConfig invalid, use defaults (visible=true, pinned=true)";
+        qWarning() << "DConfig invalid, use defaults (visible=true, pinned=true, cardTransparent=false)";
     }
 
     // 注册 D-Bus 服务，供托盘触发按钮控制显隐
@@ -259,6 +260,23 @@ void WidgetToolbarPanel::setPinned(bool pinned)
         m_config->setValue("pinned", pinned);
     }
     Q_EMIT pinnedChanged(pinned);
+}
+
+bool WidgetToolbarPanel::cardTransparent() const
+{
+    return m_cardTransparent;
+}
+
+void WidgetToolbarPanel::setCardTransparent(bool cardTransparent)
+{
+    if (m_cardTransparent == cardTransparent) {
+        return;
+    }
+    m_cardTransparent = cardTransparent;
+    if (m_config && m_config->isValid()) {
+        m_config->setValue("cardTransparent", cardTransparent);
+    }
+    Q_EMIT cardTransparentChanged(cardTransparent);
 }
 
 void WidgetToolbarPanel::toggle()

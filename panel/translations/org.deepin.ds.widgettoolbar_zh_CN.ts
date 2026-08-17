@@ -93,6 +93,11 @@
 <context>
     <name>SettingsDialog</name>
     <message>
+        <source>Card transparent mode</source>
+        <translation>卡片透明模式</translation>
+    </message>
+
+    <message>
         <source>Settings</source>
         <translation>设置</translation>
     </message>
