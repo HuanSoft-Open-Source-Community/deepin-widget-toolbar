@@ -37,11 +37,11 @@ Components.WidgetCard {
     // 需要采集的条件：实例可见且面板可见
     readonly property bool captureActive: root.visible && root.panelVisible
     // 空闲判定：采集不可用或整体音量极低（与 onPaint 的 idle 判定一致）。
-    // 空闲时重绘降到 5fps（呼吸动画），仅在有真实电平变化时回到 30fps，
-    // 避免静置状态下 30fps 空转拖累主线程与渲染线程。
+    // 空闲时重绘降到 ~12fps（呼吸动画），仅在有真实电平变化时回到 30fps，
+    // 视觉流畅与资源占用取平衡（扁平矩形快路径下开销仍很小）。
     property bool idleState: true
-    // 空闲重绘间隔（呼吸动画 ~2fps；配合扁平矩形快路径，开销≈0）
-    readonly property int idleIntervalMs: 500
+    // 空闲重绘间隔：1000/12 ≈ 83ms（~12fps）
+    readonly property int idleIntervalMs: 83
 
     function computeIdle() {
         if (!AudioVisualizer.available)
@@ -178,7 +178,7 @@ Components.WidgetCard {
 
             // 空闲快路径：扁平矩形 + 低速呼吸，跳过渐变/圆角路径（软件渲染大头）。
             // 空闲柱体仅 4%-14% 高度，实色填充观感与渐变几乎一致。
-            // 实测：空闲渲染从 ~4.3% 主线程 + ~2.3% 渲染线程降至 ≈0。
+            // ~12fps 空闲重绘下仍保持低成本（仅 fillRect）。
             if (idle) {
                 ctx.fillStyle = Qt.rgba(color.r, color.g, color.b, 0.55)
                 for (var bi = 0; bi < n; bi++) {

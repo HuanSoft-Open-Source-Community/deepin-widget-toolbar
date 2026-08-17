@@ -61,7 +61,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 ```
 
-> ⚡ **Performance**: local builds should pass `-DCMAKE_BUILD_TYPE=Release` (the official Debian package already builds Release; without it, local builds compile at -O0). The panel is idle-friendly by design: the audio spectrum analysis runs on a dedicated worker thread that sleeps on a condition variable when no spectrum widget is visible (≈0 CPU), uses a 128-point radix-2 FFT with precomputed twiddle factors instead of a naive DFT, and the spectrum widget drops from 30 fps to ~5 fps for its idle breathing animation (30 fps resumes immediately when audio starts). When the panel is hidden, widget object trees are unloaded to release QML and texture memory and rebuilt asynchronously on show.
+> ⚡ **Performance**: local builds should pass `-DCMAKE_BUILD_TYPE=Release` (the official Debian package already builds Release; without it, local builds compile at -O0). The panel is idle-friendly by design: the audio spectrum analysis runs on a dedicated worker thread that sleeps on a condition variable when no spectrum widget is visible (≈0 CPU), uses a 128-point radix-2 FFT with precomputed twiddle factors instead of a naive DFT, and the spectrum widget drops from 30 fps to ~12 fps for its idle breathing animation (30 fps resumes immediately when audio starts). When the panel is hidden, widget object trees are unloaded to release QML and texture memory and rebuilt asynchronously on show.
 
 ## 📦 Installation
 
