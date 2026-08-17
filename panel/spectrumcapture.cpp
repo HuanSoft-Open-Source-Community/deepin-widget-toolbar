@@ -6,6 +6,7 @@
 
 #include "alsabackend.h"
 #include "audiobackend.h"
+#include "fft.h"
 #include "pipewirebackend.h"
 #include "pulsebackend.h"
 
@@ -53,6 +54,7 @@ void SpectrumCaptureWorker::stop()
     if (!m_running.load())
         return;
     m_stop.store(true);
+    notifyLoop();
     if (m_thread.joinable())
         m_thread.join();
     m_running.store(false);
@@ -63,6 +65,7 @@ void SpectrumCaptureWorker::startCapture()
     if (m_captureWanted.load())
         return;
     m_captureWanted.store(true);
+    notifyLoop();
 }
 
 void SpectrumCaptureWorker::stopCapture()
@@ -70,6 +73,37 @@ void SpectrumCaptureWorker::stopCapture()
     if (!m_captureWanted.load())
         return;
     m_captureWanted.store(false);
+    notifyLoop();
+}
+
+void SpectrumCaptureWorker::notifyLoop()
+{
+    std::lock_guard<std::mutex> lock(m_cvMutex);
+    m_cv.notify_all();
+}
+
+bool SpectrumCaptureWorker::waitForWork(int state)
+{
+    std::unique_lock<std::mutex> lock(m_cvMutex);
+    if (state == 0) {
+        // 未请求采集：无限等待，直到 startCapture（wanted=true）或 stop
+        // 经 notifyLoop() 唤醒，线程 CPU≈0。
+        m_cv.wait(lock, [this]() {
+            return m_stop.load() || m_captureWanted.load();
+        });
+        return !m_stop.load();
+    }
+
+    // 请求中：按状态节流（10ms 活跃节拍 / 250ms 重试间隔）。
+    // 注意：带谓词的 wait_for 在谓词已为真时会立即返回，活跃采集期间
+    // wanted 恒为真，故此处谓词只用 stop，保证定时等待真正等满时长，
+    // 避免把 10ms 节拍退化成忙自旋；stop() 经 notify 立即唤醒。
+    const auto pred = [this]() { return m_stop.load(); };
+    if (state == 1)
+        m_cv.wait_for(lock, std::chrono::milliseconds(250), pred);
+    else
+        m_cv.wait_for(lock, std::chrono::milliseconds(10), pred);
+    return !m_stop.load();
 }
 
 void SpectrumCaptureWorker::runLoop()
@@ -94,14 +128,21 @@ void SpectrumCaptureWorker::runLoop()
             }
         }
 
-        if (wanted) {
+        // 空闲（未请求采集）时无限等待：线程 CPU≈0；
+        // 请求中无后端时 250ms 节流重试；采集活跃时 10ms 节拍。
+        int state;
+        if (!wanted) {
+            state = 0;
+        } else if (m_current && m_current->active()) {
+            state = 2;
+            if (!m_available)
+                setAvailable(true);
+            maybeReselect();
+            analyzeTick();
+        } else {
+            state = 1;
             const auto now = std::chrono::steady_clock::now();
-            if (m_current && m_current->active()) {
-                if (!m_available)
-                    setAvailable(true);
-                maybeReselect();
-                analyzeTick();
-            } else if (m_current) {
+            if (m_current) {
                 // 连接中或已失败：宽限期后判定失败并切换到下一后端
                 const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                     now - m_currentSince).count();
@@ -122,7 +163,9 @@ void SpectrumCaptureWorker::runLoop()
                 }
             }
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        if (!waitForWork(state))
+            break;
     }
 
     if (m_current) {
@@ -228,21 +271,14 @@ void SpectrumCaptureWorker::analyzeTick()
         }
     }
 
-    // 朴素 DFT（128 点 × 64 bin，开销极小），带轻微高频增益
+    // 128 点 radix-2 FFT（C 风格模块 wsf，twiddle 预计算，热点零三角函数），
+    // 输出与旧朴素 DFT 逐 bin 数值等价（无 1/N 归一化，同尺度）。
     constexpr int kUsefulBins = kAnalysisSize / 2;
     double magnitudes[kUsefulBins] = {0.0};
+    wsf::realMagnitudes(mono, kAnalysisSize, magnitudes + 1, kUsefulBins - 1);
     for (int bin = 1; bin < kUsefulBins; ++bin) {
-        double real = 0.0;
-        double imag = 0.0;
-        const double coeff = (2.0 * kPi * bin) / kAnalysisSize;
-        for (int n = 0; n < kAnalysisSize; ++n) {
-            const double angle = coeff * n;
-            real += mono[n] * std::cos(angle);
-            imag -= mono[n] * std::sin(angle);
-        }
         const double emphasis = 1.0 + (static_cast<double>(bin) / (kUsefulBins - 1)) * 0.35;
-        magnitudes[bin] = std::sqrt(real * real + imag * imag)
-            / (kAnalysisSize / 2.0) * emphasis;
+        magnitudes[bin] = magnitudes[bin] / (kAnalysisSize / 2.0) * emphasis;
     }
 
     // 分组 32 带：每带取峰值幅度，log 压缩到 0..100，攻击/释放平滑
@@ -282,10 +318,25 @@ void SpectrumCaptureWorker::analyzeTick()
             peak -= 1.0;
     }
 
+    // 发射节流：32 带整型值未变化时跳过，避免静音场景下 30Hz 无谓信号
+    bool levelsChanged = false;
+    for (int i = 0; i < kBandCount; ++i) {
+        const int level = static_cast<int>(qBound(0.0, m_levels[i], 100.0));
+        if (level != m_lastLevels[i]) {
+            levelsChanged = true;
+            break;
+        }
+    }
+    if (!levelsChanged)
+        return;
+
     QVector<int> levels;
     levels.reserve(kBandCount);
-    for (int i = 0; i < kBandCount; ++i)
-        levels.append(static_cast<int>(qBound(0.0, m_levels[i], 100.0)));
+    for (int i = 0; i < kBandCount; ++i) {
+        const int level = static_cast<int>(qBound(0.0, m_levels[i], 100.0));
+        levels.append(level);
+        m_lastLevels[i] = level;
+    }
     Q_EMIT levelsReady(levels);
 }
 

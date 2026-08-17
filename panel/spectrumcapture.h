@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <memory>
 #include <mutex>
@@ -61,6 +62,10 @@ Q_SIGNALS:
 
 private:
     void runLoop();
+    // 条件变量等待辅助：返回是否因 stop 退出循环。
+    // state: 0=未请求采集（无限等待）, 1=请求中无活跃后端（节流重试）, 2=采集活跃
+    bool waitForWork(int state);
+    void notifyLoop();
     void selectBackend();
     void maybeReselect();
     void handleSamples(const float *data, size_t count);
@@ -72,6 +77,11 @@ private:
     std::atomic<bool> m_stop{false};
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_captureWanted{false};
+
+    // 循环唤醒：未请求采集时线程休眠在条件变量上（CPU≈0），
+    // startCapture/stopCapture/stop 经 notifyLoop() 唤醒。
+    std::mutex m_cvMutex;
+    std::condition_variable m_cv;
 
     // ---- 后端选择状态 ----
     std::vector<std::unique_ptr<CaptureBackend>> m_backends;
@@ -92,6 +102,9 @@ private:
     // ---- 分析状态 ----
     double m_levels[kBandCount] = {0.0};
     double m_peaks[kBandCount] = {0.0};
+    // 上次发射的整型带值（发射节流用；静音首帧全 0 跳过发射无妨，
+    // 空闲呼吸动画由 QML 侧自身定时器驱动，不依赖 levels 信号）
+    int m_lastLevels[kBandCount] = {0};
     bool m_analysisInited = false;
     double m_window[kAnalysisSize] = {0.0};
     bool m_available = false;
