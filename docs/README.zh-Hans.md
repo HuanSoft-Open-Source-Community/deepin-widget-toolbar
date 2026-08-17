@@ -57,9 +57,11 @@ flowchart LR
 ## 🚀 构建
 
 ```bash
-cmake -S . -B build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 ```
+
+> ⚡ **性能说明**：本地构建请带优化开关 `-DCMAKE_BUILD_TYPE=Release`（官方 Debian 包已是 Release；不带此开关的本地构建按 -O0 编译，性能显著下降）。面板对空闲态做了针对性优化：频谱分析在工作线程执行，无频谱小组件可见时线程休眠在条件变量上（CPU≈0）；分析算法为预计算 twiddle 因子的 128 点基数-2 FFT（替代朴素 DFT）；频谱小组件空闲“呼吸”动画从 30fps 降到约 5fps，音频启动时立即恢复 30fps。面板隐藏时卸载小组件对象树以释放 QML 与纹理内存，显示时异步重建。
 
 ## 📦 安装
 

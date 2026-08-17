@@ -63,9 +63,11 @@ flowchart LR
 先備上之所須，然後：
 
 ```bash
-cmake -S . -B build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 ```
+
+> ⚡ **省**：構於本機者，宜加開關 `-DCMAKE_BUILD_TYPE=Release`（官製 deb 本已 Release；不加之，則以 -O0 編譯，力遂大減）。欄於無事之際，力極省：頻譜之析，在別一工役；無頻譜之具可見，則役休眠於條件變量，CPU 幾於零。析法以一百二十八點基二 FFT，twiddle 預算，代樸素 DFT。頻譜之具，無聲時呼吸之動，自三十幀降至五幀；聲起立復三十幀。欄隱，則具之樹盡卸，以還 QML 與紋理之憶；欄現，則異時重建。
 
 ## 裝
 
