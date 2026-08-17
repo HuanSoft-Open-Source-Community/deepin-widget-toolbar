@@ -7,6 +7,7 @@ import QtQuick.Controls
 import QtQuick.Controls as QC
 import QtQuick.Dialogs.quickimpl
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import org.deepin.dtk 1.0
 import org.deepin.ds 1.0
 import org.deepin.widgettoolbar 1.0
@@ -543,6 +544,7 @@ PanelPopup {
             }
 
             Flickable {
+                id: settingsScroll
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
@@ -550,6 +552,18 @@ PanelPopup {
                 // 底部保留余量：设置项可滚动时最后一行不会紧贴可视区下缘，
                 // 避免 DTK Switch 等控件底部因亚像素/DPR 取整被裁掉几行像素。
                 contentHeight: settingsColumn.implicitHeight + 16
+
+                // 系统圆角遮罩：滚动内容按弹窗圆角裁剪
+                layer.enabled: true
+                layer.smooth: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: settingsScroll.width
+                        height: settingsScroll.height
+                        radius: DTK.platformTheme.windowRadius
+                    }
+                }
+
                 ScrollBar.vertical: ScrollBar {
                     policy: ScrollBar.AsNeeded
                     anchors.right: parent.right

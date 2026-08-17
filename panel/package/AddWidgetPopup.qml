@@ -6,6 +6,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import org.deepin.dtk 1.0
 import org.deepin.dtk.style 1.0 as DStyle
 import org.deepin.ds 1.0
@@ -89,6 +90,17 @@ PanelPopup {
                 clip: true
                 spacing: 4
                 model: Panel.widgetListModel
+
+                // 系统圆角遮罩：滚动内容按弹窗圆角裁剪
+                layer.enabled: true
+                layer.smooth: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: builtinList.width
+                        height: builtinList.height
+                        radius: DTK.platformTheme.windowRadius
+                    }
+                }
 
                 ScrollBar.vertical: ScrollBar {
                     policy: ScrollBar.AsNeeded
@@ -184,6 +196,17 @@ PanelPopup {
                 clip: true
                 spacing: 4
                 model: control.instanceIds
+
+                // 系统圆角遮罩：滚动内容按弹窗圆角裁剪
+                layer.enabled: true
+                layer.smooth: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: addedList.width
+                        height: addedList.height
+                        radius: DTK.platformTheme.windowRadius
+                    }
+                }
 
                 ScrollBar.vertical: ScrollBar {
                     policy: ScrollBar.AsNeeded

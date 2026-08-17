@@ -5,6 +5,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import org.deepin.dtk 1.0
 import org.deepin.dtk.style 1.0 as DStyle
 import org.deepin.ds 1.0
@@ -211,7 +212,8 @@ Window {
 
     // 网格参数：横向固定 4 列，纵向无限行（滚动）
     property int gridColumns: 4
-    property int cellSpacing: 8
+    // 卡片间距：8 → 12，不再紧凑但也不显空旷
+    property int cellSpacing: 12
     property int cellWidth: Math.floor((gridArea.width - (gridColumns - 1) * cellSpacing) / gridColumns)
     // 格子为正方形；2×2 小组件占 (2*cellWidth + spacing) 见方
     property int cellHeight: cellWidth
@@ -661,6 +663,17 @@ Window {
                 clip: true
                 contentWidth: width
                 contentHeight: root.animatedGridContentHeight
+
+                // 系统圆角遮罩：滚动内容按窗口圆角裁剪，滚动条一并入层
+                layer.enabled: true
+                layer.smooth: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: gridFlickable.width
+                        height: gridFlickable.height
+                        radius: DTK.platformTheme.windowRadius
+                    }
+                }
 
                 // DDE 样式滚动条：不活跃时自动隐藏（org.deepin.dtk ScrollBar）
                 ScrollBar.vertical: ScrollBar {
