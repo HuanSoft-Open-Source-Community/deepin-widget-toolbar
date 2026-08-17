@@ -11,7 +11,10 @@ import org.deepin.widgettoolbar 1.0
 // showLabels 控制表盘下方文字；
 // highlighted 用于区分本机时区。
 // preloadTime 开启时订阅宿主 ClockTime 的整秒广播，表盘只更新指针旋转，
-// 静态表盘缓存为单个 Canvas，不随秒针重绘，多个表盘可同时运动而互不拖累。
+// 静态表盘缓存为单个 Canvas，不随秒针重绘。
+// 指针按整秒步进（不插值）：所有表盘在同一 ClockTime 广播时刻跳动，
+// 每秒仅一次重绘，避免数十根指针各自运行 1000ms 旋转动画把场景图
+// 渲染逼到 vsync 常驻（17 个表盘时实测 ~13% 单核 → 趋近于 0）。
 Item {
     id: root
 
@@ -161,15 +164,6 @@ Item {
             anchors.fill: parent
             rotation: root.hourAngle
 
-            Behavior on rotation {
-                enabled: root.active
-                RotationAnimation {
-                    direction: RotationAnimation.Shortest
-                    duration: 1000
-                    easing.type: Easing.Linear
-                }
-            }
-
             Rectangle {
                 x: parent.width / 2 - root.handWidth / 2
                 y: parent.height / 2 - root.radius * 0.48
@@ -185,15 +179,6 @@ Item {
             anchors.fill: parent
             rotation: root.minuteAngle
 
-            Behavior on rotation {
-                enabled: root.active
-                RotationAnimation {
-                    direction: RotationAnimation.Shortest
-                    duration: 1000
-                    easing.type: Easing.Linear
-                }
-            }
-
             Rectangle {
                 x: parent.width / 2 - root.handWidth * 0.8
                 y: parent.height / 2 - root.radius * 0.68
@@ -208,15 +193,6 @@ Item {
             id: secondHand
             anchors.fill: parent
             rotation: root.secondAngle
-
-            Behavior on rotation {
-                enabled: root.active
-                RotationAnimation {
-                    direction: RotationAnimation.Shortest
-                    duration: 1000
-                    easing.type: Easing.Linear
-                }
-            }
 
             Rectangle {
                 x: parent.width / 2 - root.handWidth * 0.35
