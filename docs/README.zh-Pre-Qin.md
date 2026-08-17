@@ -7,6 +7,7 @@
 ![Qt 6](https://img.shields.io/badge/Qt-6.8+-green.svg)
 ![DTK 6](https://img.shields.io/badge/DTK-6.0+-orange.svg)
 ![dde-shell](https://img.shields.io/badge/dde--shell-2.0+-blue.svg)
+[![deepin Skills](https://img.shields.io/badge/deepin--Skills-Open--Source-blue.svg)](https://github.com/linuxdeepin/deepin-skills)
 
 deepin 桌面之側欄也，仿 Vista 之制，依 dde-shell 插件之體。
 
