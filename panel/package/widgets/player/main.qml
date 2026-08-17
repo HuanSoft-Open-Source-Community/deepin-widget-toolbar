@@ -43,15 +43,14 @@ Components.WidgetCard {
     readonly property bool wide: hostCols >= 4
     readonly property bool medium: !root.large && !root.wide
     readonly property bool wideCard: root.wide && !root.large
-    // 宽布局封面约占内容宽度 1/3，避免右侧留白过多
+    // 宽布局封面约占内容宽度 2/5，收窄右侧文字列，避免留白过多
     readonly property int coverSize: root.large ? 160
-        : (root.wideCard ? Math.round((root.width - root.margin * 2) / 3) : 64)
-    readonly property int titlePixelSize: root.large ? 20 : 15
-    readonly property int artistPixelSize: root.large ? 14 : 11
+        : (root.wideCard ? Math.round((root.width - root.margin * 2) * 0.4) : 64)
+    readonly property int titlePixelSize: root.large ? 20 : (root.wideCard ? 17 : 15)
+    readonly property int artistPixelSize: root.large ? 14 : (root.wideCard ? 13 : 11)
     readonly property int controlSize: root.large ? 40 : 28
     readonly property int controlSpacing: root.large ? 24 : (root.wideCard ? 16 : 14)
     readonly property int verticalSpacing: root.large ? 14 : 12
-    readonly property int gapLimit: 16
     readonly property color hoverFill: DTK.themeType === ApplicationHelper.DarkType
         ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.08)
     readonly property color pressFill: DTK.themeType === ApplicationHelper.DarkType
@@ -331,6 +330,7 @@ Components.WidgetCard {
 
             Text {
                 Layout.fillWidth: true
+                Layout.topMargin: 6
                 text: player.title.length > 0 ? player.title : qsTr("Unknown title")
                 font.pixelSize: root.titlePixelSize
                 font.weight: Font.DemiBold
@@ -351,12 +351,11 @@ Components.WidgetCard {
                 maximumLineCount: 1
             }
 
-            // 有界弹性空隙：控件贴底，但艺术家与控件之间不超过 gapLimit
+            // 弹性空隙：把控件推到卡片底部（信息靠上、控件靠下的经典布局）
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.minimumHeight: 0
-                Layout.maximumHeight: root.gapLimit
             }
 
             Loader {
@@ -366,13 +365,6 @@ Components.WidgetCard {
                 visible: root.showControls
                 width: root.controlSize * 3 + root.controlSpacing * 2
                 height: root.controlSize
-            }
-
-            // 底部兜底弹性空隙：保证控件行贴底
-            Item {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.minimumHeight: 0
             }
         }
     }
