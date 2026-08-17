@@ -62,7 +62,7 @@
             "type": "boolean",
             "label": "Highlight local time",
             "label[zh_CN]": "高亮本机时间",
-            "default": true
+            "default": false
         },
         {
             "key": "backgroundColor",

@@ -47,8 +47,9 @@ Components.WidgetCard {
     property bool panelVisible: Panel.visible
     property bool showLabels: widgetConfig && widgetConfig.showLabels !== undefined
         ? widgetConfig.showLabels : true
+    // 缺省不高亮本机时区（可在设置中开启）
     property bool highlightLocal: widgetConfig && widgetConfig.highlightLocal !== undefined
-        ? widgetConfig.highlightLocal : true
+        ? widgetConfig.highlightLocal : false
     hostCols: 4
     hostRows: 2
     property int dialCount: Math.max(1, hostCols * hostRows)

@@ -2,8 +2,8 @@
     "id": "clock",
     "name": "Clock",
     "name[zh_CN]": "时钟",
-    "description": "A digital clock widget",
-    "description[zh_CN]": "数字时钟小组件",
+    "description": "A clock widget with digital and analog modes",
+    "description[zh_CN]": "数字/指针双模式时钟小组件",
     "version": "1.0.0",
     "apiVersion": "1.2",
     "author": "deepin-widget-toolbar",
@@ -30,7 +30,7 @@
             "type": "enum",
             "label": "Clock mode",
             "label[zh_CN]": "时钟模式",
-            "default": "digital",
+            "default": "analog",
             "options": [
                 { "value": "digital", "label": "Digital", "label[zh_CN]": "数字" },
                 { "value": "analog", "label": "Analog", "label[zh_CN]": "指针" }

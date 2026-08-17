@@ -8,7 +8,7 @@ import org.deepin.ds 1.0
 import org.deepin.widgettoolbar 1.0
 import "../components" as Components
 
-// 内置示例小组件：数字/指针双模式时钟（默认数字、2×2）
+// 内置示例小组件：数字/指针双模式时钟（默认指针、2×2）
 Components.WidgetCard {
     id: root
 
