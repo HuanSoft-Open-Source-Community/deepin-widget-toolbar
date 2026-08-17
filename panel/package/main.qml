@@ -712,10 +712,15 @@ Window {
                                 NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
                             }
 
-                            // 小组件渲染入口（qrc 或本地文件），由宿主按 widgetId 解析
+                            // 小组件渲染入口（qrc 或本地文件），由宿主按 widgetId 解析。
+                            // 面板隐藏时卸载小组件对象树（释放 QML 对象与纹理内存），
+                            // 显示时异步重建；各小组件 Component.onDestruction 已实现
+                            // 采集/监控清理（setActive(false)/releaseMonitor 等）。
                             Loader {
                                 id: widgetLoader
                                 anchors.fill: parent
+                                active: Panel.visible
+                                asynchronous: true
                                 source: Panel.widgetManager.entryUrl(Panel.widgetManager.instanceWidgetId(modelData))
                             }
 

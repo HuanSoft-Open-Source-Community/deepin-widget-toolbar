@@ -145,7 +145,8 @@ Components.WidgetCard {
                 fillMode: Image.PreserveAspectCrop
                 smooth: true
                 visible: root.showCover
-                layer.enabled: true
+                // 仅在有真实封面时启用圆角遮罩图层，避免无封面时无谓离屏 FBO
+                layer.enabled: root.showCover && player.artUrl.length > 0
                 layer.smooth: true
                 layer.effect: OpacityMask {
                     maskSource: Rectangle {

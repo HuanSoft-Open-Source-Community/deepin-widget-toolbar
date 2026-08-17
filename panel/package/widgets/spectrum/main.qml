@@ -36,6 +36,25 @@ Components.WidgetCard {
 
     // 需要采集的条件：实例可见且面板可见
     readonly property bool captureActive: root.visible && root.panelVisible
+    // 空闲判定：采集不可用或整体音量极低（与 onPaint 的 idle 判定一致）。
+    // 空闲时重绘降到 5fps（呼吸动画），仅在有真实电平变化时回到 30fps，
+    // 避免静置状态下 30fps 空转拖累主线程与渲染线程。
+    property bool idleState: true
+    // 空闲重绘间隔（呼吸动画 ~5fps，观感平滑且开销为 30fps 的 1/6）
+    readonly property int idleIntervalMs: 200
+
+    function computeIdle() {
+        if (!AudioVisualizer.available)
+            return true
+        var levels = AudioVisualizer.levels
+        var bandCount = AudioVisualizer.bandCount
+        var peak = 0
+        for (var k = 0; k < bandCount; k++) {
+            if (levels.length > k && levels[k] > peak)
+                peak = levels[k]
+        }
+        return peak < 3
+    }
     // 柱数随宽度自适应（8–48 根）
     readonly property int barCount: Math.max(8,
         Math.min(48, Math.floor((root.width - root.margin * 2) / 12)))
@@ -90,11 +109,26 @@ Components.WidgetCard {
             AudioVisualizer.setActive(root.instanceId, false)
     }
 
+    // 空闲呼吸 5fps；levels 变化（播放开始）由 Connections 立即切回 30fps
     Timer {
-        interval: 33
+        interval: root.idleState ? root.idleIntervalMs : 33
         repeat: true
         running: root.captureActive
         onTriggered: spectrumCanvas.requestPaint()
+    }
+
+    Connections {
+        target: AudioVisualizer
+        function onLevelsChanged() {
+            var wasIdle = root.idleState
+            root.idleState = root.computeIdle()
+            if (wasIdle && !root.idleState)
+                spectrumCanvas.requestPaint()   // 播放开始：立即重绘
+        }
+        function onAvailableChanged() {
+            root.idleState = root.computeIdle()
+            spectrumCanvas.requestPaint()
+        }
     }
 
     Canvas {
