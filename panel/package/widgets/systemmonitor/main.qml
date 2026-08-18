@@ -35,14 +35,24 @@ Components.WidgetCard {
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
     backgroundColor: Components.ColorUtils.opaqueColor(
         widgetConfig && widgetConfig.backgroundColor, "#ff8b5cf6")
-    textColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.textColor, "#ffffff")
-    property color titleTextColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.titleTextColor, "#ffffff")
-    property color labelTextColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.labelTextColor, "#ffffff")
-    property color valueTextColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.valueTextColor, "#ffffff")
+    // 透明模式（实例透明开关或面板级卡片透明模式）下文字切主题自适应色，
+    // 与 clock/calendar/todo/worldtime 保持一致；内容色（轨道/进度条）保留配置值。
+    textColor: root.effectiveTransparent
+        ? root.themeTextColor
+        : Components.ColorUtils.resolveColor(
+            widgetConfig && widgetConfig.textColor, "#ffffff")
+    property color titleTextColor: root.effectiveTransparent
+        ? root.themeTextColor
+        : Components.ColorUtils.resolveColor(
+            widgetConfig && widgetConfig.titleTextColor, "#ffffff")
+    property color labelTextColor: root.effectiveTransparent
+        ? root.themeTextColor
+        : Components.ColorUtils.resolveColor(
+            widgetConfig && widgetConfig.labelTextColor, "#ffffff")
+    property color valueTextColor: root.effectiveTransparent
+        ? root.themeTextColor
+        : Components.ColorUtils.resolveColor(
+            widgetConfig && widgetConfig.valueTextColor, "#ffffff")
     property color barTrackColor: Components.ColorUtils.resolveColor(
         widgetConfig && widgetConfig.barTrackColor, "#ffffff")
     property color barColor: Components.ColorUtils.resolveColor(
