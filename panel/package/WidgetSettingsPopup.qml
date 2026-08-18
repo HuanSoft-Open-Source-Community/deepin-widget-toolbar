@@ -284,7 +284,6 @@ PanelPopup {
                     Repeater {
                         model: control.visibleSchema
                         delegate: Components.SettingsRow {
-                            row: modelData
                             host: control
                         }
                     }

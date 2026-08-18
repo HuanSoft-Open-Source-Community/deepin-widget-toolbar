@@ -13,13 +13,15 @@ import org.deepin.dtk 1.0
 RowLayout {
     id: root
 
-    // 宿主注入
-    required property var row
+    // 宿主注入：modelData 由 Repeater 以属性方式注入（命名组件委托 +
+    // required 属性时，隐式 modelData 上下文变量在绑定处不可用，见
+    // WidgetSettingsPopup 的 Repeater）；host 由配置面板传入
+    required property var modelData
     required property var host
 
-    property string key: row.key
-    property string type: row.type
-    property var options: row.options ? row.options : []
+    property string key: modelData.key
+    property string type: modelData.type
+    property var options: modelData.options ? modelData.options : []
 
     Layout.fillWidth: true
     spacing: 8
@@ -27,7 +29,7 @@ RowLayout {
     Text {
         Layout.preferredWidth: 88
         visible: type !== "timezoneList"
-        text: row.label ? row.label : row.key
+        text: modelData.label ? modelData.label : modelData.key
         font: DTK.fontManager.t6
         color: palette.windowText
         elide: Text.ElideRight
@@ -333,7 +335,7 @@ RowLayout {
 
         Text {
             Layout.fillWidth: true
-            text: row.label ? row.label : row.key
+            text: modelData.label ? modelData.label : modelData.key
             font: DTK.fontManager.t6
             color: palette.windowText
         }
