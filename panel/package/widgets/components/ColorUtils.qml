@@ -19,13 +19,16 @@ QtObject {
 
     // 卡片底色专用：透明背景开关关闭时底色必须不透明，
     // 防止旧实例里保存的半透明色让卡片露出“白边/底色不生效”的观感。
+    // 8 位色为 #AARRGGBB：RRGGBB 是第 3~8 个字符（slice(3, 9)）；
+    // 取 slice(1, 7) 会把 AA+RR+GG 拼成新 RGB，导致底色错位
+    //（如粉 #ffffc0cb 变黄、紫 #ff8b5cf6 变橙）。
     function opaqueColor(value, fallback) {
         var color = resolveColor(value, fallback)
         if (typeof color !== "string")
             return color
         var match = /^#([0-9a-fA-F]{8})$/.exec(color)
         if (match)
-            return "#ff" + color.slice(1, 7)
+            return "#ff" + color.slice(3, 9)
         return color
     }
 }
