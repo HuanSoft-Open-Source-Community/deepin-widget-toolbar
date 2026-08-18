@@ -8,7 +8,6 @@
 ![DTK 6](https://img.shields.io/badge/DTK-6.0+-orange.svg)
 ![dde-shell](https://img.shields.io/badge/dde--shell-2.0+-blue.svg)
 [![deepin Skills](https://img.shields.io/badge/deepin--Skills-Open--Source-blue.svg)](https://github.com/linuxdeepin/deepin-skills)
-[![CI](https://github.com/HuanSoft-Open-Source-Community/deepin-widget-toolbar/actions/workflows/ci.yml/badge.svg)](https://github.com/HuanSoft-Open-Source-Community/deepin-widget-toolbar/actions/workflows/ci.yml)
 
 面向 deepin 桌面、基于 dde-shell 插件体系的 Vista 风格小组件工具栏。
 
