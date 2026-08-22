@@ -22,9 +22,13 @@ Item {
     // 面板距 dock 的空隙 = 距屏幕其他边缘的空隙，视觉对称。
     property int contentPadding: 10
 
-    property int topMargin: 0
-    property int rightMargin: 0
-    property int bottomMargin: 0
+    // 三条边距的下限恒为 contentPadding（desiredMargin = layerShellMargin + contentPadding），
+    // 0 从来不是合法值：初值直接取 contentPadding，保证主面板 DLayerShellWindow 绑定
+    // 首次求值即非 0——否则窗口首次映射（visible 绑定先于边距绑定求值）会以 0 边距
+    // 计算几何，X11 模拟层把面板拉满全高（上下边距视觉为 0）。
+    property int topMargin: contentPadding
+    property int rightMargin: contentPadding
+    property int bottomMargin: contentPadding
 
     // dock 位置枚举与 dde-shell dock 一致：0=Top 1=Right 2=Bottom 3=Left
     function windowMargin(position) {
@@ -166,5 +170,11 @@ Item {
                 stop()
             }
         }
+    }
+
+    // 子组件先于父组件（主面板 Window）完成：这里先刷新一次，让边距在
+    // 主面板 onCompleted 之前就已就绪，不依赖调用方的 restart() 纪律。
+    Component.onCompleted: {
+        root.refresh()
     }
 }

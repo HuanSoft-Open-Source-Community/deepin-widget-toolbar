@@ -9,6 +9,10 @@
 
 DS_USE_NAMESPACE
 
+// 与 main.qml 的 contentPadding 保持一致：三条 layer-shell 边距的下限。
+// 边距任何时刻都不应为 0（0 会让面板在首次映射时被拉满全高）。
+static constexpr int kDefaultMargin = 10;
+
 #include <QDebug>
 #include <QGuiApplication>
 #include <QPlatformSurfaceEvent>
@@ -46,6 +50,16 @@ void WindowGuard::attach(QQuickWindow *window)
         // X11 下边距由 0 变为正确值后，模拟层可能不按最新边距重放窗口几何，
         // 这里监听边距变化直接重算锚定几何（enforceFrameless 内部仅 xcb 生效）。
         connect(shell, &DLayerShellWindow::marginsChanged, this, &WindowGuard::enforceFrameless);
+        // QML 端的边距绑定在组件完成阶段才求值，而本 attach()（rootObjectChanged 时触发）
+        // 早于该阶段：窗口首次映射前若边距仍为 0，模拟层/几何守护会以 0 边距计算几何，
+        // 面板被拉满全高（首次打开时上下边距为 0）。这里先按 contentPadding（main.qml 中
+        // 的常量，现为 10，如修改需同步）下限补齐，任何求值顺序下都不会出现 0 边距。
+        if (shell->topMargin() == 0)
+            shell->setTopMargin(kDefaultMargin);
+        if (shell->rightMargin() == 0)
+            shell->setRightMargin(kDefaultMargin);
+        if (shell->bottomMargin() == 0)
+            shell->setBottomMargin(kDefaultMargin);
     }
     enforceFrameless();
     m_geometryTicks = 0;

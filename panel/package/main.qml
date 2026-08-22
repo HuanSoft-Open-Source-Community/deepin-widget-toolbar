@@ -340,6 +340,14 @@ Window {
     property int contentPadding: 10
     property int contentWidth: 360
 
+    // 边距绑定必须声明在 visible 之前：组件完成阶段按声明顺序求值绑定，
+    // 先求值边距（初值即 contentPadding，见 DockMarginHelper）再求值 visible，
+    // 保证窗口首次映射时 DLayerShellWindow 边距已非 0——否则 X11 模拟层以 0 边距
+    // 计算几何、Wayland 首帧提交 0 边距状态，面板首次打开被拉满全高（上下边距为 0）。
+    DLayerShellWindow.topMargin: dockMargin.topMargin
+    DLayerShellWindow.rightMargin: dockMargin.rightMargin
+    DLayerShellWindow.bottomMargin: dockMargin.bottomMargin
+
     visible: Panel.visible
     flags: Qt.Tool | Qt.FramelessWindowHint
     // X11 下 dde-shell 的 LayerShellEmulation 在 LayerButtom 分支会用 setFlags() 整体替换窗口 flags
@@ -401,9 +409,6 @@ Window {
     // 图标避让无效。置底时仅保留 LayerButtom 层语义，不再向合成器声明排除区域。
     DLayerShellWindow.anchors: DLayerShellWindow.AnchorRight
         | DLayerShellWindow.AnchorTop | DLayerShellWindow.AnchorBottom
-    DLayerShellWindow.topMargin: dockMargin.topMargin
-    DLayerShellWindow.rightMargin: dockMargin.rightMargin
-    DLayerShellWindow.bottomMargin: dockMargin.bottomMargin
     DLayerShellWindow.keyboardInteractivity: DLayerShellWindow.KeyboardInteractivityOnDemand
 
     palette: DTK.palette
