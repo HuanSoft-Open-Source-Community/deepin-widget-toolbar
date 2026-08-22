@@ -1,3 +1,14 @@
+deepin-widget-toolbar (0.1.1.0-1) unstable; urgency=medium
+
+  * fix(panel): ensure non-zero layer-shell margins on first map
+  * fix(panel): inject modelData into SettingsRow delegate to fix blank widget settings
+  * fix(components): correct opaqueColor slice for 8-digit hex card colors
+  * fix(widgets): theme system monitor text colors in card transparent mode
+  * chore(scripts): one-stop install/uninstall with auto build, sudo and restart
+  * chore: remove GitHub Actions CI/CD workflows; docs: deepin Skills badge
+
+ -- 燕戏竹林 <yxzl666xx@outlook.com>  Sun, 23 Aug 2026 03:33:01 +0800
+
 deepin-widget-toolbar (0.1.0.0-1) unstable; urgency=medium
 
   * Initial Debian packaging: dde-shell sidebar panel plugin and

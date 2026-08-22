@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 cmake_minimum_required(VERSION 3.13)
-project(deepin-widget-toolbar VERSION 0.1.0.0 LANGUAGES CXX)
+project(deepin-widget-toolbar VERSION 0.1.1.0 LANGUAGES CXX)
 
 # debhelper 的 cmake 构建系统会自动注入这些开关；显式引用它们，
 # 避免在 Debian 构建时出现 "Manually-specified variables were not used" 警告。
