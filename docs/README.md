@@ -68,8 +68,8 @@ cmake --build build -j$(nproc)
 ## 📦 Installation
 
 ```bash
-sudo ./install.sh          # cmake --install build
-systemctl --user restart dde-shell@DDE
+./install.sh               # one-stop: rebuild + sudo deploy + restart dde-shell
+./uninstall.sh             # one-stop: remove plugins/caches + restart dde-shell
 ```
 
 ## 🖱️ Usage
@@ -105,8 +105,8 @@ systemctl --user restart dde-shell@DDE
 ```
 deepin-widget-toolbar/
 ├── CMakeLists.txt          # top-level build (panel + tray)
-├── install.sh              # system install script
-├── uninstall.sh            # uninstall script (paired with install.sh)
+├── install.sh              # one-stop install (build + sudo deploy + restart)
+├── uninstall.sh            # one-stop uninstall (remove + cleanup + restart)
 ├── build-deb.sh            # Debian packaging script (temp copy dpkg-buildpackage → dist/)
 ├── LICENSE                 # GNU GPL v3 full text
 ├── debian/                 # Debian packaging config (control/rules/postinst/postrm)

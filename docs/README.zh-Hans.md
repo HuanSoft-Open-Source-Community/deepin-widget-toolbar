@@ -68,8 +68,8 @@ cmake --build build -j$(nproc)
 ## 📦 安装
 
 ```bash
-sudo ./install.sh          # cmake --install build
-systemctl --user restart dde-shell@DDE
+./install.sh               # 一键安装：自动构建 + 请求管理员权限部署 + 重启 dde-shell
+./uninstall.sh             # 一键卸载：删除插件与缓存残留 + 重启 dde-shell
 ```
 
 ## 🖱️ 使用
@@ -105,8 +105,8 @@ systemctl --user restart dde-shell@DDE
 ```
 deepin-widget-toolbar/
 ├── CMakeLists.txt          # 顶层构建（panel + tray）
-├── install.sh              # 系统安装脚本
-├── uninstall.sh            # 卸载脚本（与 install.sh 配套）
+├── install.sh              # 一键安装（构建 + sudo 部署 + 重启）
+├── uninstall.sh            # 一键卸载（删除 + 清理 + 重启）
 ├── build-deb.sh            # Debian 打包脚本（临时副本 dpkg-buildpackage → dist/）
 ├── LICENSE                 # GNU GPL v3 全文
 ├── debian/                 # Debian 打包配置（control/rules/postinst/postrm）
