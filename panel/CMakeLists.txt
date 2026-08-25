@@ -68,7 +68,10 @@ add_library(ds-widget-toolbar SHARED
     widgetresources.qrc
 )
 
-target_link_libraries(ds-widget-toolbar PRIVATE Dde::Shell Qt6::Qml Qt6::DBus Qt6::Concurrent m)
+# xcb：WindowGuard 在 X11 下直接以 xcb_change_property 恢复窗口类型
+# （_NET_WM_WINDOW_TYPE），防止 kwin 把面板当普通窗口垂直最大化
+find_package(XCB REQUIRED)
+target_link_libraries(ds-widget-toolbar PRIVATE Dde::Shell Qt6::Qml Qt6::DBus Qt6::Concurrent m XCB::XCB)
 
 # PipeWire 后端的 SPA POD 使用官方 inline builder（仅需头文件，无链接依赖）；
 # 头文件缺失时回退手写 POD（pipewirebackend.cpp 内 HAVE_SPA_POD_BUILDER=0）

@@ -349,7 +349,14 @@ Window {
     DLayerShellWindow.bottomMargin: dockMargin.bottomMargin
 
     visible: Panel.visible
-    flags: Qt.Tool | Qt.FramelessWindowHint
+    // flags 刻意不含 Qt.FramelessWindowHint：Qt 对带 Frameless 的窗口写 _MOTIF_WM_HINTS 时
+    // 不设置 MWM_HINTS_FUNCTIONS 位（functions 恒为 MWM_FUNC_ALL），kwin 据此判定窗口
+    // 可最大化（isMaximizable()=true），首次映射高度达到工作区时被垂直最大化（y=0、
+    // 上下边距为 0）并被钉住。改加 Min/Close 按钮 hint（不含 Maximize）后 Qt 会写出
+    // functions=MOVE|RESIZE|MINIMIZE|CLOSE（含 FUNCTIONS 位、无 MAXIMIZE），kwin 判定
+    // 不可最大化，从根源杜绝拉伸。无边框外观由 DWindow（_DEEPIN_SCISSOR_WINDOW）与
+    // kwin 对 Notification/Dock 类型窗口不装饰保证，与通知中心（flags: Qt.Tool）一致。
+    flags: Qt.Tool | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint
     // X11 下 dde-shell 的 LayerShellEmulation 在 LayerButtom 分支会用 setFlags() 整体替换窗口 flags
     // （清掉 Qt.Tool/Qt.FramelessWindowHint），且窗口重建后窗口类型属性丢失，都会让面板回落为
     // 普通窗口被 kwin 装饰出标题栏与窗口按钮。主兜底在 C++ 端（WidgetToolbarPanel 的事件过滤器
@@ -385,10 +392,17 @@ Window {
         // 不依赖 X11 LayerShellEmulation 的 layer→窗口类型映射：该映射只在 layerChanged
         // 信号时应用，窗口 hide/show 重建原生窗口后不会重新执行（QWindow 对象不变时
         // DLayerShellWindow 与模拟器都不会重建），导致窗口类型/层级丢失。
+        // 注意：setFlags 会触发 QXcbWindow 按 flags 重算 _NET_WM_WINDOW_TYPE
+        // （Qt.Tool → UTILITY + NORMAL），覆盖模拟层设置的 Notification/Dock 类型，
+        // kwin 会把面板当普通窗口垂直最大化（首次打开上下边距为 0）——窗口类型由
+        // C++ WindowGuard::enforceWindowType() 在每次 setFlags 后恢复（置顶
+        // =Notification、置底=Dock），本函数只负责 flags。
         // Wayland 下本函数不调用（合成器按 layer 管理），flags 无副作用。
         root.flags = layerIsBottom
-            ? Qt.WindowStaysOnBottomHint | Qt.Tool | Qt.FramelessWindowHint
-            : Qt.WindowStaysOnTopHint | Qt.Tool | Qt.FramelessWindowHint
+            ? Qt.WindowStaysOnBottomHint | Qt.Tool
+              | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint
+            : Qt.WindowStaysOnTopHint | Qt.Tool
+              | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint
     }
 
     // 与任务栏间距：计算与轮询在 DockMarginHelper，输出属性供绑定消费
@@ -402,11 +416,13 @@ Window {
     // 置顶：Overlay 层（在所有窗口之上）；置底：Buttom 层（可被普通窗口覆盖）
     DLayerShellWindow.layer: Panel.pinned
         ? DLayerShellWindow.LayerOverlay : DLayerShellWindow.LayerButtom
-    // 注意：不再设置 exclusionZone。X11 下它会被 LayerShellEmulation 转成
-    // _NET_WM_STRUT_PARTIAL 压缩整个工作区（导致全屏/最大化窗口被挤出黑边），
-    // Wayland 下也会影响其他 layer-shell 窗口；而 dde-desktop 的桌面图标区域
-    // 只按 dock 的 frontendWindowRect 计算、不读工作区，故 exclusionZone 对
-    // 图标避让无效。置底时仅保留 LayerButtom 层语义，不再向合成器声明排除区域。
+    // 不向合成器声明排除区域：X11 下 exclusionZone 会被 LayerShellEmulation 转成
+    // _NET_WM_STRUT_PARTIAL（默认 0 也会生成 0 宽 strut），实测带 strut 的窗口会被
+    // kwin 当作工作区保留窗口特殊放置（首次映射被拉伸到全高、上下边距为 0）；
+    // Wayland 下 exclusionZone 也会影响其他 layer-shell 窗口；而 dde-desktop 的
+    // 桌面图标区域只按 dock 的 frontendWindowRect 计算、不读工作区，故 exclusionZone
+    // 对图标避让无效。置底时仅保留 LayerButtom 层语义，不声明排除区域。
+    DLayerShellWindow.exclusionZone: Qt.platform.pluginName === "wayland" ? 0 : -1
     DLayerShellWindow.anchors: DLayerShellWindow.AnchorRight
         | DLayerShellWindow.AnchorTop | DLayerShellWindow.AnchorBottom
     DLayerShellWindow.keyboardInteractivity: DLayerShellWindow.KeyboardInteractivityOnDemand
