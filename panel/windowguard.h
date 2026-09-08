@@ -40,6 +40,13 @@ public:
     // 同步面板置顶状态（决定恢复的 flags）
     void setPinned(bool pinned);
 
+    // 请求面板窗口获得 OS 键盘焦点（便签等文本小组件点击进入编辑时经
+    // WidgetHost 调用）。X11 下 kwin 不因点击激活 Dock/Notification 类面板窗，
+    // 仅 QML 取焦时光标会闪但按键到不了窗口；这里先 requestActivate()
+    // （_NET_ACTIVE_WINDOW，带最近用户交互时间戳），仍未激活则延迟直设
+    // X 输入焦点兜底。Wayland 下 requestActivate 无副作用，直接返回。
+    static void ensureKeyboardFocus(QQuickWindow *window);
+
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 

@@ -60,11 +60,49 @@ Components.WidgetCard {
 
     // 主面板拖放层接收按下以持有鼠标抓取；普通点击由此转发，
     // 让便签仍能进入编辑并把光标放到点击位置。
-    function handleHostClick(x, y) {
+    // 注意：X11 下面板是 Dock/Notification 类窗口，kwin 不因点击授予键盘
+    // 焦点——只做 QML 取焦时光标会闪但按键到不了窗口。因此点击进入编辑
+    // 时须随用户手势请求窗口激活（仅本组件点击触发，媒体按钮等普通点击
+    // 不会借 handleHostClick 抢走其它应用的键盘焦点）。
+    property point lastClickPos: Qt.point(0, 0)
+    property string textAtClick: ""
+
+    function focusNoteAt(x, y) {
         var p = noteArea.mapFromItem(root, x, y)
         noteArea.forceActiveFocus()
         var pos = noteArea.positionAt(p.x, p.y)
         noteArea.cursorPosition = Math.max(0, pos)
+    }
+
+    function handleHostClick(x, y) {
+        WidgetHost.activateWindow()
+        root.lastClickPos = Qt.point(x, y)
+        root.textAtClick = noteArea.text
+        focusNoteAt(x, y)
+        // 窗口激活是异步的（X11 下 kwin 处理激活后才 FocusIn），期间窗口
+        // 激活事件可能重置 QML 焦点；短暂重发取焦直到稳定（有界，3×150ms，
+        // 用户一旦开始输入即停，不与按键抢光标）。
+        focusRetry.left = 3
+        focusRetry.restart()
+    }
+
+    Timer {
+        id: focusRetry
+        interval: 150
+        repeat: true
+        property int left: 0
+        onTriggered: {
+            if (left <= 0) {
+                stop()
+                return
+            }
+            --left
+            if (noteArea.text !== root.textAtClick) {
+                stop()
+                return
+            }
+            root.focusNoteAt(root.lastClickPos.x, root.lastClickPos.y)
+        }
     }
 
     // 标题区高度：透明模式为纯文字（配色模式前样式），无标题条占位

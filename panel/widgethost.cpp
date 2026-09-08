@@ -5,6 +5,10 @@
 #include "widgethost.h"
 
 #include "widgetmanager.h"
+#include "widgettoolbarpanel.h"
+#include "windowguard.h"
+
+#include <QQuickWindow>
 
 WidgetHost::WidgetHost(WidgetManager *manager, QObject *parent)
     : QObject(parent)
@@ -24,4 +28,12 @@ QStringList WidgetHost::usedZones(const QString &excludingInstanceId)
     if (!m_manager)
         return QStringList();
     return m_manager->usedZones(excludingInstanceId);
+}
+
+void WidgetHost::activateWindow()
+{
+    auto *panel = qobject_cast<WidgetToolbarPanel *>(parent());
+    if (!panel)
+        return;
+    WindowGuard::ensureKeyboardFocus(panel->rootWindow());
 }

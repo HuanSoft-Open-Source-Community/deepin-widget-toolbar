@@ -16,6 +16,7 @@ using Dtk::Core::DConfig;
 class WidgetManager;
 class WidgetListModel;
 class WindowGuard;
+class QQuickWindow;
 
 class WidgetToolbarPanel : public DPanel
 {
@@ -44,6 +45,10 @@ public:
 
     WidgetManager *widgetManager() const;
     WidgetListModel *widgetListModel() const;
+
+    // 当前小组件宿主窗口（rootObject 即 QML 主窗口）；小组件请求键盘
+    // 输入（便签文本编辑等）时用于激活窗口，rootObject 未就绪返回 nullptr
+    QQuickWindow *rootWindow() const;
 
 public Q_SLOTS:
     // 供 D-Bus（org.deepin.dde.widgettoolbar）与 QML 调用的显隐控制

@@ -79,6 +79,30 @@ void WindowGuard::setPinned(bool pinned)
     enforceFrameless();
 }
 
+// 小组件点击进入文本编辑时的键盘焦点请求（见头文件注释）。
+void WindowGuard::ensureKeyboardFocus(QQuickWindow *window)
+{
+    if (!window)
+        return;
+    // X11：requestActivate() 向 kwin 发送 _NET_ACTIVE_WINDOW（Qt 附带最近一次
+    // 用户交互的时间戳，kwin 视为用户手势放行激活）。
+    window->requestActivate();
+    if (QGuiApplication::platformName() != "xcb")
+        return; // Wayland：layer-shell OnDemand 表面由合成器在点击时授予键盘
+    // kwin 对 Dock/Notification 等面板类型可能仍拒绝激活；延迟后确认窗口
+    // 仍未激活则直设 X 输入焦点兜底（与 xdotool windowfocus 同路径，kwin
+    // 接受；触发前提是用户刚在本窗口内点击，不会凭空抢焦点）。
+    QTimer::singleShot(250, window, [window]() {
+        if (window->isActive() || QGuiApplication::platformName() != "xcb")
+            return;
+        auto *x11App = qGuiApp->nativeInterface<QNativeInterface::QX11Application>();
+        if (!x11App || !x11App->connection() || !window->handle())
+            return;
+        xcb_set_input_focus(x11App->connection(), XCB_INPUT_FOCUS_PARENT,
+                            window->winId(), XCB_CURRENT_TIME);
+    });
+}
+
 // 期望 flags 与 QML 端 applyLayerFlags 保持一致：置顶时 WindowStaysOnTopHint，
 // 置底时 WindowStaysOnBottomHint。仅在 xcb 平台需要（Wayland 下 layer-shell
 // 窗口由合成器管理；X11 下 LayerShellEmulation 的 layer 映射在窗口 hide/show

@@ -1,7 +1,7 @@
-# 小组件接口规范（v1.5）
+# 小组件接口规范（v1.6）
 
 > 本文档定义 deepin-widget-toolbar 面板（宿主）与小组件之间的开放接口契约。
-> 当前宿主接口版本：1.5；同时兼容 1.0/1.1/1.2/1.3/1.4 小组件。
+> 当前宿主接口版本：1.6；同时兼容 1.0/1.1/1.2/1.3/1.4/1.5 小组件。
 
 ## 1. 架构
 
@@ -241,12 +241,13 @@
 
 信号：`epochMsChanged()`（整秒变化时发出；同一秒内只发一次）。
 
-### WidgetHost（实例配置回写）
+### WidgetHost（实例配置回写 / 键盘焦点请求）
 
 | 方法 | 签名 | 说明 |
 |---|---|---|
 | `saveConfig` | `bool saveConfig(string instanceId, object values)` | 保存该实例的配置；仅允许 manifest `settings` 中声明的 key，供小组件在运行期（如缩放补位）持久化设置 |
 | `usedZones` | `string[] usedZones(string excludingInstanceId)` | 其它实例 `dials` 配置中已使用的时区 id（世界时间跨实例地区唯一性用） |
+| `activateWindow` | `void activateWindow()` | 小组件点击进入文本编辑（如便签）时请求 OS 键盘焦点。X11 下面板是 Dock/Notification 类窗口，kwin 不因点击授予键盘焦点，仅 QML 取焦时光标会闪但按键无法送达；本调用随用户手势请求窗口激活（未被 kwin 接受时宿主再直设 X 输入焦点兜底）。Wayland 下为无副作用请求。仅应在确实需要键盘输入的用户手势中调用，避免普通点击（如媒体控制）抢走其它应用的键盘焦点 |
 
 ### AudioVisualizer（系统音频频谱）
 
@@ -310,7 +311,7 @@
 
 - 小组件声明 `apiVersion`；宿主加载时校验，不兼容则拒绝加载并提示，不静默失败。
 - 宿主新增接口走次版本递增，不破坏既有小组件（1.0 小组件仍可加载）。
-- 当前宿主实现：`apiVersion = "1.5"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型；1.5 新增 `AudioVisualizer` 系统音频频谱代理）。
+- 当前宿主实现：`apiVersion = "1.6"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型；1.5 新增 `AudioVisualizer` 系统音频频谱代理；1.6 新增 `WidgetHost.activateWindow` 键盘焦点请求）。
 
 ## 10. 生命周期（当前范围）
 

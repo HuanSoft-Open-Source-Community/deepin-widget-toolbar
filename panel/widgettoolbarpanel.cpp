@@ -128,6 +128,11 @@ WidgetListModel *WidgetToolbarPanel::widgetListModel() const
     return m_widgetListModel;
 }
 
+QQuickWindow *WidgetToolbarPanel::rootWindow() const
+{
+    return qobject_cast<QQuickWindow *>(rootObject());
+}
+
 void WidgetToolbarPanel::setVisible(bool visible)
 {
     if (m_visible == visible) {
