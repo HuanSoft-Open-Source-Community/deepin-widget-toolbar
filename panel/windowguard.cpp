@@ -84,22 +84,46 @@ void WindowGuard::ensureKeyboardFocus(QQuickWindow *window)
 {
     if (!window)
         return;
-    // X11：requestActivate() 向 kwin 发送 _NET_ACTIVE_WINDOW（Qt 附带最近一次
-    // 用户交互的时间戳，kwin 视为用户手势放行激活）。
+    // 常规激活请求：置顶（Notification）等 kwin 愿意放行的场景直接生效；
+    // Dock 类面板窗会被 kwin 拒绝，真正生效的是下方按 X 真实焦点直设。
     window->requestActivate();
     if (QGuiApplication::platformName() != "xcb")
         return; // Wayland：layer-shell OnDemand 表面由合成器在点击时授予键盘
-    // kwin 对 Dock/Notification 等面板类型可能仍拒绝激活；延迟后确认窗口
-    // 仍未激活则直设 X 输入焦点兜底（与 xdotool windowfocus 同路径，kwin
-    // 接受；触发前提是用户刚在本窗口内点击，不会凭空抢焦点）。
-    QTimer::singleShot(250, window, [window]() {
-        if (window->isActive() || QGuiApplication::platformName() != "xcb")
-            return;
-        auto *x11App = qGuiApp->nativeInterface<QNativeInterface::QX11Application>();
-        if (!x11App || !x11App->connection() || !window->handle())
-            return;
-        xcb_set_input_focus(x11App->connection(), XCB_INPUT_FOCUS_PARENT,
-                            window->winId(), XCB_CURRENT_TIME);
+    // X11：不能以 QWindow::isActive() 判断成败——kwin 对 Dock 类面板窗只做
+    // "逻辑激活"（Qt 收到激活状态、isActive() 为 true），却不会把 X 输入焦点
+    // 移过来，击键仍进前层窗口。因此以 X 服务器真实输入焦点（xcb_get_input_focus）
+    // 为准做有界轮询：焦点不在本窗口就 xcb_set_input_focus 直设（与 xdotool
+    // windowfocus 同路径，kwin 接受），直到成功或有界结束。仅由用户在本窗口
+    // 内的点击手势触发，最多 ~1.2s，不会凭空抢焦点。
+    ensureXInputFocus(window, 0);
+}
+
+// 有界重试直设 X 输入焦点：attempt 为已尝试次数，上限 8 拍（约 1.2s）。
+// 计时器以 window 为上下文：窗口销毁即自动中止。
+void WindowGuard::ensureXInputFocus(QQuickWindow *window, int attempt)
+{
+    constexpr int kMaxAttempts = 8;
+    if (attempt >= kMaxAttempts || !window->handle())
+        return;
+    auto *x11App = qGuiApp->nativeInterface<QNativeInterface::QX11Application>();
+    if (!x11App || !x11App->connection())
+        return;
+    xcb_connection_t *conn = x11App->connection();
+    const xcb_window_t target = window->winId();
+    auto cookie = xcb_get_input_focus(conn);
+    xcb_get_input_focus_reply_t *reply = xcb_get_input_focus_reply(conn, cookie, nullptr);
+    if (reply) {
+        if (reply->focus == target) {
+            free(reply);
+            return; // 真实焦点已在本窗口，成功收工
+        }
+        free(reply);
+        // 焦点在其它窗口（含 NONE/POINTER_ROOT 无主状态）：直设到本窗口。
+        // 立即直设 + 延迟复查：覆盖 kwin 处理先前激活请求后可能回卷的竞态。
+        xcb_set_input_focus(conn, XCB_INPUT_FOCUS_PARENT, target, XCB_CURRENT_TIME);
+    }
+    QTimer::singleShot(150, window, [window, attempt]() {
+        ensureXInputFocus(window, attempt + 1);
     });
 }
 

@@ -41,16 +41,18 @@ public:
     void setPinned(bool pinned);
 
     // 请求面板窗口获得 OS 键盘焦点（便签等文本小组件点击进入编辑时经
-    // WidgetHost 调用）。X11 下 kwin 不因点击激活 Dock/Notification 类面板窗，
-    // 仅 QML 取焦时光标会闪但按键到不了窗口；这里先 requestActivate()
-    // （_NET_ACTIVE_WINDOW，带最近用户交互时间戳），仍未激活则延迟直设
-    // X 输入焦点兜底。Wayland 下 requestActivate 无副作用，直接返回。
+    // WidgetHost 调用）。X11 下 kwin 不因点击把输入焦点交给 Dock/Notification
+    // 类面板窗（且 Qt 的 isActive() 可能与真实 X 焦点脱钩），这里先
+    // requestActivate()，再按 X 服务器真实输入焦点做有界直设兜底。
+    // Wayland 下 requestActivate 无副作用，直接返回。
     static void ensureKeyboardFocus(QQuickWindow *window);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+    // X11 有界轮询直设 X 输入焦点（ensureKeyboardFocus 内部使用）
+    static void ensureXInputFocus(QQuickWindow *window, int attempt);
     void enforceFrameless();
     // 恢复 X11 窗口类型（_NET_WM_WINDOW_TYPE）：setFlags 会按 Qt.Tool 重算为
     // UTILITY+NORMAL，kwin 会对含 NORMAL 的窗口执行 placement（垂直最大化），
