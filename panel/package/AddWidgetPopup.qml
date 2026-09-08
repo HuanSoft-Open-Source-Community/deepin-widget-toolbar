@@ -19,7 +19,8 @@ import org.deepin.ds 1.0
 PanelPopup {
     id: control
 
-    // 弹在侧栏面板左侧，顶部对齐
+    // 弹在侧栏面板左侧；popupY 默认 0（顶部对齐），打开前宿主按触发位置
+    // 重定位（main.qml positionPopup），弹窗垂直趋向鼠标指针所在高度
     popupX: 0 - width - 8
     popupY: 0
     windowTitle: "dde-shell/widgettoolbar-add"

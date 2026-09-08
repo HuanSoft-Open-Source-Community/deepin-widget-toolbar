@@ -682,7 +682,13 @@ Window {
             height: 32
             icon.name: "add"
             text: qsTr("Add")
-            onClicked: addPopup.open()
+            onClicked: {
+                // 与右键菜单/托盘入口一致：先按触发位置（按钮中心）重定位弹窗，
+                // 让二级面板趋向鼠标指针所在高度，而非默认贴面板顶部。
+                var c = addButton.mapToItem(root.contentItem,
+                                            addButton.width / 2, addButton.height / 2)
+                root.openPanelPopup(addPopup, c.y)
+            }
         }
     }
 
