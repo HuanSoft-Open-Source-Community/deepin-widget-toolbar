@@ -7,3 +7,7 @@ ColorPickerDialog 1.0 ColorPickerDialog.qml
 ControlsBar 1.0 ControlsBar.qml
 CoverArt 1.0 CoverArt.qml
 singleton ColorUtils 1.0 ColorUtils.qml
+
+AppPickerDialog 1.0 AppPickerDialog.qml
+AppPickerBody 1.0 AppPickerBody.qml
+AppPickerLevel3 1.0 AppPickerLevel3.qml

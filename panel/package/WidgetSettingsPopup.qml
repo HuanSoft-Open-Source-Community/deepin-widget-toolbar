@@ -29,13 +29,26 @@ PanelPopup {
     property string editingDialKey: ""
     property int editingDialIndex: -1
     property string editingDialField: ""
-
+    // 启动器单元（applauncher）三级选择面板的编辑目标（launcherList 行）
+    property string editingLauncherKey: ""
+    property int editingLauncherIndex: -1
+    // 设置面板会话代号：打开/重建时 +1，launcherList 行据此做拖拽状态复位与
+    // 尺寸容量重同步（函数式容量绑定不会自己跟踪 instanceCols/Rows 的变化）
+    property int launcherEditSession: 0
     popupX: 0 - width - 8
     popupY: 0
     windowTitle: "dde-shell/widgettoolbar-widget-settings"
 
     width: 360
     height: 520
+
+    onPopupVisibleChanged: {
+        // 本弹窗隐藏时同收其子级（色卡/三级应用选择），避免残留在桌面
+        if (!popupVisible) {
+            colorDialog.close()
+            launcherPicker.close()
+        }
+    }
 
     function openFor(instance) {
         control.instanceId = instance
@@ -54,6 +67,8 @@ PanelPopup {
         else
             control.playerOptions = []
         control.rebuildVisibleSchema()
+        control.launcherEditSession++
+        settingsScroll.interactive = true   // 复位上一会话可能的拖拽滚动锁
         control.open()
     }
 
@@ -78,6 +93,9 @@ PanelPopup {
         var result = []
         for (var i = 0; i < control.schema.length; ++i) {
             var item = control.schema[i]
+            // “_”前缀为内部键（如首启预置标记），不进入设置面板
+            if (String(item.key).charAt(0) === "_")
+                continue
             if (control.widgetId === "systemmonitor" && item.key === "dualColumn"
                 && cols < 4) {
                 continue
@@ -86,9 +104,18 @@ PanelPopup {
                 && control.values.playerMode !== "locked") {
                 continue
             }
+            // 沉浸模式：标签与启动器底色相关设置不再展示（视觉同步隐藏）
+            if (control.widgetId === "applauncher"
+                && control.values.immersiveMode === true
+                && (item.key === "showLabels" || item.key === "labelColor"
+                    || item.key === "unitBackgroundColor")) {
+                continue
+            }
             result.push(item)
         }
         control.visibleSchema = result
+        // 尺寸/实例变化导致的重建同样触发 launcherList 会话重同步
+        control.launcherEditSession++
     }
 
     function commit(key, value) {
@@ -100,7 +127,8 @@ PanelPopup {
         next[key] = value
         control.values = next
         Panel.widgetManager.saveInstanceConfig(control.instanceId, next)
-        if (control.widgetId === "player" && key === "playerMode")
+        if ((control.widgetId === "player" && key === "playerMode")
+            || (control.widgetId === "applauncher" && key === "immersiveMode"))
             control.rebuildVisibleSchema()
     }
 
@@ -108,6 +136,7 @@ PanelPopup {
     function openCustomColor(key, colorText) {
         control.editingColorKey = key
         control.editingDialKey = ""
+        colorDialog.avoidOffsetX = launcherPicker.visible ? launcherPicker.width + 8 : 0
         colorDialog.openFor(String(colorText))
     }
 
@@ -116,6 +145,7 @@ PanelPopup {
         control.editingDialKey = key
         control.editingDialIndex = index
         control.editingDialField = field
+        colorDialog.avoidOffsetX = launcherPicker.visible ? launcherPicker.width + 8 : 0
         colorDialog.openFor(String(colorText))
     }
 
@@ -164,6 +194,143 @@ PanelPopup {
             control.commit(key, list)
     }
 
+    // ===== 启动器单元列表（launcherList 行）=====
+
+    // C++ QVariantList 经部分返回路径会变成"类数组对象"，Array.isArray 不成立，
+    // 统一容错提取（与 applauncher 内 asAppList 同一规则）
+    function asAppList(value) {
+        if (value === undefined || value === null)
+            return []
+        if (Array.isArray(value))
+            return value
+        if (typeof value === "object") {
+            var out = []
+            if (typeof value.length === "number") {
+                for (var i = 0; i < value.length; ++i)
+                    out.push(value[i])
+                return out
+            }
+            for (var k in value)
+                out.push(value[k])
+            return out
+        }
+        return []
+    }
+
+    function launcherList(key) {
+        return control.asAppList(control.values[key])
+    }
+
+    // 打开三级"选择程序"面板替换某槽位 / 追加新单元（上限 16）；
+    // 若同级的色卡取色面板正打开，向左让位避免叠窗
+    // 实例当前容量（剩余空位 = 容量 - 已配置数；容量即该尺寸能放的上限，≤ 16）
+    function launcherCapacity() {
+        var cols = Panel.widgetManager.instanceCols(control.instanceId)
+        var rows = Panel.widgetManager.instanceRows(control.instanceId)
+        return Math.max(1, cols * rows)
+    }
+
+    // 替换某槽位：三级面板单选该槽
+    function openLauncherPicker(key, index) {
+        var list = control.launcherList(key)
+        if (index < 0 || index >= list.length)
+            return
+        control.editingLauncherKey = key
+        control.editingLauncherIndex = index
+        launcherPicker.avoidOffsetX = colorDialog.visible ? colorDialog.width + 8 : 0
+        launcherPicker.openFor(control.instanceId, index, [String(list[index])], 1, [])
+    }
+
+    // 追加空位：三级面板可多选，上限 = 当前卡片剩余空位（容量上限随尺寸继承）
+    function addLauncher(key) {
+        var list = control.launcherList(key)
+        var capacity = control.launcherCapacity()
+        if (list.length >= capacity)
+            return
+        control.editingLauncherKey = key
+        control.editingLauncherIndex = -1
+        var remaining = Math.max(1, capacity - list.length)
+        launcherPicker.avoidOffsetX = colorDialog.visible ? colorDialog.width + 8 : 0
+        launcherPicker.openFor(control.instanceId, -1, [], remaining, list.slice())
+    }
+
+    // 恢复默认四应用（浏览器/终端/文本编辑器/邮箱）：
+    // 容量放不下时只保留第一个（如 1×1 小卡）
+    function restoreDefaultLaunchers(key) {
+        var ids = DesktopApps.defaultAppIds()
+        var resolved = []
+        for (var i = 0; i < ids.length; ++i) {
+            if (String(ids[i]).length > 0 && resolved.indexOf(String(ids[i])) < 0)
+                resolved.push(String(ids[i]))
+        }
+        if (resolved.length === 0)
+            return
+        if (resolved.length > control.launcherCapacity())
+            resolved = [resolved[0]]
+        control.commit(key, resolved)
+    }
+
+    // 拖放排序：把 from 行的单元移动到 to 行位置（一次落盘，卡片即时重排）
+    function reorderLaunchers(key, from, to) {
+        var list = control.launcherList(key)
+        if (from === to || from < 0 || from >= list.length
+            || to < 0 || to >= list.length)
+            return
+        var moved = list.slice()
+        var item = moved.splice(from, 1)[0]
+        moved.splice(to, 0, item)
+        control.commit(key, moved)
+    }
+
+    // 行拖放期间禁用滚动（防 Flickable 抢手势），结束恢复
+    function beginRowDrag() {
+        settingsScroll.interactive = false
+    }
+    function endRowDrag() {
+        settingsScroll.interactive = true
+    }
+
+    // 三级面板确认：替换槽位取首项；追加模式逐项加入
+    //（防重复、上限 = 当前卡片容量；多选上限已在面板层按剩余空位约束）
+    function commitLauncherPicked(desktopIdList) {
+        var key = control.editingLauncherKey
+        if (key.length === 0 || !Array.isArray(desktopIdList))
+            return
+        var picked = []
+        for (var i = 0; i < desktopIdList.length; ++i) {
+            var id = String(desktopIdList[i])
+            if (id.length > 0 && picked.indexOf(id) < 0)
+                picked.push(id)
+        }
+        if (picked.length === 0)
+            return
+        var list = control.launcherList(key)
+        var index = control.editingLauncherIndex
+        var capacity = control.launcherCapacity()
+        control.editingLauncherKey = ""
+        control.editingLauncherIndex = -1
+        if (index >= 0 && index < list.length) {
+            list = list.slice()
+            list[index] = picked[0]
+        } else {
+            list = list.slice()
+            for (var j = 0; j < picked.length; ++j) {
+                if (list.length >= capacity || list.indexOf(picked[j]) >= 0)
+                    continue
+                list.push(picked[j])
+            }
+        }
+        control.commit(key, list)
+    }
+
+    function removeLauncher(key, index) {
+        var list = control.launcherList(key).slice()
+        if (index < 0 || index >= list.length)
+            return
+        list.splice(index, 1)
+        control.commit(key, list)
+    }
+
     // 自定义颜色取色弹窗（拆分自本面板）：编辑目标由 editing* 状态记录，
     // 确认/取消后清空；commit 与 commitDialColor 走本面板既有路径
     Components.ColorPickerDialog {
@@ -190,6 +357,24 @@ PanelPopup {
             control.editingDialField = ""
         }
     }
+
+    // 启动器单元的应用列表 —— 三级面板（应用快捷启动器，从二级设置面板唤起）：
+    // 结构与取色器色卡同级（弹中弹：自建窗口锚定本设置弹窗，水平浮其左侧）。
+    // 与色卡互相避让：打开一方前若对方正显示，向左让出对方宽度。
+    Components.AppPickerLevel3 {
+        id: launcherPicker
+        hostPopupWindow: control.popupWindow
+        hostHeight: control.height
+
+        onAppPicked: function(desktopId) {
+            control.commitLauncherPicked(desktopId)
+        }
+        onCanceled: {
+            control.editingLauncherKey = ""
+            control.editingLauncherIndex = -1
+        }
+    }
+
 
     Rectangle {
         id: contentCard

@@ -21,6 +21,8 @@ PanelPopup {
     property var hostPopupWindow: null
     // 父弹窗高度（popupY 垂直居中的基准），由宿主注入
     property int hostHeight: 460
+    // 同级三级面板（应用选择）避让：对方正打开时向左让出宽度，避免叠窗
+    property real avoidOffsetX: 0
 
     signal colorCommitted(string colorText)
     signal canceled()
@@ -28,7 +30,7 @@ PanelPopup {
     width: 420
     height: 460
     popupWindow: colorDialogWindow
-    popupX: -root.width - 8
+    popupX: -root.width - 8 - root.avoidOffsetX
     popupY: Math.max(0, (root.hostHeight - root.height) / 2)
     windowTitle: "dde-shell/widgettoolbar-widget-color"
 
@@ -229,19 +231,20 @@ PanelPopup {
                 Layout.fillWidth: true
             }
 
-            QC.DialogButtonBox {
-                id: buttonBox
-                standardButtons: QC.DialogButtonBox.Ok
-                    | QC.DialogButtonBox.Cancel
-                spacing: 12
-
-                onAccepted: {
-                    root.colorCommitted(root.currentColor.toString())
+            // 自定义按钮：Qt 标准按钮文案依赖 qt_ 翻译包，本环境不保证加载，
+            // 改走本插件 ts（qsTr），保证三级面板按钮随语言翻译
+            Button {
+                text: qsTr("Cancel")
+                onClicked: {
+                    root.canceled()
                     root.close()
                 }
+            }
 
-                onRejected: {
-                    root.canceled()
+            Button {
+                text: qsTr("OK")
+                onClicked: {
+                    root.colorCommitted(root.currentColor.toString())
                     root.close()
                 }
             }

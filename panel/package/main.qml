@@ -9,6 +9,7 @@ import Qt5Compat.GraphicalEffects
 import org.deepin.dtk 1.0
 import org.deepin.dtk.style 1.0 as DStyle
 import org.deepin.ds 1.0
+import org.deepin.widgettoolbar 1.0
 import "widgets/components" as Components
 
 Window {
@@ -332,6 +333,76 @@ Window {
         root.lastPopupMouseY = mouseY === undefined ? -1 : mouseY
         widgetContextMenu.rebuild(instanceId)
         widgetContextMenu.popup()
+    }
+
+    // C++ QVariantList 可能以"类数组对象"到达 QML（Array.isArray 不成立），
+    // 回写前统一容错提取（与 applauncher/SettingsRow 同一规则）
+    function asAppList(value) {
+        if (value === undefined || value === null)
+            return []
+        if (Array.isArray(value))
+            return value
+        if (typeof value === "object") {
+            var out = []
+            if (typeof value.length === "number") {
+                for (var i = 0; i < value.length; ++i)
+                    out.push(value[i])
+                return out
+            }
+            for (var k in value)
+                out.push(value[k])
+            return out
+        }
+        return []
+    }
+
+    // 打开"选择程序"三级面板（卡片内"+"或启动器行触发，index=-1 表示追加）
+    function openAppPickerFor(instanceId, index) {
+        addPopup.close()
+        settingsDialog.close()
+        aboutDialog.close()
+        widgetSettingsDialog.close()
+
+        var cfg = Panel.widgetManager.instanceConfig(instanceId)
+        var list = root.asAppList(cfg ? cfg.launchers : undefined)
+        var current = (index >= 0 && index < list.length) ? [String(list[index])] : []
+        var maxSelect = 1
+        if (index < 0) {
+            // 追加空位（卡片内"+"）：多选上限 = 剩余空位（容量 - 已配置，≤ 16 上限）
+            var cols = Panel.widgetManager.instanceCols(instanceId)
+            var rows = Panel.widgetManager.instanceRows(instanceId)
+            var capacity = Math.max(1, cols * rows)
+            maxSelect = Math.max(1, Math.min(capacity - list.length,
+                                             16 - list.length))
+        }
+        root.positionPopup(appPickerDialog, -1)
+        appPickerDialog.openFor(instanceId, index, current, maxSelect, list.slice())
+    }
+
+    // 二级面板确认后的回写：替换槽位取首项；追加模式逐项加入（防重复、上限 16）
+    function applyAppPick(instanceId, index, desktopIdList) {
+        if (Panel.widgetManager.instanceIds().indexOf(instanceId) < 0)
+            return
+        if (!Array.isArray(desktopIdList) || desktopIdList.length === 0)
+            return
+        var cfg = Panel.widgetManager.instanceConfig(instanceId)
+        var list = root.asAppList(cfg ? cfg.launchers : undefined).slice()
+        if (index >= 0 && index < list.length) {
+            list[index] = String(desktopIdList[0])
+        } else {
+            var capCols = Panel.widgetManager.instanceCols(instanceId)
+            var capRows = Panel.widgetManager.instanceRows(instanceId)
+            var listCap = Math.max(1, capCols * capRows)   // 继承当前卡片容量
+            for (var j = 0; j < desktopIdList.length; ++j) {
+                var id = String(desktopIdList[j])
+                if (id.length === 0 || list.indexOf(id) >= 0)
+                    continue
+                if (list.length >= listCap)
+                    break
+                list.push(id)
+            }
+        }
+        Panel.widgetManager.saveInstanceConfig(instanceId, { "launchers": list })
     }
 
     // ===== 窗口基础配置（与通知中心一致的尺寸与样式） =====
@@ -787,6 +858,7 @@ Window {
             var sizeOptions = [
                 { "cols": 1, "rows": 1, "label": qsTr("Small") + " 1×1" },
                 { "cols": 2, "rows": 2, "label": qsTr("Medium") + " 2×2" },
+                { "cols": 4, "rows": 1, "label": qsTr("Long") + " 4×1" },
                 { "cols": 4, "rows": 2, "label": qsTr("Wide") + " 4×2" },
                 { "cols": 4, "rows": 4, "label": qsTr("Large") + " 4×4" }
             ]
@@ -836,6 +908,24 @@ Window {
         id: widgetSettingsDialog
     }
 
+    // "选择程序"三级面板（卡片内"+"触发时使用；确认后按当前编辑目标回写实例配置）
+    Components.AppPickerDialog {
+        id: appPickerDialog
+
+        onAppPicked: function(desktopIdList) {
+            root.applyAppPick(appPickerDialog.instanceId,
+                              appPickerDialog.editIndex, desktopIdList)
+        }
+    }
+
+    // 小组件经 WidgetHost 请求打开三级面板（应用快捷启动器卡片内"+"）
+    Connections {
+        target: WidgetHost
+        function onOpenAppPickerRequested(instanceId, index) {
+            root.openAppPickerFor(instanceId, index)
+        }
+    }
+
     // 托盘右键菜单经 D-Bus 触发的动作统一在这里执行
     Connections {
         target: Panel
@@ -860,6 +950,7 @@ Window {
                 settingsDialog.close()
                 aboutDialog.close()
                 widgetSettingsDialog.close()
+                appPickerDialog.close()
                 contextMenu.close()
                 widgetContextMenu.close()
             }
