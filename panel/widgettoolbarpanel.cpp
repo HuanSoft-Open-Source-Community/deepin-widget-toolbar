@@ -22,6 +22,8 @@
 
 #include <QDBusConnection>
 #include <QDBusError>
+#include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
 #include <QDebug>
 #include <QQuickWindow>
 #include <QtQml/qqml.h>
@@ -38,6 +40,11 @@ WidgetToolbarPanel::WidgetToolbarPanel(QObject *parent)
 
 WidgetToolbarPanel::~WidgetToolbarPanel()
 {
+    // 注销 MMV 避让订阅（插件 stop/update 时不留残余匹配）
+    QDBusConnection::sessionBus().disconnect(
+        QString(), QStringLiteral("/KWin"), QStringLiteral("org.kde.KWin"),
+        QStringLiteral("MultitaskStateChanged"), this,
+        SLOT(onMultitaskStateChanged(bool)));
     delete m_config;
 }
 
@@ -110,7 +117,46 @@ bool WidgetToolbarPanel::init()
         m_windowGuard->attach(qobject_cast<QQuickWindow *>(rootObject()));
     });
 
+    // 多任务视图避让（kwin multitaskview 特效对 Dock/Notification 类型窗口不经缩略图
+    // 收录、也不隐藏，直接绘制在概览之上——面板置顶=Notification/置底=Dock 恰命中，
+    // 两种模式都不避让。与任务栏 DockHelper 同源，监听特效 setActive 发出的
+    // MultitaskStateChanged，进入 MMV 临时隐藏窗口、退出自动恢复）
+    watchMultitaskView();
+
     return true;
+}
+
+void WidgetToolbarPanel::onMultitaskStateChanged(bool active)
+{
+    setMultitaskAvoided(active);
+}
+
+void WidgetToolbarPanel::watchMultitaskView()
+{
+    // 信号由特效 setActive 无条件发出，覆盖 dock 按钮（com.deepin.wm ShowWorkspace）、
+    // Meta+S 全局快捷键、触摸板手势等全部唤起路径，且 X11 / Wayland 行为一致。
+    // service 传空串匹配任意发送者（与 dde-shell DockHelper 用法一致）。
+    QDBusConnection::sessionBus().connect(
+        QString(), QStringLiteral("/KWin"), QStringLiteral("org.kde.KWin"),
+        QStringLiteral("MultitaskStateChanged"), this,
+        SLOT(onMultitaskStateChanged(bool)));
+
+    // 初始态对账：宿主可能在 MMV 开启期间重启（错过 true 事件）。dde-fakewm
+    // 经同一信号缓存了该状态，异步查询一次；服务缺失/失败则静默保持 false。
+    QDBusMessage query = QDBusMessage::createMethodCall(
+        QStringLiteral("com.deepin.wm"), QStringLiteral("/com/deepin/wm"),
+        QStringLiteral("com.deepin.wm"), QStringLiteral("GetMultiTaskingStatus"));
+    auto *watcher = new QDBusPendingCallWatcher(
+        QDBusConnection::sessionBus().asyncCall(query), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this](QDBusPendingCallWatcher *w) {
+                if (!w->isError()) {
+                    const QList<QVariant> args = w->reply().arguments();
+                    if (!args.isEmpty())
+                        setMultitaskAvoided(args.first().toBool());
+                }
+                w->deleteLater();
+            });
 }
 
 bool WidgetToolbarPanel::visible() const
@@ -162,6 +208,21 @@ void WidgetToolbarPanel::setPinned(bool pinned)
     if (m_windowGuard)
         m_windowGuard->setPinned(pinned);
     Q_EMIT pinnedChanged(pinned);
+}
+
+bool WidgetToolbarPanel::multitaskAvoided() const
+{
+    return m_multitaskAvoided;
+}
+
+void WidgetToolbarPanel::setMultitaskAvoided(bool avoided)
+{
+    if (m_multitaskAvoided == avoided)
+        return;
+    m_multitaskAvoided = avoided;
+    // 刻意不触碰 m_visible/DConfig/托盘高亮：避让是临时视觉态，
+    // 用户显隐语义（含重启恢复）保持不变，退出 MMV 后自动回来
+    Q_EMIT multitaskAvoidedChanged(avoided);
 }
 
 bool WidgetToolbarPanel::cardTransparent() const

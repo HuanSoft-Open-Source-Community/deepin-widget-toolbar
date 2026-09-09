@@ -348,7 +348,9 @@ Window {
     DLayerShellWindow.rightMargin: dockMargin.rightMargin
     DLayerShellWindow.bottomMargin: dockMargin.bottomMargin
 
-    visible: Panel.visible
+    // 显示 = 用户显隐状态 且 未处于 MMV 避让态。避让期间 Panel.visible 不变
+    // （DConfig/托盘高亮不动），MMV 退出信号置 multitaskAvoided=false 后自动回归。
+    visible: Panel.visible && !Panel.multitaskAvoided
     // flags 刻意不含 Qt.FramelessWindowHint：Qt 对带 Frameless 的窗口写 _MOTIF_WM_HINTS 时
     // 不设置 MWM_HINTS_FUNCTIONS 位（functions 恒为 MWM_FUNC_ALL），kwin 据此判定窗口
     // 可最大化（isMaximizable()=true），首次映射高度达到工作区时被垂直最大化（y=0、
@@ -848,6 +850,19 @@ Window {
         }
         function onAutoArrangeRequested() {
             autoArrangeNow()
+        }
+        // MMV 避让开始：关闭全部二级弹窗。四类 PanelPopup 挂在独立的辅助顶层
+        // 窗口（Panel.popupWindow）上，不随主窗口隐藏，留着会被 MMV 当普通窗口
+        // 收录成缩略图；窗口内 Menu 随主窗隐藏，一并 close 防止恢复后残开。
+        function onMultitaskAvoidedChanged() {
+            if (Panel.multitaskAvoided) {
+                addPopup.close()
+                settingsDialog.close()
+                aboutDialog.close()
+                widgetSettingsDialog.close()
+                contextMenu.close()
+                widgetContextMenu.close()
+            }
         }
     }
 

@@ -30,6 +30,7 @@ deepin 桌面之側欄也，仿 Vista 之制，依 dde-shell 插件之體。
 - **開宗**：manifest（`sizes` + `settings`）+ 例之上下文（`dataDir`/`instanceId`/`widgetConfig`）+ 宿主之能（`FileIO`/`SystemInfo`/`Lyrics`/`ClockTime`/`MediaPlayers`/`MediaPlayer`/`AudioVisualizer`），詳見 [widget-api.md](widget-api.md)
 - **欄設**：右鍵"設置"或托盤之單，彈出設置之面，有顯欄、置頂、卡片透明之式三闕：卡片透明之式啟，則凡卡片皆為半透之底（默閉），與各組件自設之透明闕不相涉
 - **置頂/置底**：欄首 DTK 圖釘之鈕，置頂則恆居萬窗上（`LayerOverlay`），置底則凡窗可覆（`LayerButtom`）
+- **避多任務之觀**：多任務視圖既啟（kwin 概覽也）——或由任務欄之鈕，或 Meta+S 之捷，或觸板之勢——欄暫隱以避，置頂置底皆然；視圖既闔，欄自歸，不勞再喚。顯隱之存與托盤之明，悉如故不改
 - **任務欄鈕**：dde-dock 托盤插件，按之顯隱——此為顯隱唯一之途，失焦不自閉
 - **存**：`visible`、`pinned` 與卡片透明之式記於 DConfig，重啟而復；組件之單存於 `~/.local/share/org.deepin.ds.widgettoolbar/installed.json`，每例之設另存於其數據之目
 - **諸文**：QML 皆用 `qsTr`，廿三種語言之 `.ts`（簡體已譯）

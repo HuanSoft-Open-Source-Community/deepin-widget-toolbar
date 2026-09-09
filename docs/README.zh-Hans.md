@@ -26,6 +26,7 @@
 - **🔌 开放接口**：manifest（`sizes` + `settings`）+ 实例上下文注入（`dataDir`/`instanceId`/`widgetConfig`）+ 宿主能力代理（`FileIO`/`SystemInfo`/`Lyrics`/`ClockTime`/`MediaPlayers`/`MediaPlayer`/`AudioVisualizer`），规范见 [widget-api.md](widget-api.md)
 - **⚙️ 面板设置**："设置"弹窗（右键 → 设置，或经托盘菜单）提供显示面板、置顶与*卡片透明模式*三项开关：卡片透明模式开启时所有小组件卡片使用半透明叠层底（默认关闭），与每个小组件自身的透明背景开关相互独立
 - **📌 置顶/置底**：标题栏的 DTK 图钉按钮在*置顶*（始终在其他窗口之上，`LayerOverlay`）与*置底*（可被普通窗口覆盖，`LayerButtom`）之间切换
+- **🫥 多任务视图避让**：唤起多任务视图（kwin 概览）时——无论经任务栏按钮、Meta+S 还是触摸板——面板临时隐藏避让，置顶与置底两种模式皆然；视图一退出面板立即自动回归，无需再次唤起，持久化的显隐状态与托盘按钮高亮全程不受影响
 - **🔘 任务栏触发按钮**：dde-dock 托盘插件控制面板显隐——这是显示/隐藏的唯一途径，失焦不会自动关闭
 - **💾 状态持久化**：`visible`、`pinned` 与卡片透明模式经 DConfig 持久化，重启后恢复；小组件实例清单存于 `~/.local/share/org.deepin.ds.widgettoolbar/installed.json`，按实例配置存于对应小组件数据目录
 - **🌐 国际化**：QML 全量 `qsTr`，23 种语言 `.ts`（简体中文已翻译）
