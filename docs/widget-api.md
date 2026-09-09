@@ -1,7 +1,7 @@
-# 小组件接口规范（v1.6）
+# 小组件接口规范（v1.7）
 
 > 本文档定义 deepin-widget-toolbar 面板（宿主）与小组件之间的开放接口契约。
-> 当前宿主接口版本：1.6；同时兼容 1.0/1.1/1.2/1.3/1.4/1.5 小组件。
+> 当前宿主接口版本：1.7；同时兼容 1.0~1.6 小组件。
 
 ## 1. 架构
 
@@ -47,10 +47,12 @@
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `key` | string | 配置键，不能为空 |
-| `type` | string | `boolean` / `enum` / `color` / `font` / `string` / `integer` / `timezoneList` / `player` |
+| `type` | string | `boolean` / `enum` / `color` / `font` / `string` / `integer` / `timezoneList` / `player` / `launcherList` |
 | `label` / `label[locale]` | string | 显示名称及本地化名称 |
 | `default` | 任意 | 默认值 |
 | `options` | array | `enum`/`color` 的候选项，元素含 `value`、`label`、`label[locale]`；`font` 的候选由宿主从 `Qt.fontFamilies()` 生成；`timezoneList` 的候选由宿主从 `Timezones` 生成；`player` 的候选由宿主从 `MediaPlayers.players` 生成 |
+
+配置键以 `_` 开头者为**内部键**（如应用快捷启动器的首启预置标记）：宿主设置面板自动跳过这类行，小组件可经 `WidgetHost.saveConfig` 或设置弹窗回写；其余规则与普通键一致。
 
 颜色类配置值统一为 `#RRGGBB` 或 `#AARRGGBB`（`AARRGGBB` 用于带透明度的默认色）。宿主/小组件在渲染前必须校验：
 非法值回退到 manifest 默认色，避免脏配置导致渲染异常。内置小组件统一提供
@@ -67,11 +69,13 @@
 `zone` 为控制中心时区 id，`auto` 标记是否为缩放补位生成。宿主配置面板渲染为
 “时区下拉 + 删除”行列表及“添加”按钮；改过任一行会把 `auto` 置为 false。
 
+`launcherList` 类型的值是**桌面应用 desktop id 数组**（值形如 `["org.deepin.browser", "deepin-terminal"]`，不带 `.desktop` 后缀；同 id 不重复，长度上限 16）。宿主设置面板按行渲染每个启动器单元：行内显示应用图标与本地化显示名（来自 `DesktopApps`），点击行打开**三级"选择程序"面板**（图标 + 应用名列表，点选高亮，底部确认/取消）以替换该单元，行尾 ✕ 删除，末尾按钮追加新单元（超限自动禁用）。卡片按当前规格容量显示前 N 个单元，未放满时末位出现"+"（同样打开选择面板）。程序不在库中时（如对应软件已卸载）行内回退显示原始 id，卡片该单元不显示。
+
 `player` 类型的值是一个 MPRIS 会话总线服务名（如 `org.mpris.MediaPlayer2.vlc`），
 由宿主动态枚举；当前无播放器时下拉为空且禁用。配置面板应在 `playerMode` 为
 `locked` 时才显示该行。
 
-内置组件示例：clock 允许 `1×1 / 2×2 / 4×2 / 4×4` 并声明 `clockMode` 配置；lyrics 声明 `lyricsFont` 与 `lyricsColor`。
+内置组件示例：clock 允许 `1×1 / 2×2 / 4×2 / 4×4` 并声明 `clockMode` 配置；lyrics 声明 `lyricsFont` 与 `lyricsColor`；applauncher（应用快捷启动器）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格）并声明 `launchers`（launcherList，默认空，新实例由组件自行预置浏览器/终端/文本编辑器/邮箱四个默认程序）、`immersiveMode`、`showLabels`/`labelColor`/`unitBackgroundColor`/`backgroundColor`/`transparentBackground` 等配置。
 
 ## 4. 布局模型
 
@@ -286,6 +290,24 @@
 `activeChanged()`（采集开/停）。小组件应在可见时 `setActive(instanceId, true)`、
 隐藏/销毁时 `setActive(instanceId, false)`，避免无谓采集。
 
+### DesktopApps（桌面程序条目 / 默认程序 / 启动）
+
+> **系统能力代理**：小组件不允许自行扫描系统目录或解析 `.desktop`；桌面条目、默认程序与应用启动统一经本代理提供。条目聚合与 dde-launchpad/dde-shell 应用列表同源同规则：合并 XDG 启动器目录（用户 `~/.local/share/applications`、系统 `/usr/share/applications` 等）、flatpak exports（`/var/lib/flatpak/...` 与 `~/.local/share/flatpak/...`）、如意玲珑 entries（`/var/lib/linglong/entries/apps/...` 与 `~/.linglong/...`），按目录优先级去重，过滤 `NoDisplay`/`Hidden`/非 `Application`/`OnlyShowIn` 不含 X-Deepin 等不应显示的条目；宿主监听目录变化，软件装/卸后自动刷新（无需手动调用）。启动则经 dde 应用管理器（会话总线 `org.desktopspec.ApplicationManager1`，dde-application-manager 提供，负责 linglong/flatpak 容器化包装），服务不可用或调用失败时降级为直接执行解析后的 Exec（已含 `ll-cli`/`flatpak run` 包装前缀）。
+
+| 属性/方法 | 类型/签名 | 说明 |
+|---|---|---|
+| `available` | bool | 应用管理器（启动通道）是否在线；条目列表不受其影响，始终来自目录聚合 |
+| `entries` | var | `[{id, name, icon}]`（id 为不带 `.desktop` 的规范化 desktop id；name 为本地化显示名；icon 为主题图标名或绝对路径），按本地化名排序；目录内容变化自动刷新并发出 `entriesChanged()` |
+| `nameOf` | `string nameOf(string desktopId)` | 本地化显示名；未知返回空串 |
+| `iconNameOf` | `string iconNameOf(string desktopId)` | 主题图标名（或绝对路径）；未知返回空串 |
+| `iconSource` | `string iconSource(string iconName, int px)` | 可直接用作 `Image.source` 的图标 URL（`image://dwtappicon/…@像素`）。图标解析与 dde-shell 相同（v25 bloom 主题含 .dci，由 dde-qt6integration 的 icon engine 支持）；名称空/无效时回退通用可执行图标。通常传 `iconNameOf(id)`，为空时传 `id` 本身 |
+| `launch` | `bool launch(string desktopId)` | 启动应用：应用管理器在线时经其 `Application.Launch`（负责容器化包装与运行环境），失败自动回退直接执行；离线时直接执行解析后的 Exec（含字段码展开）。仅限已注册条目 |
+| `defaultAppIds` | `string[] defaultAppIds()` | 默认程序四元组 `[浏览器, 终端, 文本编辑器, 邮箱]`（均不带 `.desktop`）。浏览器/邮箱/文本编辑器按 XDG mimeapps（`x-scheme-handler/http(s)`、`mailto`、`text/plain` 等），终端读 `com.deepin.desktop.default-applications.terminal`（控制中心"默认程序"终端项同源）；每类均有常见应用兜底，解析不到的位置为空串 |
+| `refresh` | `void refresh()` | 强制重建（目录变化时宿主自动调度，一般无需手动触发） |
+
+信号：`availableChanged()`（应用管理器上线/下线）、`entriesChanged()`。
+依赖说明：条目聚合无需额外服务；`org.desktopspec.ApplicationManager1` 由 dde-application-manager（dde-app-services）提供（deepin/UOS v25 桌面必需服务），缺失时启动降级为直接 Exec，功能不受影响。小组件展示"应用快捷启动器"默认四应用时应以 `defaultAppIds()` 解析而不是硬编码 id。
+
 ## 7. 面板 API（预留）
 
 以下接口为本规范预留，尚未实现，未来版本按此契约提供：
@@ -311,7 +333,7 @@
 
 - 小组件声明 `apiVersion`；宿主加载时校验，不兼容则拒绝加载并提示，不静默失败。
 - 宿主新增接口走次版本递增，不破坏既有小组件（1.0 小组件仍可加载）。
-- 当前宿主实现：`apiVersion = "1.6"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型；1.5 新增 `AudioVisualizer` 系统音频频谱代理；1.6 新增 `WidgetHost.activateWindow` 键盘焦点请求）。
+- 当前宿主实现：`apiVersion = "1.7"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型；1.5 新增 `AudioVisualizer` 系统音频频谱代理；1.6 新增 `WidgetHost.activateWindow` 键盘焦点请求；1.7 新增 `DesktopApps` 桌面程序代理与 `launcherList` 设置类型（三级应用选择面板、`_` 前缀内部键，及内置应用快捷启动器与 `4×1` 长条规格）。
 
 ## 10. 生命周期（当前范围）
 
