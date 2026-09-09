@@ -12,8 +12,9 @@ import "dialslogic.js" as DialsLogic
 // 内置小组件：世界时间（逐表盘自定义）。
 // 每块表盘由控制中心时区下拉定义：地区名与 UTC 偏移都由所选时区决定，
 // 无需维护偏移文本框。表盘列表按实例持久化（widgetConfig.dials，
-// 元素为 {zone, auto}），数字模式显示全部表盘，指针模式显示前
-// hostCols*hostRows 个表盘，表盘可少于格子数并留空。
+// 元素为 {zone, auto}）。两种模式槽数一致（hostCols*hostRows），切片显示、
+// 可少于格子数并留空；数字模式取纵向双列（每个 2×2 区恰 4 单位），
+// 仅 1×1 退化为单格并隐去标题，窄格（1×1/2×2）内地区名与时间上下排列。
 // 新实例缺省为指针模式并预置四块表盘（默认 2×2 恰好放满）：当前时区一块，
 // 其余三块取旧版四城市（北京/东京/伦敦/纽约）中不与当前时区重复的前三个。
 // 预置仅在实例尚无任何已保存配置（config 文件不存在）时生成并持久化；
@@ -53,7 +54,6 @@ Components.WidgetCard {
         ? widgetConfig.highlightLocal : false
     hostCols: 4
     hostRows: 2
-    property int dialCount: Math.max(1, hostCols * hostRows)
     property real localOffset: {
         var now = new Date()
         return -now.getTimezoneOffset() / 60
@@ -78,11 +78,21 @@ Components.WidgetCard {
     property bool defaultDialsSeeded: false
 
     property int layoutSpacing: 6
-    property int rowHeight: Math.max(18,
-        Math.floor((content.height - 28 - layoutSpacing * (zoneInfos.length + 1))
-            / Math.max(1, zoneInfos.length)))
     property int titlePixelSize: Math.max(11, Math.min(20, Math.round(content.width * 0.04)))
-    property int cityPixelSize: Math.max(8, Math.min(18, Math.round(rowHeight * 0.42)))
+
+    // 数字模式布局：单位数与指针模式一致（hostCols*hostRows），排列取纵向
+    // 双列（每个 2×2 区恰 4 单位：中 2×2→2×2、宽 4×2→2×4、大 4×4→2×8）；
+    // 小卡（1×1）退化为单格并隐去标题；窄格（hostCols<4）内上下排列
+    property int digitalSlots: root.hostCols * root.hostRows
+    property bool digitalCompact: root.hostCols < 2
+    property bool digitalVerticalCells: root.hostCols < 4
+    property int digitalCols: root.digitalCompact ? 1 : 2
+    property int digitalRows: root.digitalSlots / root.digitalCols
+
+    // 当前尺寸下的槽数：指针模式铺满网格，数字模式按上表
+    function currentSlots() {
+        return root.analogMode ? root.hostCols * root.hostRows : root.digitalSlots
+    }
 
     function nowMs() {
         return root.preloadTime ? ClockTime.epochMs : Date.now()
@@ -212,8 +222,8 @@ Components.WidgetCard {
         })
     }
 
-    function shrinkDials() {
-        return DialsLogic.shrinkDials(root.dials, root.hostCols * root.hostRows)
+    function shrinkDials(target) {
+        return DialsLogic.shrinkDials(root.dials, target)
     }
 
     function persistDials(list) {
@@ -225,14 +235,15 @@ Components.WidgetCard {
     }
 
     function handleResize() {
-        var slots = root.hostCols * root.hostRows
-        if (root.lastSlotCount >= 0 && slots !== root.lastSlotCount && root.analogMode) {
+        var slots = root.currentSlots()
+        // 数字模式同样继承补位/收缩：尺寸变化即向当前槽数对齐（仅动 auto 表盘）
+        if (root.lastSlotCount >= 0 && slots !== root.lastSlotCount) {
             if (slots > root.dials.length) {
                 var grown = root.fillDials(slots)
                 if (grown.length !== root.dials.length)
                     root.persistDials(grown)
             } else if (slots < root.dials.length) {
-                var shrunk = root.shrinkDials()
+                var shrunk = root.shrinkDials(slots)
                 if (shrunk.length !== root.dials.length)
                     root.persistDials(shrunk)
             }
@@ -249,7 +260,11 @@ Components.WidgetCard {
 
     onHostColsChanged: root.scheduleResize()
     onHostRowsChanged: root.scheduleResize()
-    onWidgetConfigChanged: root.rebuildDials()
+    // 模式切换不补位（既有规则），但刷新槽数基准，避免下次缩放误判变化幅度
+    onWidgetConfigChanged: {
+        root.rebuildDials()
+        root.lastSlotCount = root.currentSlots()
+    }
     onPreloadTimeChanged: if (!root.analogMode) root.updateTimes()
     onVisibleChanged: if (visible && !root.analogMode) root.updateTimes()
     onPanelVisibleChanged: if (panelVisible && !root.analogMode) root.updateTimes()
@@ -261,7 +276,7 @@ Components.WidgetCard {
         // 宿主对 hostCols/hostRows 的首次注入可能晚于 onCompleted，
         // 延迟一拍再记录基准尺寸，避免把首次注入误判为“缩放”
         Qt.callLater(function () {
-            root.lastSlotCount = root.hostCols * root.hostRows
+            root.lastSlotCount = root.currentSlots()
         })
     }
 
@@ -287,16 +302,20 @@ Components.WidgetCard {
         wrapMode: Text.Wrap
     }
 
-    // 数字模式列表视图（拆分至 DigitalList.qml）
+    // 数字模式网格视图（拆分至 DigitalList.qml）；
+    // 标题文本由本文件传入：qsTr 上下文随文件名，放 DigitalList 会查不到
+    // 既有翻译条目（全部登记在 main 上下文下）
     DigitalList {
         id: content
         visible: !root.analogMode
         zoneInfos: root.zoneInfos
         times: root.times
         layoutSpacing: root.layoutSpacing
-        rowHeight: root.rowHeight
+        titleText: root.digitalCompact ? "" : qsTr("World Time")
         titlePixelSize: root.titlePixelSize
-        cityPixelSize: root.cityPixelSize
+        cols: root.digitalCols
+        rows: root.digitalRows
+        verticalCells: root.digitalVerticalCells
         highlightLocal: root.highlightLocal
         localOffset: root.localOffset
         textColor: root.textColor
