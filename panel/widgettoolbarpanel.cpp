@@ -18,6 +18,8 @@
 #include "widgetmanager.h"
 #include "widgetmodel.h"
 
+#include "desktopapps.h"
+
 #include <pluginfactory.h>
 
 #include <QDBusConnection>
@@ -25,7 +27,9 @@
 #include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QDebug>
+#include <QQuickImageProvider>
 #include <QQuickWindow>
+#include <QQmlEngine>
 #include <QtQml/qqml.h>
 
 // D-Bus 服务：面板显隐与置顶状态通过 session bus 暴露给 dde-dock 托盘触发按钮
@@ -87,6 +91,10 @@ bool WidgetToolbarPanel::init()
     // 内部在独立线程采集（dlopen libpulse），仅输出只读数值，绝不触麦克风
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "AudioVisualizer",
                                  new AudioVisualizer(this));
+    // 桌面程序条目代理：应用快捷启动器经它枚举应用（AM 优先、目录降级）、
+    // 解析默认程序与启动应用；图标经 image provider 与 dde-shell 同源渲染
+    qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "DesktopApps",
+                                 new DesktopApps(this));
 
     // 读取持久化状态（默认显示 + 默认置顶，Vista 侧栏风格）
     m_config = DConfig::create("org.deepin.dde.shell", "org.deepin.ds.widgettoolbar");
@@ -114,7 +122,18 @@ bool WidgetToolbarPanel::init()
     m_windowGuard = new WindowGuard(this);
     m_windowGuard->setPinned(m_pinned);
     connect(this, &DApplet::rootObjectChanged, this, [this]() {
-        m_windowGuard->attach(qobject_cast<QQuickWindow *>(rootObject()));
+        auto *window = qobject_cast<QQuickWindow *>(rootObject());
+        if (window) {
+            // 应用图标 image provider（小组件 Image source 形如
+            // "image://dwtappicon/<图标名或路径>@<像素>"）：QML 引擎就绪后注册一次。
+            // 每个小组件根对象由该引擎创建，注册必须先于任何图标请求。
+            if (QQmlEngine *engine = qmlEngine(window); engine && engine != m_iconEngine) {
+                engine->addImageProvider(QStringLiteral("dwtappicon"),
+                                         DesktopApps::createIconProvider());
+                m_iconEngine = engine;
+            }
+        }
+        m_windowGuard->attach(window);
     });
 
     // 多任务视图避让（kwin multitaskview 特效对 Dock/Notification 类型窗口不经缩略图

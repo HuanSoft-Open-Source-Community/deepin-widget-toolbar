@@ -37,3 +37,8 @@ void WidgetHost::activateWindow()
         return;
     WindowGuard::ensureKeyboardFocus(panel->rootWindow());
 }
+
+void WidgetHost::requestOpenAppPicker(const QString &instanceId, int index)
+{
+    Q_EMIT openAppPickerRequested(instanceId, index);
+}

@@ -28,6 +28,13 @@ public:
     // X11 下面板是 Dock/Notification 类窗口，kwin 不因点击授予键盘焦点，
     // 只做 QML 取焦光标会闪但按键无法送达；详见 WindowGuard::ensureKeyboardFocus
     Q_INVOKABLE void activateWindow();
+    // 小组件请求宿主打开"选择程序"三级面板（应用快捷启动器用）：
+    // index 为待编辑的启动器槽位（-1 = 追加新单元），宿主确认后直接回写实例配置
+    Q_INVOKABLE void requestOpenAppPicker(const QString &instanceId, int index);
+
+Q_SIGNALS:
+    // 打开选择面板请求（宿主 QML 监听并负责弹窗定位）
+    void openAppPickerRequested(const QString &instanceId, int index);
 
 private:
     WidgetManager *m_manager = nullptr;

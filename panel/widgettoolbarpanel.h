@@ -16,7 +16,9 @@ using Dtk::Core::DConfig;
 class WidgetManager;
 class WidgetListModel;
 class WindowGuard;
+class DesktopApps;
 class QQuickWindow;
+class QQmlEngine;
 
 class WidgetToolbarPanel : public DPanel
 {
@@ -98,4 +100,6 @@ private:
 
     WidgetManager *m_widgetManager = nullptr;
     WidgetListModel *m_widgetListModel = nullptr;
+    // 应用图标 image provider 已注册的 QML 引擎（rootObject 重建时防重复注册）
+    QQmlEngine *m_iconEngine = nullptr;
 };

@@ -54,6 +54,8 @@ add_library(ds-widget-toolbar SHARED
     timezones.h
     widgethost.cpp
     widgethost.h
+    desktopapps.cpp
+    desktopapps.h
     audiovisualizer.cpp
     audiovisualizer.h
     spectrumcapture.cpp
