@@ -1,0 +1,88 @@
+{
+    "id": "applauncher",
+    "name": "App Launcher",
+    "name[zh_CN]": "应用快捷启动器",
+    "description": "Launch your favourite apps from one card",
+    "description[zh_CN]": "把常用软件收纳进一张卡片，随时一键启动",
+    "version": "1.0.0",
+    "apiVersion": "1.2",
+    "author": "deepin-widget-toolbar",
+    "icon": "system-run",
+    "runtime": "qml",
+    "entry": "main.qml",
+    "defaultSize": { "cols": 4, "rows": 1 },
+    "sizes": [
+        { "cols": 1, "rows": 1 },
+        { "cols": 2, "rows": 2 },
+        { "cols": 4, "rows": 1 },
+        { "cols": 4, "rows": 2 },
+        { "cols": 4, "rows": 4 }
+    ],
+    "settings": [
+        {
+            "key": "transparentBackground",
+            "type": "boolean",
+            "label": "Transparent background",
+            "label[zh_CN]": "透明背景",
+            "default": false
+        },
+        {
+            "key": "backgroundColor",
+            "type": "color",
+            "label": "Background color",
+            "label[zh_CN]": "背景颜色",
+            "default": "#660066",
+            "options": [
+                { "value": "#660066", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "immersiveMode",
+            "type": "boolean",
+            "label": "Immersive mode",
+            "label[zh_CN]": "沉浸模式",
+            "default": false
+        },
+        {
+            "key": "launchers",
+            "type": "launcherList",
+            "label": "Apps",
+            "label[zh_CN]": "应用",
+            "default": []
+        },
+        {
+            "key": "showLabels",
+            "type": "boolean",
+            "label": "Show labels",
+            "label[zh_CN]": "显示标签",
+            "default": true
+        },
+        {
+            "key": "labelColor",
+            "type": "color",
+            "label": "Label color",
+            "label[zh_CN]": "标签颜色",
+            "default": "#ffffff",
+            "options": [
+                { "value": "#ffffff", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "unitBackgroundColor",
+            "type": "color",
+            "label": "Launcher background",
+            "label[zh_CN]": "启动器底色",
+            "default": "#ffffff",
+            "options": [
+                { "value": "#ffffff", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "_launchersSeeded",
+            "type": "boolean",
+            "label": "Seeded",
+            "default": false
+        }
+    ],
+    "builtin": true
+}
