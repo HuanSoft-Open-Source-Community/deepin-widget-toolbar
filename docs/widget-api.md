@@ -88,7 +88,7 @@
 | 属性 | 类型 | 说明 |
 |---|---|---|
 | `instanceId` | string | 实例唯一标识（UUID），同一小组件可添加多个实例 |
-| `dataDir` | string | 宿主隔离的实例数据目录：`~/.local/share/org.deepin.ds.widgettoolbar/widgets/<id>/data/`。持久化数据写入 `dataDir/<instanceId>.txt`（或自建子目录），按实例隔离 |
+| `dataDir` | string | 宿主隔离的实例数据目录：`~/.local/share/org.deepin.ds.widgettoolbar/widgets/<id>/data/`。持久化数据写入 `dataDir/<instanceId>.xml`（或自建子目录），按实例隔离；内置便签已由旧版 `.txt` 迁移至 XML——首次加载时自动转换，`.txt` 保留作备份，此后以 `.xml` 为唯一事实源 |
 | `widgetConfig` | object | 该实例的配置对象（由 `settings` schema 默认值与已保存配置合并），配置面板保存后宿主刷新该属性 |
 
 ## 6. 宿主能力代理（QML 模块 `org.deepin.widgettoolbar 1.0`）

@@ -9,7 +9,16 @@ import org.deepin.widgettoolbar 1.0
 import "../components" as Components
 
 // 内置示例小组件：便签（默认 2×2）
-// 实例数据持久化演示：写入 dataDir/<instanceId>.txt（宿主隔离的实例数据目录）
+// 实例数据持久化：XML 写入 dataDir/<instanceId>.xml（宿主隔离的实例数据目录），
+// 首次加载时自动从旧版纯文本 <instanceId>.txt 迁移（.txt 保留作备份）。
+//
+// 待办模式（manifest 设置 todoMode，经 widgetConfig 实时生效）：
+//  - 每个逻辑行行首缺省一个空心圆点，点击圆点在空心/实心间交替；
+//  - 实心（完成）行：文字叠半透明底色"洗浅"，并由 strikeCanvas 画删除线；
+//    空心行不作任何处理；
+//  - 内容区 Flickable + 全高 TextArea：可滚动页面高度随行数动态增长（无限滚动），
+//    圆点/洗色/删除线与文字同处内容坐标系，随滚动整体移动。
+//  圆点与行状态按"行索引"绑定：回车新增行缺省空心，上方插行后既有标记不随行迁移。
 Components.WidgetCard {
     id: root
 
@@ -17,7 +26,10 @@ Components.WidgetCard {
     dataDir: ""
     instanceId: ""
 
-    property string notePath: dataDir.length > 0 && instanceId.length > 0
+    property string xmlPath: dataDir.length > 0 && instanceId.length > 0
+        ? dataDir + "/" + instanceId + ".xml" : ""
+    // 旧版纯文本存储：仅作迁移来源与损坏 XML 的回退，迁移后不再读取
+    property string legacyNotePath: dataDir.length > 0 && instanceId.length > 0
         ? dataDir + "/" + instanceId + ".txt" : ""
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
     // 卡片底色跟随内容背景色，让内容自定义色延伸到整个便签卡片
@@ -32,6 +44,22 @@ Components.WidgetCard {
         widgetConfig && widgetConfig.contentBackgroundColor, "#fff8d6")
     property color lineColor: Components.ColorUtils.resolveColor(
         widgetConfig && widgetConfig.lineColor, "#cccccc")
+    // 待办模式开关（实例设置，缺省关闭）
+    property bool todoMode: widgetConfig && widgetConfig.todoMode === true
+    // 各行完成标记（按行索引与文本行对齐；长度恒与 lineCount 同步）
+    property var doneFlags: []
+    // 程序化赋值文本期间置 true，抑制 onTextChanged 的标记同步
+    property bool syncingFlags: false
+    // 圆点/文字颜色：配色模式跟文字色，透明模式跟主题文字色（与正文一致）
+    property color dotColor: root.effectiveTransparent ? root.themeTextColor : root.textColor
+    // 完成行"洗浅"色：配色模式用内容底色，透明模式（底色不可知）退主题窗口色
+    readonly property color washColor: {
+        var c = root.effectiveTransparent ? palette.window : root.contentBackgroundColor
+        return Qt.rgba(c.r, c.g, c.b, 0.55)
+    }
+    // 圆点列宽度（仅待办模式占位，文字整体右移让位）
+    property int dotGutter: root.todoMode ? Math.max(18, Math.round(root.lineHeight * 0.85)) : 0
+    property int dotSize: Math.max(9, Math.round(root.lineHeight * 0.36))
     property int titlePixelSize: Math.max(10, Math.min(20, Math.round(content.width * 0.04)))
     property real noteFontScale: {
         var mode = widgetConfig && widgetConfig.noteFontScale ? widgetConfig.noteFontScale : "medium"
@@ -45,18 +73,112 @@ Components.WidgetCard {
         Math.round(content.height * 0.09 * noteFontScale)))
     // 行底线必须与 TextArea 实际文本行高一致，不能用像素大小的经验倍率估算
     property real lineHeight: Math.max(12, noteFontMetrics.lineSpacing)
+
+    // ===== 实测行几何（对齐的事实源） =====
+    // Controls 2 的 TextArea 是包装器，没有 lineHeight/lineHeightMode 属性可设，
+    // 渲染行距无法与 i*lineSpacing 步进强制一致：QTextDocument 默认行高为
+    // ascent+descent（不含 leading），CJK fallback 字体混排时还会被撑高，行数一多
+    // 即累积偏移（圆点/格线与文字对不齐）。因此一切行几何改绑 positionToRectangle()
+    // 实测值：lineStarts 为每行起始字符位（随文本变化重建，O(字符数) 一次 split）；
+    // lineTops/lineHeights 为每行顶 y 与行高（y 值只取决于行号，同行编辑不改变任何
+    // 行的几何，故仅在行数或字号变化时重测，击键高频路径零重测开销）。
+    property var lineStarts: []
+    property var lineTops: []
+    property var lineHeights: []
+
+    function rebuildLineStarts() {
+        var lines = noteArea.text.replace(/\r\n/g, "\n").split("\n")
+        var starts = []
+        var pos = 0
+        for (var i = 0; i < lines.length; i++) {
+            starts.push(pos)
+            pos += lines[i].length + 1
+        }
+        root.lineStarts = starts
+    }
+
+    function rebuildLineTops() {
+        var tops = []
+        var heights = []
+        for (var i = 0; i < root.lineStarts.length; i++) {
+            var r = noteArea.positionToRectangle(root.lineStarts[i])
+            tops.push(r.y)
+            heights.push(r.height)
+        }
+        root.lineTops = tops
+        root.lineHeights = heights
+        // 极端行分隔符（U+2028 等）下 split 行数可能少于 lineCount：
+        // 按末行几何补齐，避免委托绑定 y/height 取到 undefined
+        while (tops.length < noteArea.lineCount && tops.length > 0) {
+            tops.push(tops[tops.length - 1] + heights[heights.length - 1])
+            heights.push(heights[heights.length - 1])
+        }
+        if (lineCanvas)
+            lineCanvas.requestPaint()
+        if (strikeCanvas)
+            strikeCanvas.requestPaint()
+    }
+
+    // y（noteArea 内容坐标）→ 行号：取最后一个行顶 <= y 的行
+    function lineIndexAt(y) {
+        for (var i = root.lineTops.length - 1; i >= 0; i--) {
+            if (y >= root.lineTops[i])
+                return i
+        }
+        return -1
+    }
     property int autoSaveInterval: widgetConfig && widgetConfig.autoSaveInterval
         ? Number(widgetConfig.autoSaveInterval) : 5000
 
-    onNotePixelSizeChanged: if (lineCanvas) lineCanvas.requestPaint()
-    onLineHeightChanged: if (lineCanvas) lineCanvas.requestPaint()
+    onNotePixelSizeChanged: {
+        if (lineCanvas)
+            lineCanvas.requestPaint()
+        // 字号变化会重排所有行：延迟到布局更新后重测行几何
+        Qt.callLater(root.rebuildLineTops)
+    }
+    onLineHeightChanged: {
+        if (lineCanvas) lineCanvas.requestPaint()
+        if (strikeCanvas) strikeCanvas.requestPaint()
+    }
+    onTodoModeChanged: {
+        // 切模式时文本不变、标记保留；对齐一次防越界
+        root.syncFlags()
+        if (strikeCanvas) strikeCanvas.requestPaint()
+        if (lineCanvas) lineCanvas.requestPaint()
+    }
+    onDoneFlagsChanged: if (strikeCanvas) strikeCanvas.requestPaint()
 
-    onNotePathChanged: {
+    // dataDir/instanceId 由宿主 Binding 注入，xmlPath 就绪后加载/迁移一次
+    onXmlPathChanged: {
         Qt.callLater(function () {
             if (noteArea)
                 noteArea.loadNote()
         })
     }
+
+    // ===== 行状态模型 =====
+
+    function isDone(index) {
+        return index >= 0 && index < root.doneFlags.length
+            && root.doneFlags[index] === true
+    }
+
+    // 把标记数组对齐到当前行数：截断多余、尾部补 false（新增行缺省空心）。
+    // 已有标记按行索引保留。行数未变时不重建数组，避免每次击键触发
+    // doneFlagsChanged 引发删除线画布整幅重绘。
+    function syncFlags() {
+        if (root.syncingFlags)
+            return
+        var n = noteArea.lineCount
+        if (root.doneFlags.length === n)
+            return
+        var flags = root.doneFlags.slice(0, n)
+        while (flags.length < n)
+            flags.push(false)
+        root.doneFlags = flags
+    }
+
+    // ===== 点击路由 =====
 
     // 主面板拖放层接收按下以持有鼠标抓取；普通点击由此转发，
     // 让便签仍能进入编辑并把光标放到点击位置。
@@ -74,8 +196,30 @@ Components.WidgetCard {
         noteArea.cursorPosition = Math.max(0, pos)
     }
 
+    // 待办模式点击圆点列：命中即翻转该行完成态并落盘，返回是否已消费。
+    // mapFromItem 自动计入 Flickable 滚动偏移，行号按行高换算。
+    function tryToggleDot(x, y) {
+        if (!root.todoMode)
+            return false
+        var p = noteArea.mapFromItem(root, x, y)
+        if (p.x < 0 || p.x >= noteArea.leftPadding - 2)
+            return false
+        var idx = root.lineIndexAt(p.y)
+        if (idx < 0 || idx >= noteArea.lineCount)
+            return false
+        var flags = root.doneFlags.slice()
+        while (flags.length <= idx)
+            flags.push(false)
+        flags[idx] = !flags[idx]
+        root.doneFlags = flags
+        noteArea.saveNote()
+        return true
+    }
+
     function handleHostClick(x, y) {
         WidgetHost.activateWindow()
+        if (root.tryToggleDot(x, y))
+            return
         root.lastClickPos = Qt.point(x, y)
         root.textAtClick = noteArea.text
         focusNoteAt(x, y)
@@ -84,6 +228,22 @@ Components.WidgetCard {
         // 用户一旦开始输入即停，不与按键抢光标）。
         focusRetry.left = 3
         focusRetry.restart()
+    }
+
+    // 光标移动后滚入可视区：全高 TextArea 无内滚，可视窗口由 contentY 决定。
+    // 先停滚轮回弹动画，避免动画随后把 contentY 拉回旧目标。
+    function ensureCursorVisible() {
+        bounceAnim.stop()
+        var r = noteArea.cursorRectangle
+        var lineTop = r.y - noteArea.topPadding
+        var margin = 4
+        if (lineTop < noteFlick.contentY + margin) {
+            noteFlick.contentY = Math.max(0, lineTop - margin)
+        } else if (lineTop + root.lineHeight > noteFlick.contentY + noteFlick.height - margin) {
+            noteFlick.contentY = Math.min(
+                Math.max(0, noteFlick.contentHeight - noteFlick.height),
+                lineTop + root.lineHeight - noteFlick.height + margin)
+        }
     }
 
     Timer {
@@ -103,6 +263,52 @@ Components.WidgetCard {
             }
             root.focusNoteAt(root.lastClickPos.x, root.lastClickPos.y)
         }
+    }
+
+    // ===== XML 持久化 =====
+
+    // 实体转义（写入侧）：item 文本内不会出现裸 < > &，保证逐行严格可解析
+    function escapeXml(s) {
+        return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    }
+
+    // 实体解码（读取侧）：先解字符实体、最后解 &amp;，与转义顺序互逆
+    function decodeXml(s) {
+        return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
+    }
+
+    // 严格解析自产 XML 为 [{done, text}]；空便签（无 item）返回 []；
+    // 结构意外（被手工改动/损坏）返回 null，由调用方回退迁移路径。
+    function parseXmlItems(raw) {
+        if (raw.indexOf("<sticky-note") < 0)
+            return null
+        if (raw.indexOf("<item") >= 0) {
+            var matched = false
+            var items = []
+            var re = /<item done="(true|false)">([\s\S]*?)<\/item>/g
+            var m
+            while ((m = re.exec(raw)) !== null) {
+                matched = true
+                items.push({ "done": m[1] === "true", "text": root.decodeXml(m[2]) })
+            }
+            if (!matched)
+                return null // 有 item 标签但无一合法：视为损坏
+            return items
+        }
+        return []
+    }
+
+    function applyItems(items) {
+        var lines = []
+        var flags = []
+        for (var i = 0; i < items.length; i++) {
+            lines.push(items[i].text)
+            flags.push(items[i].done === true)
+        }
+        root.syncingFlags = true
+        noteArea.text = lines.join("\n")
+        root.syncingFlags = false
+        root.doneFlags = flags
     }
 
     // 标题区高度：透明模式为纯文字（配色模式前样式），无标题条占位
@@ -143,7 +349,7 @@ Components.WidgetCard {
             width: parent.width
             height: parent.height - root.titleBarHeight - content.spacing
 
-            // 内容底色：仅非透明模式显示
+            // 内容底色：仅非透明模式显示（固定于可视区，不随内容滚动）
             Rectangle {
                 anchors.fill: parent
                 radius: DTK.platformTheme.windowRadius
@@ -151,67 +357,283 @@ Components.WidgetCard {
                 color: root.contentBackgroundColor
             }
 
-            TextArea {
-                id: noteArea
+            // 无限滚动：TextArea 全高铺开内容，可视窗口由 Flickable 决定，
+            // contentHeight 随行数动态增长；滚轮/触摸板滚动，光标移动自动跟随。
+            // （宿主拖放层为长按拖拽持有按下，触屏单指拖滚不生效，属桌面场景取舍。）
+            Flickable {
+                id: noteFlick
                 anchors.fill: parent
-                font.pixelSize: root.notePixelSize
-                color: root.effectiveTransparent ? root.themeTextColor : root.textColor
-                placeholderText: qsTr("Write something…")
-                FontMetrics {
-                    id: noteFontMetrics
-                    font: noteArea.font
-                }
-                background: Canvas {
-                    id: lineCanvas
-                    anchors.fill: parent
+                clip: true
+                contentWidth: width
+                contentHeight: Math.max(height, noteArea.height)
 
-                    onWidthChanged: requestPaint()
-                    onHeightChanged: requestPaint()
-
-                    onPaint: {
-                        var ctx = getContext("2d")
-                        if (!ctx)
+                // 滚轮接管：无条件消费滚轮事件——到头继续滚不再透传给面板网格；
+                // 越界部分转为小幅 overshoot 并回弹，形成"拉紧回弹"的视觉缓冲。
+                // 触摸板 pixelDelta 逐帧映射，鼠标滚轮按 3 行/格映射。
+                WheelHandler {
+                    id: noteWheel
+                    target: null
+                    onWheel: (ev) => {
+                        ev.accepted = true
+                        var dy = ev.pixelDelta.y !== 0
+                            ? -ev.pixelDelta.y
+                            : -ev.angleDelta.y / 120 * root.lineHeight * 3
+                        if (dy === 0)
                             return
-                        // 透明模式为配色模式前样式：无行底线
-                        if (root.effectiveTransparent)
+                        var maxC = Math.max(0, noteFlick.contentHeight - noteFlick.height)
+                        // 内容不足以滚动时：仅消费事件（防穿透），不做越界动画
+                        if (noteFlick.contentHeight <= noteFlick.height + 1) {
+                            noteFlick.cancelFlick()
                             return
-                        ctx.reset()
-                        ctx.strokeStyle = root.lineColor
-                        ctx.globalAlpha = 0.7
-                        ctx.lineWidth = 1
-
-                        var y = noteArea.topPadding + root.lineHeight - 1
-                        while (y < height - noteArea.bottomPadding) {
-                            ctx.beginPath()
-                            ctx.moveTo(2, y)
-                            ctx.lineTo(width - 4, y)
-                            ctx.stroke()
-                            y += root.lineHeight
+                        }
+                        var clamped = Math.max(0, Math.min(maxC, noteFlick.contentY + dy))
+                        // 越界余量钳制在约 2 行，避免连续滚动把内容拉飞
+                        var maxOver = root.lineHeight * 2
+                        var target = Math.max(-maxOver, Math.min(maxC + maxOver,
+                            noteFlick.contentY + dy))
+                        bounceAnim.stop()
+                        noteFlick.cancelFlick()
+                        noteFlick.contentY = target
+                        if (target !== clamped) {
+                            // 越界 → 回弹到最近边界（OutCubic 模拟橡皮筋回位）
+                            bounceAnim.to = clamped
+                            bounceAnim.restart()
                         }
                     }
                 }
-
-                function loadNote() {
-                    if (root.notePath.length > 0 && FileIO.exists(root.notePath))
-                        noteArea.text = FileIO.readTextFile(root.notePath)
-                }
-                function saveNote() {
-                    if (root.notePath.length > 0)
-                        FileIO.writeTextFile(root.notePath, text)
+                NumberAnimation {
+                    id: bounceAnim
+                    target: noteFlick
+                    property: "contentY"
+                    duration: 280
+                    easing.type: Easing.OutCubic
                 }
 
-                onActiveFocusChanged: {
-                    if (!activeFocus)
-                        saveNote()
-                }
-                Component.onDestruction: saveNote()
+                TextArea {
+                    id: noteArea
+                    width: noteFlick.width
+                    // 全高：内容不足时撑满可视区（底线画满整卡），超出时随内容增长
+                    height: Math.max(noteFlick.height, implicitHeight)
+                    font.pixelSize: root.notePixelSize
+                    color: root.effectiveTransparent ? root.themeTextColor : root.textColor
+                    placeholderText: qsTr("Write something…")
+                    // 待办模式文字右移为圆点让位；经典模式恢复样式默认 padding
+                    Binding {
+                        target: noteArea
+                        property: "leftPadding"
+                        when: root.todoMode
+                        value: root.dotGutter + 4
+                        restoreMode: Binding.RestoreBindingOrValue
+                    }
+                    FontMetrics {
+                        id: noteFontMetrics
+                        font: noteArea.font
+                    }
+                    background: Canvas {
+                        id: lineCanvas
+                        anchors.fill: parent
 
-                Timer {
-                    id: autoSaveTimer
-                    interval: root.autoSaveInterval
-                    repeat: true
-                    running: noteArea.activeFocus
-                    onTriggered: noteArea.saveNote()
+                        onWidthChanged: requestPaint()
+                        onHeightChanged: requestPaint()
+
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            if (!ctx)
+                                return
+                            // 透明模式为配色模式前样式：无行底线
+                            if (root.effectiveTransparent)
+                                return
+                            ctx.reset()
+                            ctx.strokeStyle = root.lineColor
+                            ctx.globalAlpha = 0.7
+                            ctx.lineWidth = 1
+
+                            // 待办模式从圆点列右侧起笔，避免线穿过圆点下方；
+                            // 经典模式保持原有 x=2 起点不变
+                            var x0 = root.todoMode ? Math.max(2, noteArea.leftPadding) : 2
+                            // 已有行：精确画在实测行底（对齐事实源）
+                            for (var i = 0; i < root.lineTops.length; i++) {
+                                var ly = root.lineTops[i] + root.lineHeights[i] - 1
+                                if (ly >= height - noteArea.bottomPadding)
+                                    break
+                                ctx.beginPath()
+                                ctx.moveTo(x0, ly)
+                                ctx.lineTo(width - 4, ly)
+                                ctx.stroke()
+                            }
+                            // 行数不足整卡：从最后一个实测行起按其实测行高补满，
+                            // 空白区格线仍延续便签纸观感，且偏移不从头累积
+                            if (root.lineTops.length > 0) {
+                                var step = root.lineHeights[root.lineHeights.length - 1]
+                                var y = root.lineTops[root.lineTops.length - 1] + step * 2 - 1
+                                while (y < height - noteArea.bottomPadding) {
+                                    ctx.beginPath()
+                                    ctx.moveTo(x0, y)
+                                    ctx.lineTo(width - 4, y)
+                                    ctx.stroke()
+                                    y += step
+                                }
+                            } else {
+                                var y0 = noteArea.topPadding + root.lineHeight - 1
+                                while (y0 < height - noteArea.bottomPadding) {
+                                    ctx.beginPath()
+                                    ctx.moveTo(x0, y0)
+                                    ctx.lineTo(width - 4, y0)
+                                    ctx.stroke()
+                                    y0 += root.lineHeight
+                                }
+                            }
+                        }
+                    }
+
+                    // 完成行删除线：画在洗色矩形之上（z 更高），保证清晰可辨
+                    Canvas {
+                        id: strikeCanvas
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        width: noteArea.width
+                        height: noteArea.height
+                        z: 4
+                        visible: root.todoMode
+
+                        onWidthChanged: requestPaint()
+                        onHeightChanged: requestPaint()
+
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            if (!ctx)
+                                return
+                            ctx.reset()
+                            if (!root.todoMode)
+                                return
+                            ctx.strokeStyle = root.dotColor
+                            ctx.globalAlpha = 0.8
+                            ctx.lineWidth = 1
+                            for (var i = 0; i < root.lineTops.length; i++) {
+                                if (!root.isDone(i))
+                                    continue
+                                var y = root.lineTops[i] + root.lineHeights[i] * 0.5
+                                ctx.beginPath()
+                                ctx.moveTo(noteArea.leftPadding, y)
+                                ctx.lineTo(width - 4, y)
+                                ctx.stroke()
+                            }
+                        }
+                    }
+
+                    // 完成行"洗浅"矩形：半透明内容底色叠于文字上（z 高于 TextArea），
+                    // 深字浅底/浅字深底/透明模式三种配色下都呈现"变浅"观感
+                    Repeater {
+                        model: root.todoMode ? noteArea.lineCount : 0
+                        delegate: Rectangle {
+                            required property int index
+                            z: 2
+                            x: 0
+                            y: root.lineTops[index]
+                            width: noteArea.width
+                            height: root.lineHeights[index]
+                            color: root.washColor
+                            visible: root.isDone(index)
+                        }
+                    }
+
+                    // 行首圆点列：空心（边框圆环）/实心（填充圆盘），随内容滚动；
+                    // 垂直居中于实测行几何，与文字逐行严格对齐
+                    Repeater {
+                        model: root.todoMode ? noteArea.lineCount : 0
+                        delegate: Item {
+                            id: dotItem
+                            required property int index
+                            z: 3
+                            x: 4
+                            y: root.lineTops[index]
+                                + (root.lineHeights[index] - root.dotSize) / 2
+                            width: root.dotSize
+                            height: root.dotSize
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: width / 2
+                                color: root.isDone(dotItem.index) ? root.dotColor : "transparent"
+                                border.color: root.dotColor
+                                border.width: Math.max(1, root.dotSize * 0.09)
+                                opacity: root.isDone(dotItem.index) ? 0.9 : 0.7
+                            }
+                        }
+                    }
+
+                    // ===== 加载 / 保存（XML + 旧 .txt 迁移） =====
+
+                    function loadNote() {
+                        if (root.xmlPath.length === 0)
+                            return
+                        // 1) XML 为事实源：存在即解析
+                        if (FileIO.exists(root.xmlPath)) {
+                            var items = root.parseXmlItems(FileIO.readTextFile(root.xmlPath))
+                            if (items !== null) {
+                                root.applyItems(items)
+                                return
+                            }
+                            // 损坏 XML：落入下方迁移/空路径，下次保存自然修复
+                        }
+                        // 2) 迁移：旧版纯文本 → 立即写 XML（.txt 保留作备份，此后不读）
+                        if (FileIO.exists(root.legacyNotePath)) {
+                            var legacy = FileIO.readTextFile(root.legacyNotePath)
+                            root.syncingFlags = true
+                            noteArea.text = legacy.replace(/\r\n/g, "\n")
+                            root.syncingFlags = false
+                            root.syncFlags()
+                            noteArea.saveNote()
+                            return
+                        }
+                        // 3) 全新实例
+                        root.syncingFlags = true
+                        noteArea.text = ""
+                        root.syncingFlags = false
+                        root.doneFlags = []
+                    }
+
+                    function saveNote() {
+                        if (root.xmlPath.length === 0)
+                            return
+                        var lines = text.replace(/\r\n/g, "\n").split("\n")
+                        var out = '<?xml version="1.0" encoding="UTF-8"?>\n'
+                            + '<sticky-note version="1">\n'
+                        for (var i = 0; i < lines.length; i++) {
+                            out += '  <item done="'
+                                + (root.isDone(i) ? "true" : "false") + '">'
+                                + root.escapeXml(lines[i]) + '</item>\n'
+                        }
+                        out += '</sticky-note>\n'
+                        FileIO.writeTextFile(root.xmlPath, out)
+                    }
+
+                    onTextChanged: {
+                        root.syncFlags()
+                        root.rebuildLineStarts()
+                        // 行数变化才重测行几何：同行编辑不改变任何行的 y/行高
+                        if (root.lineStarts.length !== root.lineTops.length)
+                            root.rebuildLineTops()
+                    }
+                    Component.onCompleted: {
+                        root.rebuildLineStarts()
+                        root.rebuildLineTops()
+                    }
+                    onCursorPositionChanged: root.ensureCursorVisible()
+
+                    onActiveFocusChanged: {
+                        if (!activeFocus)
+                            saveNote()
+                    }
+                    Component.onDestruction: saveNote()
+
+                    Timer {
+                        id: autoSaveTimer
+                        interval: root.autoSaveInterval
+                        repeat: true
+                        running: noteArea.activeFocus
+                        onTriggered: noteArea.saveNote()
+                    }
                 }
             }
         }
