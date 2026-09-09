@@ -41,7 +41,7 @@
             "type": "boolean",
             "label": "Todo mode",
             "label[zh_CN]": "待办模式",
-            "default": false
+            "default": true
         },
         {
             "key": "autoSaveInterval",

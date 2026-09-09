@@ -69,8 +69,15 @@ Components.WidgetCard {
             return 1.2
         return 1.0
     }
-    property int notePixelSize: Math.max(9, Math.min(20,
-        Math.round(content.height * 0.09 * noteFontScale)))
+    // 基准字号随卡片高度缩放，但钳制基准本身（9..17px）；档位缩放乘在基准上。
+    // 旧实现把钳制施加在乘积上（min(20, h*0.09*scale)）：大卡片基准远超上限，
+    // 小/中/大三档全部钳成同一字号、选项失效。改为钳基准后三档恒可辨，
+    // 且 17×1.2≈20.4 与原 20px 上限观感一致。
+    property int notePixelSize: Math.max(9, Math.round(
+        Math.min(17, Math.max(9, content.height * 0.09)) * noteFontScale))
+
+    // 滚动指示条活动态：任何 contentY 变化即点亮，闲置 900ms 后由 scrollActivity 熄灭
+    property bool scrollActive: false
     // 行底线必须与 TextArea 实际文本行高一致，不能用像素大小的经验倍率估算
     property real lineHeight: Math.max(12, noteFontMetrics.lineSpacing)
 
@@ -367,6 +374,14 @@ Components.WidgetCard {
                 contentWidth: width
                 contentHeight: Math.max(height, noteArea.height)
 
+                // 滚动即点亮指示条：滚轮、回弹动画、光标自动滚入三条路径都经
+                // contentY 赋值，天然全部驱动（attached ScrollBar 依赖的 moving
+                // 恒为 false、hover 又被宿主拖放层持有，故弃用改自绘指示条）
+                onContentYChanged: {
+                    root.scrollActive = true
+                    scrollActivity.restart()
+                }
+
                 // 滚轮接管：无条件消费滚轮事件——到头继续滚不再透传给面板网格；
                 // 越界部分转为小幅 overshoot 并回弹，形成"拉紧回弹"的视觉缓冲。
                 // 触摸板 pixelDelta 逐帧映射，鼠标滚轮按 3 行/格映射。
@@ -634,6 +649,62 @@ Components.WidgetCard {
                         running: noteArea.activeFocus
                         onTriggered: noteArea.saveNote()
                     }
+                }
+            }
+
+            // ===== 滚动指示条：右缘细圆角拇指，随滚动点亮、闲置自动隐藏 =====
+            // 纯视觉、无输入处理，不与宿主拖放层/滚轮路径竞争；
+            // 颜色与圆点同源（dotColor），三种配色与透明模式均可见。
+            // visible 只随"内容是否可滚"切换（低频、无动画语义）；点亮/熄灭全部
+            // 走 opacity——若把 scrollActive 放进 visible，Qt 会在置 false 的瞬间
+            // 硬切掉淡出动画（旧实现消退生硬的根因）。非对称时长 + OutCubic：
+            // 出现 250ms 干脆、消退 600ms 从容，与卡片回弹（280ms OutCubic）
+            // 及面板整体动效同族。
+            Item {
+                anchors.right: parent.right
+                anchors.rightMargin: 3
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: 4
+                visible: noteFlick.contentHeight > noteFlick.height + 1
+                opacity: root.scrollActive ? 1 : 0
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: root.scrollActive ? 250 : 600
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                // 拇指：长度按可视占比（最小 24px），位置随 contentY 线性映射
+                // （overshoot 越界值钳回可视范围，避免画到卡片外）。
+                // y 上叠加轻阻尼（180ms OutCubic）：滚轮每格 3 行的离散跳步
+                // 变为滑行，与回弹曲线同族、连续滚动时呈轻微跟随感。
+                Rectangle {
+                    width: parent.width
+                    radius: width / 2
+                    color: root.dotColor
+                    opacity: 0.35
+                    height: Math.max(24,
+                        noteFlick.height * noteFlick.visibleArea.heightRatio)
+                    Behavior on y {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                    y: {
+                        if (noteFlick.contentHeight <= noteFlick.height)
+                            return 0
+                        var span = noteFlick.contentHeight - noteFlick.height
+                        var t = Math.max(0, Math.min(span, noteFlick.contentY)) / span
+                        return t * (parent.height - height)
+                    }
+                }
+
+                Timer {
+                    id: scrollActivity
+                    interval: 900
+                    onTriggered: root.scrollActive = false
                 }
             }
         }
