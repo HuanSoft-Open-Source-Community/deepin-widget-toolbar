@@ -52,8 +52,32 @@ Window {
     // 布局版本：位置变化时递增，驱动内容高度等绑定重新求值
     property int layoutVersion: 0
     property bool widgetsLoaded: false
-    // 网格内容高度的动画代理：尺寸切换时滚动范围平滑过渡
-    property int animatedGridContentHeight: Math.max(gridContentHeight(), height)
+    // 占用区顶行（最上卡片的最顶行）：滚动内容与卡片渲染的归一化基准。
+    // 最上卡片上方的空洞格不计入滚动高度（新增实例会自动填充首个空闲
+    // 矩形，空洞本就不可见）；空网格为 0。
+    property int gridTopRow: {
+        let minY = Infinity
+        for (let id in gridPositions)
+            minY = Math.min(minY, gridPositions[id].y)
+        return minY === Infinity ? 0 : minY
+    }
+    property int lastGridTopRow: 0
+    onGridTopRowChanged: {
+        // 顶行变化（删除最上卡片/避让预览移动顶卡）时同步平移视口，保持
+        // 卡片视觉位置稳定。程序化写入的 contentY 不会被 Flickable 自动
+        // 钳制（Qt 6.8 实测越界值会残留），必须按目标内容高度显式钳制。
+        gridFlickable.contentY += (gridTopRow - lastGridTopRow)
+            * (cellHeight + cellSpacing)
+        let maxContentY = Math.max(gridContentHeight(), gridFlickable.height)
+            - gridFlickable.height
+        gridFlickable.contentY = Math.max(0,
+            Math.min(gridFlickable.contentY, maxContentY))
+        lastGridTopRow = gridTopRow
+    }
+    // 网格内容高度的动画代理：尺寸切换时滚动范围平滑过渡。钳制到网格
+    // 可视区高度（而非整窗高度）：内容不足一屏时完全不可滚动。
+    property int animatedGridContentHeight: Math.max(gridContentHeight(),
+                                                     gridFlickable.height)
     Behavior on animatedGridContentHeight {
         NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
     }
@@ -91,14 +115,16 @@ Window {
         root.layoutVersion++
     }
 
-    // 实例左上角像素坐标；位置映射未就绪时回退到 C++ 直接读取
+    // 实例左上角像素坐标；位置映射未就绪时回退到 C++ 直接读取。
+    // Y 以占用区顶行为基准归一化（整块占用区贴住画布顶部）
     function cellX(instanceId) {
         let p = root.gridPositions[instanceId]
         return (p ? p.x : Panel.widgetManager.instanceGridX(instanceId)) * (cellWidth + cellSpacing)
     }
     function cellY(instanceId) {
         let p = root.gridPositions[instanceId]
-        return (p ? p.y : Panel.widgetManager.instanceGridY(instanceId)) * (cellHeight + cellSpacing)
+        let gy = p ? p.y : Panel.widgetManager.instanceGridY(instanceId)
+        return (gy - root.gridTopRow) * (cellHeight + cellSpacing)
     }
 
     Connections {
@@ -111,7 +137,7 @@ Window {
         }
     }
 
-    // 网格参数：横向固定 4 列，纵向无限行（滚动）
+    // 网格参数：横向固定 4 列，纵向行数不限（滚动范围按卡片占用区动态计算）
     property int gridColumns: 4
     // 卡片间距：8 → 12，不再紧凑但也不显空旷
     property int cellSpacing: 12
@@ -119,16 +145,26 @@ Window {
     // 格子为正方形；2×2 小组件占 (2*cellWidth + spacing) 见方
     property int cellHeight: cellWidth
 
-    // 网格内容总高度（由实例的最大 gridY+rows 决定）
+    // 网格内容总高度：占用区跨度 = 最上卡片顶行 → 最下卡片底行（含），
+    // 上/下方的空白格不再计入滚动范围。拖拽中末尾多留一行，保证能把
+    // 卡片拖到当前最底行之下落位（canDrop 对行数无上限）。空网格为 0
+    // （由 animatedGridContentHeight 钳到可视区高度）。
     function gridContentHeight() {
-        let maxY = 0
+        let ids = root.instanceIds
+        if (ids.length === 0)
+            return 0
         let version = root.layoutVersion
-        for (let i = 0; i < instanceIds.length; i++) {
-            let y = Panel.widgetManager.instanceGridY(instanceIds[i])
-            let rows = Panel.widgetManager.instanceRows(instanceIds[i])
+        let minY = Infinity
+        let maxY = 0
+        for (let i = 0; i < ids.length; i++) {
+            let p = root.gridPositions[ids[i]]
+            let y = p ? p.y : Panel.widgetManager.instanceGridY(ids[i])
+            let rows = Panel.widgetManager.instanceRows(ids[i])
+            minY = Math.min(minY, y)
             maxY = Math.max(maxY, y + rows)
         }
-        return maxY * (cellHeight + cellSpacing) - cellSpacing
+        let bottomRow = maxY + (root.dragging ? 1 : 0)
+        return (bottomRow - minY) * (cellHeight + cellSpacing) - cellSpacing
     }
 
     // ===== 拖放状态 =====
@@ -193,11 +229,13 @@ Window {
         if (!root.dragging)
             return
         // 目标格 = 组件左上角格：指针格扣除抓取偏移后钳制到网格可容纳范围。
-        // 钳制保证宽 4 高 2 等大组件抓取任意位置都能自由放置（含最顶行）
+        // 钳制保证宽 4 高 2 等大组件抓取任意位置都能自由放置（含最顶行）。
+        // 指针坐标是画布空间：画布行 + 占用区顶行 = 网格行（画布顶部即
+        // 最上卡片顶行，见 gridTopRow）。
         let targetX = Math.floor((pointerX - root.dragGrabOffsetX) / (cellWidth + cellSpacing))
-        let targetY = Math.floor((pointerY - root.dragGrabOffsetY) / (cellHeight + cellSpacing))
+        let targetY = Math.max(0, Math.floor((pointerY - root.dragGrabOffsetY)
+            / (cellHeight + cellSpacing))) + root.gridTopRow
         targetX = Math.max(0, Math.min(targetX, gridColumns - root.dragCols))
-        targetY = Math.max(0, targetY)
         root.dragTargetX = targetX
         root.dragTargetY = targetY
         root.dragTargetValid = Panel.widgetManager.canDrop(root.dragInstanceId, targetX, targetY)
