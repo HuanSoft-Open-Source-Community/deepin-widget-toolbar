@@ -32,6 +32,8 @@ add_library(ds-widget-toolbar SHARED
     timezonedb.h
     windowguard.cpp
     windowguard.h
+    panelavoidwatcher.cpp
+    panelavoidwatcher.h
     mprisparsing.cpp
     mprisparsing.h
     widgetmodel.cpp

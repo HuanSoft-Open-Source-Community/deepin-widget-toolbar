@@ -16,6 +16,7 @@ using Dtk::Core::DConfig;
 class WidgetManager;
 class WidgetListModel;
 class WindowGuard;
+class PanelAvoidWatcher;
 class DesktopApps;
 class QQuickWindow;
 class QQmlEngine;
@@ -32,6 +33,12 @@ class WidgetToolbarPanel : public DPanel
     // MultitaskStateChanged 信号驱动，不持久化，也不改变 visible/托盘高亮；
     // MMV 退出后绑定表达式自动恢复面板显示
     Q_PROPERTY(bool multitaskAvoided READ multitaskAvoided NOTIFY multitaskAvoidedChanged FINAL)
+    // 外部面板避让运行时状态：通知/通知中心/控制中心/电源/剪贴板/托盘快捷
+    // 面板与展开小卡等**几何与本侧栏叠合**期间为 true，侧栏据此临时隐藏，
+    // 其关闭或移开自动恢复（展开在侧栏之外的小卡不触发，几何不可知时退化为
+    // 照旧避让）。与 multitaskAvoided 独立并列（任一为真即隐藏），仅 X11 平台
+    // 生效，不持久化、不改变 visible/托盘高亮。由 PanelAvoidWatcher 驱动。
+    Q_PROPERTY(bool panelAvoided READ panelAvoided NOTIFY panelAvoidedChanged FINAL)
     // 小组件宿主接口：QML 通过 Panel.widgetManager / Panel.widgetListModel 访问
     Q_PROPERTY(WidgetManager *widgetManager READ widgetManager CONSTANT)
     Q_PROPERTY(WidgetListModel *widgetListModel READ widgetListModel CONSTANT)
@@ -49,6 +56,7 @@ public:
     bool cardTransparent() const;
     void setCardTransparent(bool cardTransparent);
     bool multitaskAvoided() const;
+    bool panelAvoided() const;
 
     WidgetManager *widgetManager() const;
     WidgetListModel *widgetListModel() const;
@@ -73,6 +81,7 @@ Q_SIGNALS:
     void pinnedChanged(bool pinned);
     void cardTransparentChanged(bool cardTransparent);
     void multitaskAvoidedChanged(bool multitaskAvoided);
+    void panelAvoidedChanged(bool panelAvoided);
     // 菜单动作信号（D-Bus ExportAllSignals 导出，QML Connections 监听）
     void settingsRequested();
     void aboutRequested();
@@ -92,6 +101,10 @@ private:
 
     // X11 窗口层级与几何守护（enforceFrameless/事件过滤/几何轮询）已拆分到 WindowGuard
     WindowGuard *m_windowGuard = nullptr;
+    // 外部面板避让监视器（X11）：panelAvoided 属性即其 avoided 转发，
+    // 信号对信号连接，无本地副本；面板自身窗口经 rootObjectChanged 一并
+    // attachPanel 给它做几何叠合判定（窗口重建后重新绑定）
+    PanelAvoidWatcher *m_panelAvoidWatcher = nullptr;
     DConfig *m_config = nullptr;
     bool m_visible = true;
     bool m_pinned = true;

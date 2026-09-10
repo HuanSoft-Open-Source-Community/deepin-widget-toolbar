@@ -4,6 +4,7 @@
 
 #include "widgettoolbarpanel.h"
 
+#include "panelavoidwatcher.h"
 #include "windowguard.h"
 
 #include "audiovisualizer.h"
@@ -117,6 +118,17 @@ bool WidgetToolbarPanel::init()
                                | QDBusConnection::ExportAllProperties);
     }
 
+    // 外部面板避让（X11）：通知/通知中心/控制中心/电源/剪贴板/托盘快捷面板
+    // 与展开小卡等**几何与本侧栏叠合**时临时隐藏侧栏，关闭/移开自动恢复。
+    // panelAvoided 直接转发 watcher 的 avoided（信号对信号连接，无本地副本），
+    // QML 端与 MMV 避让并列使用；Wayland 下 watcher start 即静默，属性恒 false。
+    // 需在 rootObjectChanged 之前创建：下面的 lambda 要把面板自身窗口交给
+    // watcher 做叠合判定（hide/show 重建窗口后重新 attach）。
+    m_panelAvoidWatcher = new PanelAvoidWatcher(this);
+    connect(m_panelAvoidWatcher, &PanelAvoidWatcher::avoidedChanged,
+            this, &WidgetToolbarPanel::panelAvoidedChanged);
+    m_panelAvoidWatcher->start();
+
     // X11 窗口层级/几何守护：QML Window 根创建后绑定（hide/show 重建后
     // rootObjectChanged 再次触发重新 attach），详见 WindowGuard 注释
     m_windowGuard = new WindowGuard(this);
@@ -134,6 +146,9 @@ bool WidgetToolbarPanel::init()
             }
         }
         m_windowGuard->attach(window);
+        // 避让叠合判定需要侧栏自身矩形；rootObject 非 QQuickWindow 时为
+        // nullptr，attachPanel 据此解除绑定
+        m_panelAvoidWatcher->attachPanel(window);
     });
 
     // 多任务视图避让（kwin multitaskview 特效对 Dock/Notification 类型窗口不经缩略图
@@ -232,6 +247,11 @@ void WidgetToolbarPanel::setPinned(bool pinned)
 bool WidgetToolbarPanel::multitaskAvoided() const
 {
     return m_multitaskAvoided;
+}
+
+bool WidgetToolbarPanel::panelAvoided() const
+{
+    return m_panelAvoidWatcher && m_panelAvoidWatcher->avoided();
 }
 
 void WidgetToolbarPanel::setMultitaskAvoided(bool avoided)

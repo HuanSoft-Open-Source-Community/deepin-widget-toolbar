@@ -331,6 +331,20 @@ Window {
             target.popupX = -target.width - 8
     }
 
+    // 收起本面板全部二级弹窗与菜单：任一避让（MMV / 外部面板）开始时调用。
+    // 四类 PanelPopup 挂在独立的辅助顶层窗口（Panel.popupWindow）上，不随主
+    // 窗口隐藏，留着会被 MMV 当普通窗口收录成缩略图、或与外部面板叠合；
+    // 窗口内 Menu 一并 close 防止恢复后残开。
+    function closeAllPopups() {
+        addPopup.close()
+        settingsDialog.close()
+        aboutDialog.close()
+        widgetSettingsDialog.close()
+        appPickerDialog.close()
+        contextMenu.close()
+        widgetContextMenu.close()
+    }
+
     // 弹出面板互斥：添加/设置/关于同时只允许打开一个。
     // 打开目标前先关闭另外两个；目标已打开则关闭（切换语义）
     function openPanelPopup(target, mouseY) {
@@ -457,9 +471,9 @@ Window {
     DLayerShellWindow.rightMargin: dockMargin.rightMargin
     DLayerShellWindow.bottomMargin: dockMargin.bottomMargin
 
-    // 显示 = 用户显隐状态 且 未处于 MMV 避让态。避让期间 Panel.visible 不变
-    // （DConfig/托盘高亮不动），MMV 退出信号置 multitaskAvoided=false 后自动回归。
-    visible: Panel.visible && !Panel.multitaskAvoided
+    // 显示 = 用户显隐状态 且 未处于任何避让态。MMV/外部面板避让期间 Panel.visible
+    // 不变（DConfig/托盘高亮不动），退出信号置对应 avoided=false 后自动回归。
+    visible: Panel.visible && !Panel.multitaskAvoided && !Panel.panelAvoided
     // flags 刻意不含 Qt.FramelessWindowHint：Qt 对带 Frameless 的窗口写 _MOTIF_WM_HINTS 时
     // 不设置 MWM_HINTS_FUNCTIONS 位（functions 恒为 MWM_FUNC_ALL），kwin 据此判定窗口
     // 可最大化（isMaximizable()=true），首次映射高度达到工作区时被垂直最大化（y=0、
@@ -979,19 +993,15 @@ Window {
         function onAutoArrangeRequested() {
             autoArrangeNow()
         }
-        // MMV 避让开始：关闭全部二级弹窗。四类 PanelPopup 挂在独立的辅助顶层
-        // 窗口（Panel.popupWindow）上，不随主窗口隐藏，留着会被 MMV 当普通窗口
-        // 收录成缩略图；窗口内 Menu 随主窗隐藏，一并 close 防止恢复后残开。
+        // 任一避让开始（MMV / 外部面板）：收起全部二级弹窗。判断用聚合避让态，
+        // 退出某一避让而另一仍在时不误开（closeAllPopups 只关不开）。
         function onMultitaskAvoidedChanged() {
-            if (Panel.multitaskAvoided) {
-                addPopup.close()
-                settingsDialog.close()
-                aboutDialog.close()
-                widgetSettingsDialog.close()
-                appPickerDialog.close()
-                contextMenu.close()
-                widgetContextMenu.close()
-            }
+            if (Panel.multitaskAvoided || Panel.panelAvoided)
+                root.closeAllPopups()
+        }
+        function onPanelAvoidedChanged() {
+            if (Panel.multitaskAvoided || Panel.panelAvoided)
+                root.closeAllPopups()
         }
     }
 
