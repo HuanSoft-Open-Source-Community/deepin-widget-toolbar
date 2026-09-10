@@ -71,9 +71,13 @@ cmake --build build -j$(nproc)
 ## 📦 Installation
 
 ```bash
-./install.sh               # one-stop: rebuild + sudo deploy + restart dde-shell
-./uninstall.sh             # one-stop: remove plugins/caches + restart dde-shell
+./install.sh               # one-stop: rebuild + sudo deploy + make new config keys live + restart dde-shell
+./uninstall.sh             # one-stop: asks (y/N) about panel settings and widget data, then removes plugins/caches and restarts dde-shell
 ```
+
+`./install.sh` also makes newly added DConfig keys usable immediately: `dde-dconfig-daemon` only parses config descriptions at startup, so after an in-place upgrade a brand-new key is unknown to it — reads still work through the plugin's built-in fallback (that is why a new feature shows up right away), but writes to it are rejected, and a user toggling it would silently lose the choice at the next restart. When the description file changed, or any of the plugin's keys is not recognised, the installer restarts that service (a sub-second operation) and verifies every key afterwards.
+
+Panel settings (visibility, pin-to-top, card transparent mode, card names) are DConfig items, so every user change becomes a stored *override* — one that a plain reinstall would inherit, which is exactly how a removed and reinstalled plugin could still come back with the transparent mode on. The uninstaller therefore asks whether to reset those overrides, and resets only this plugin's own keys (`visible`, `pinned`, `cardTransparent`, `showCardNames`) — never other dde-shell configs such as the dock's. Resetting is only possible while the plugin's config description file is installed, so that question is asked and acted on before any file deletion; the prompt for the persistent widget data stays with the cache-cleanup step as before. Answering `n` keeps everything, and a single key can be reset by hand: `dde-dconfig reset -a org.deepin.dde.shell -r org.deepin.ds.widgettoolbar -k cardTransparent`.
 
 ## 🖱️ Usage
 
@@ -94,11 +98,11 @@ cmake --build build -j$(nproc)
 - The dock tray button toggles the panel; its highlight follows the panel state.
 - While the panel is shown, changing the dock's position, size or hide mode updates its margins and height immediately; no hide-and-show cycle is needed for the panel to follow.
 - Pinned panels are not covered by normal windows; unpinned panels can be.
+- Each card shows its name centered below it, clipped to the card width with an ellipsis; turning it on leaves every card's width exactly as it was with names off (the cells get taller instead, so only single-row cards lose 4 px of height), and turning it off restores the previous layout pixel for pixel. The setting has no per-card counterpart and survives a restart.
 - Clicking outside the panel never closes it.
 - Right-clicking a widget offers only the sizes declared by its manifest; resizing persists and avoids other widgets; Remove deletes the instance.
 - Per-instance clock and lyrics settings apply immediately and survive a restart.
 - The system monitor uses lightweight progress bars without continuous animations; 2×2 stays single-column, while 4×2 and 4×4 support dual-column (enabled by default), and every size can display all enabled CPU/MEM/DISK IO/GPU/NPU rows with compact single-column rows when needed; sampling defaults to 5 seconds, runs on a background thread only while visible, and stops when the panel is hidden; the dual-column switch appears on 4×2 and 4×4 instances.
-- Each card shows its name centered below it, clipped to the card width with an ellipsis; turning it on leaves every card's width exactly as it was with names off (the cells get taller instead, so only single-row cards lose 4 px of height), and turning it off restores the previous layout pixel for pixel. The setting has no per-card counterpart and survives a restart.
 - Clock and World Time use preloaded time by default: every visible clock instance shares the host's single second ticker, and analog dials only update hand rotations instead of repainting whole canvases; disabling the setting falls back to per-instance timers.
 - The Spectrum Panel dances with whatever audio the system plays (the default sink's monitor loopback); it captures only while an instance is visible, offers configurable amplitude (40–200%) and spectrum color, defaults to a light-green background with theme-colored bars, and shows a smooth breathing idle when there is no audio; the bars sit in the upper two thirds with a fading mirror reflection in the bottom third (half in the 4×4 large size).
 - A new World Time instance defaults to analog mode with four dials: the current timezone plus three of the classic four (Beijing/Tokyo/London/New York); clearing all dials in settings is respected and not re-seeded.
@@ -110,8 +114,8 @@ cmake --build build -j$(nproc)
 ```
 deepin-widget-toolbar/
 ├── CMakeLists.txt          # top-level build (panel + tray)
-├── install.sh              # one-stop install (build + sudo deploy + restart)
-├── uninstall.sh            # one-stop uninstall (remove + cleanup + restart)
+├── install.sh              # one-stop install (build + sudo deploy + refresh DConfig keys + restart)
+├── uninstall.sh            # one-stop uninstall (asks about panel settings/data, remove + cleanup + restart)
 ├── build-deb.sh            # Debian packaging script (temp copy dpkg-buildpackage → dist/)
 ├── LICENSE                 # GNU GPL v3 full text
 ├── debian/                 # Debian packaging config (control/rules/postinst/postrm)

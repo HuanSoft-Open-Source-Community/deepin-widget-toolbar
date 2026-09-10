@@ -3,7 +3,8 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# deepin-widget-toolbar 一键卸载脚本：删除系统与用户残留 -> 清理缓存（可选用户数据）-> 重启 dde-shell。
+# deepin-widget-toolbar 一键卸载脚本：确认清理范围（可选面板设置）-> 删除系统与用户残留 ->
+# 清理缓存（可选用户数据）-> 重启 dde-shell。
 #
 # 用法：./uninstall.sh   （无需参数；删除系统文件时自动请求 sudo 密码）
 # 请以普通用户运行本脚本（内部自动请求管理员权限），勿加 sudo。
@@ -11,10 +12,45 @@ set -euo pipefail
 
 PLUGIN_ID="org.deepin.ds.widgettoolbar"
 TRAY_PLUGIN="libwidget-toolbar.so"
+# DConfig 应用 Id 与配置项，与面板代码里 DConfig::create("org.deepin.dde.shell", PLUGIN_ID)
+# 一致。只 reset 本插件这几个键，绝不触碰 dde-shell 的其它配置（如 dock）。
+DCONFIG_APPID="org.deepin.dde.shell"
+DCONFIG_KEYS=(visible pinned cardTransparent showCardNames)
 
 if [ "$(id -u)" = "0" ]; then
     echo "错误：请以普通用户运行 ./uninstall.sh（脚本内部会自动请求 sudo 密码，勿加 sudo）" >&2
     exit 1
+fi
+
+# 面板设置的清理：面板的显隐/置顶/卡片透明/卡片名称都是 DConfig 配置项，用户改动会形成
+# "用户覆盖"并由 dde-dconfig 守护进程按 uid 持久化（存放于 /var/lib/dde-dconfig-daemon，
+# root 私有，删 ~/.config 下的文件清不掉），所以重装会沿用上次的选择——例如卡片透明模式
+# 仍是开启，看起来像"缺省值不对"。只能经官方 CLI reset 回到配置描述文件里声明的默认值，
+# 而 reset 要求该描述文件仍在，故这一步必须先于 [1/4] 的删除动作。
+purge_settings=""
+if [ -t 0 ]; then
+    read -r -p "是否清除本插件的面板设置（显隐/置顶/卡片透明/卡片名称）？[y/N] " ans
+    case "${ans}" in y|Y|yes|YES) purge_settings=1 ;; esac
+fi
+if [ -n "${purge_settings}" ]; then
+    if command -v dde-dconfig >/dev/null 2>&1; then
+        echo "==> 清除面板设置（DConfig 用户覆盖）"
+        for key in "${DCONFIG_KEYS[@]}"; do
+            # 旧版本的配置描述文件可能没有该键、资源也可能缺失：失败只提示，不中断卸载
+            if dde-dconfig reset -a "${DCONFIG_APPID}" -r "${PLUGIN_ID}" -k "${key}" >/dev/null 2>&1; then
+                echo "  已重置 ${key}"
+            else
+                echo "  跳过 ${key}（配置项不存在或已是默认值）"
+            fi
+        done
+        if [ "$(dde-dconfig get -a "${DCONFIG_APPID}" -r "${PLUGIN_ID}" -k cardTransparent -m isDefaultValue 2>/dev/null)" = "true" ]; then
+            echo "  复查：cardTransparent 已回到默认值（关闭）"
+        fi
+    else
+        echo "警告：未找到 dde-dconfig，跳过面板设置清理（可手动执行 dde-dconfig reset -a ${DCONFIG_APPID} -r ${PLUGIN_ID} -k <键名>）" >&2
+    fi
+else
+    echo "保留面板设置（如需重置：dde-dconfig reset -a ${DCONFIG_APPID} -r ${PLUGIN_ID} -k cardTransparent）"
 fi
 
 echo "==> [1/4] 删除系统插件文件（请求管理员权限）"
@@ -60,8 +96,8 @@ if [ -e "${HOME}/.local/share/${PLUGIN_ID}" ]; then
             ;;
     esac
 fi
-# 注：DConfig 用户态覆盖记录在 ~/.config/deepin/org.deepin.dde-shell/settings.ini，
-#     与其他 dde-shell 配置共用，不在此删除。
+# 注：面板设置（DConfig 用户覆盖）已在上方单独确认并清理，且必须先于删除配置描述文件执行；
+#     它的真实存储是 dde-dconfig 守护进程的按 uid 库，不在本步按路径删除。
 
 echo "==> [4/4] 重启 dde-shell（卸载生效，托盘图标随之移除）"
 systemctl --user restart dde-shell@DDE.service \
