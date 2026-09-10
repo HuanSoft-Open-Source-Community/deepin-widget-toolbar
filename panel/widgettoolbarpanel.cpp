@@ -224,6 +224,11 @@ void WidgetToolbarPanel::setVisible(bool visible)
     if (m_config && m_config->isValid()) {
         m_config->setValue("visible", visible);
     }
+    // 用户要求显示面板时，先按窗口树真值对账一次：避让状态若因漏事件而滞留，
+    // 面板会一直不显示且用户无法自救；此刻立即纠正，保证显示按钮永远有效。
+    if (visible && m_panelAvoidWatcher) {
+        m_panelAvoidWatcher->recheck();
+    }
     Q_EMIT visibleChanged(visible);
 }
 
@@ -283,11 +288,6 @@ void WidgetToolbarPanel::setCardTransparent(bool cardTransparent)
     Q_EMIT cardTransparentChanged(cardTransparent);
 }
 
-void WidgetToolbarPanel::toggle()
-{
-    setVisible(!m_visible);
-}
-
 // 卡片名称显示：全局唯一开关，刻意没有按实例的读写接口（避免面板出现每卡各自
 // 的显隐状态）。开启时由**格高变高**让出名称空间、卡片宽度保持不变（见 main.qml
 // 的 cardLabelHeight/cardLabelShrink/cardSpacingY），多行卡片随之相应变高。
@@ -306,6 +306,17 @@ void WidgetToolbarPanel::setShowCardNames(bool showCardNames)
         m_config->setValue("showCardNames", showCardNames);
     }
     Q_EMIT showCardNamesChanged(showCardNames);
+}
+
+void WidgetToolbarPanel::toggle()
+{
+    // 先对账再翻转：托盘按钮是用户唯一的显隐入口，若面板此刻正被滞留的避让态
+    // 隐藏（visible 已是 true，表达式 visible && !panelAvoided 恒假），这一次
+    // 点击就应把面板叫回来，而不是被翻成"隐藏"再点第二次。
+    if (m_panelAvoidWatcher) {
+        m_panelAvoidWatcher->recheck();
+    }
+    setVisible(!m_visible);
 }
 
 void WidgetToolbarPanel::show()
