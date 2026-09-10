@@ -402,6 +402,12 @@ RowLayout {
             if (!rowsWrap || !launcherRowComponent)
                 return
             var order = launcherPanel.orderList
+            // 可见行数必须与 order 同一快照本地派生：onOrderListChanged 触发时
+            // launcherCount/visibleList 仍是上一轮的旧缓存值（QML 不会为信号
+            // 处理器内的命令式读取冲刷脏绑定，实测 Qt 6.8 复现）。旧值偏大时
+            // String(order[i]) 越界产生 appId="undefined" 的幽灵行（✕ 因查不到
+            // 序号而无法删除），偏小时漏建行（恢复默认后末位行缺失）。
+            var count = Math.min(order.length, launcherPanel.launcherCap)
 
             // 自愈：rowsWrap 下所有行可视对象（appId 为字符串者）先按出现顺序
             // 归拢进 rowItems，重复的只保留第一个并摘除其余
@@ -427,7 +433,7 @@ RowLayout {
             var stale = []
             for (var id in launcherPanel.rowItems) {
                 var pos = launcherPanel.orderIndexOf(id)
-                if (pos < 0 || pos >= launcherPanel.launcherCount)
+                if (pos < 0 || pos >= count)
                     stale.push(id)
             }
             for (var k = 0; k < stale.length; ++k) {
@@ -436,7 +442,7 @@ RowLayout {
             }
 
             // 补充缺失行并统一指派目标位置（既有行靠 y Behavior 滑移）
-            for (var i = 0; i < launcherPanel.launcherCount; ++i) {
+            for (var i = 0; i < count; ++i) {
                 var key = String(order[i])
                 var item = launcherPanel.rowItems[key]
                 if (!item) {
@@ -470,7 +476,8 @@ RowLayout {
                     launcherPanel.destroyRow(child)
             }
             var order = launcherPanel.orderList
-            var count = launcherPanel.launcherCount
+            // 与 syncRows 同理：count 从 order 快照本地派生，不读过期 launcherCount
+            var count = Math.min(order.length, launcherPanel.launcherCap)
             for (var i = 0; i < count && i < order.length; ++i) {
                 var key = String(order[i])
                 if (launcherPanel.rowItems[key])
@@ -602,7 +609,12 @@ RowLayout {
         Item {
             id: rowsWrap
             Layout.fillWidth: true
-            height: Math.max(0, launcherPanel.launcherCount
+            // 高度必须经 Layout.preferredHeight 声明：普通 height 绑定会被
+            // ColumnLayout 的子项尺寸分配写断/冻结——实测跨会话行数变化后
+            // 高度停在旧值（clip:false 时行溢出，压住下方"恢复默认/添加"
+            // 按钮行）；preferredHeight 是布局的活输入，每次布局都按当前
+            // launcherCount 重算。同文件 color 行 Item 用同一惯例。
+            Layout.preferredHeight: Math.max(0, launcherPanel.launcherCount
                 * launcherPanel.launcherRowStep - launcherPanel.launcherRowSpacing)
             clip: false
 
