@@ -62,6 +62,21 @@ static QStringList fallbackApplicationsDirs()
         if (QDir(extra).exists() && !dirs.contains(extra))
             dirs.append(extra);
     }
+    // deepin 应用商店 deb包约定目录：/opt/apps/<id>/entries/applications。
+    // 部分应用（如 com.seewo.easinote5）的条目只存在于这里，缺扫描时
+    // 选择列表看不到它们，且其被设为系统默认程序后 defaultMimeHandler
+    // 会因注册表查不到而静默跳过（"恢复默认"降级为其他应用）。
+    // 与 setupIconSearchPaths 的 /opt/apps 图标域扫描同源，最低优先级。
+    const QDir appsRoot(QStringLiteral("/opt/apps"));
+    if (appsRoot.exists()) {
+        const QStringList appIds = appsRoot.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QString &appId : appIds) {
+            const QString dir = appsRoot.filePath(appId)
+                + QStringLiteral("/entries/applications");
+            if (QDir(dir).exists() && !dirs.contains(dir))
+                dirs.append(dir);
+        }
+    }
     return dirs;
 }
 
@@ -449,7 +464,12 @@ void DesktopApps::rescanDirectories()
             if (id.isEmpty() || next.contains(id))
                 continue;
             const RawDesktopFile raw = parseDesktopFile(file.absoluteFilePath());
-            if (raw.noDisplay || raw.hidden)
+            // Hidden=true 按 XDG 语义视为"用户已移除"，全链路排除；
+            // NoDisplay 条目保留在注册表（可解析/可启动/参与默认程序匹配），
+            // 只是不进 entries 应用列表——控制中心"默认程序"创建的自定义
+            // 启动器（如 NoDisplay 的 vim 文本编辑器）正是此类，若在此丢弃，
+            // defaultMimeHandler 会查不到用户真实默认而静默降级到其他应用。
+            if (raw.hidden)
                 continue;
             if (!raw.type.isEmpty() && raw.type != QLatin1String("Application"))
                 continue;
@@ -469,6 +489,7 @@ void DesktopApps::rescanDirectories()
             entry.name = raw.name;
             entry.icon = raw.icon;
             entry.exec = raw.exec;
+            entry.noDisplay = raw.noDisplay;
             next.insert(id, entry);
         }
     }
@@ -480,7 +501,8 @@ void DesktopApps::rescanDirectories()
             const auto old = m_apps.constFind(it.key());
             if (old == m_apps.constEnd()
                 || old->name != it->name || old->icon != it->icon
-                || old->exec != it->exec) {
+                || old->exec != it->exec
+                || old->noDisplay != it->noDisplay) {
                 changed = true;
                 break;
             }
@@ -521,6 +543,10 @@ void DesktopApps::rebuildEntries()
     list.reserve(ids.size());
     for (const QString &id : std::as_const(ids)) {
         const Entry &entry = m_apps.value(id);
+        // NoDisplay 条目可解析/可启动/参与默认程序匹配（见 rescanDirectories），
+        // 但不进公开应用列表，选择面板展示集合与 dde-launchpad 规则保持一致
+        if (entry.noDisplay)
+            continue;
         QVariantMap item;
         item.insert(QStringLiteral("id"), entry.id);
         item.insert(QStringLiteral("name"), entry.name.isEmpty() ? entry.id : entry.name);

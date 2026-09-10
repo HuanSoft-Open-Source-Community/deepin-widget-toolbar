@@ -21,10 +21,13 @@ class QQuickImageProvider;
 // 为"应用快捷启动器"等小组件提供桌面程序条目（desktop entries）。
 //
 // 条目聚合与 dde-launchpad/dde-shell 一致：合并 XDG 启动器目录（用户/系统）、
-// flatpak 与如意玲珑 entries（/var/lib、~/.local、~/.linglong），按目录优先级
-// 去重，统一过滤 NoDisplay/Hidden/Type!=Application/OnlyShowIn 等不应显示的项，
-// 输出本地化显示名与主题图标名并稳定排序；宿主用 QFileSystemWatcher 监听各
-// 目录，软件装/卸时自动刷新。
+// flatpak 与如意玲珑 entries（/var/lib、~/.local、~/.linglong）、
+// deepin 应用商店 /opt/apps/<id>/entries/applications，按目录优先级去重，
+// 过滤 Hidden/Type!=Application/OnlyShowIn 不含 X-Deepin 等不应显示的项；
+// NoDisplay 条目保留为可解析/可启动并参与默认程序匹配，但不进 entries
+// 应用列表（控制中心"默认程序"的自定义启动器即为此类）。输出本地化显示名
+// 与主题图标名并稳定排序；宿主用 QFileSystemWatcher 监听各目录，
+// 软件装/卸时自动刷新。
 //
 // 启动走 dde 生态应用管理器（会话总线 org.desktopspec.ApplicationManager1，
 // dde-application-manager 提供，dock/启动器同源；由其负责 flatpak/linglong 的
@@ -47,6 +50,9 @@ public:
         QString name;            // 本地化显示名
         QString icon;            // 主题图标名或绝对路径
         QString exec;            // Exec 原文（降级启动用）
+        bool noDisplay = false;  // NoDisplay：可解析/可启动/参与默认程序匹配，
+                                 // 但不进 entries 应用列表（控制中心"默认程序"
+                                 // 的自定义启动器即为此类，见 rebuildEntries）
     };
 
     // 应用管理器（org.desktopspec.ApplicationManager1）是否在线（决定启动通道）

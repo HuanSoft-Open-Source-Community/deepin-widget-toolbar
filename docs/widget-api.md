@@ -292,7 +292,7 @@
 
 ### DesktopApps（桌面程序条目 / 默认程序 / 启动）
 
-> **系统能力代理**：小组件不允许自行扫描系统目录或解析 `.desktop`；桌面条目、默认程序与应用启动统一经本代理提供。条目聚合与 dde-launchpad/dde-shell 应用列表同源同规则：合并 XDG 启动器目录（用户 `~/.local/share/applications`、系统 `/usr/share/applications` 等）、flatpak exports（`/var/lib/flatpak/...` 与 `~/.local/share/flatpak/...`）、如意玲珑 entries（`/var/lib/linglong/entries/apps/...` 与 `~/.linglong/...`），按目录优先级去重，过滤 `NoDisplay`/`Hidden`/非 `Application`/`OnlyShowIn` 不含 X-Deepin 等不应显示的条目；宿主监听目录变化，软件装/卸后自动刷新（无需手动调用）。启动则经 dde 应用管理器（会话总线 `org.desktopspec.ApplicationManager1`，dde-application-manager 提供，负责 linglong/flatpak 容器化包装），服务不可用或调用失败时降级为直接执行解析后的 Exec（已含 `ll-cli`/`flatpak run` 包装前缀）。
+> **系统能力代理**：小组件不允许自行扫描系统目录或解析 `.desktop`；桌面条目、默认程序与应用启动统一经本代理提供。条目聚合与 dde-launchpad/dde-shell 应用列表同源同规则：合并 XDG 启动器目录（用户 `~/.local/share/applications`、系统 `/usr/share/applications` 等）、flatpak exports（`/var/lib/flatpak/...` 与 `~/.local/share/flatpak/...`）、如意玲珑 entries（`/var/lib/linglong/entries/apps/...` 与 `~/.linglong/...`）、deepin 应用商店 `/opt/apps/<id>/entries/applications`，按目录优先级去重，过滤 `Hidden`/非 `Application`/`OnlyShowIn` 不含 X-Deepin 等不应显示的条目；`NoDisplay` 条目（如控制中心"默认程序"创建的自定义启动器）保留为可解析、可启动并参与默认程序匹配，但不进 `entries` 应用列表；宿主监听目录变化，软件装/卸后自动刷新（无需手动调用）。启动则经 dde 应用管理器（会话总线 `org.desktopspec.ApplicationManager1`，dde-application-manager 提供，负责 linglong/flatpak 容器化包装），服务不可用或调用失败时降级为直接执行解析后的 Exec（已含 `ll-cli`/`flatpak run` 包装前缀）。
 
 | 属性/方法 | 类型/签名 | 说明 |
 |---|---|---|
