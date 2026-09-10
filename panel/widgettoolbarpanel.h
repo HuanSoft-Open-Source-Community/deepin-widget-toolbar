@@ -29,6 +29,9 @@ class WidgetToolbarPanel : public DPanel
     Q_PROPERTY(bool pinned READ pinned WRITE setPinned NOTIFY pinnedChanged FINAL)
     // 面板级"卡片透明模式"：全局卡片底半透明叠层，与小组件自身 transparentBackground 解耦
     Q_PROPERTY(bool cardTransparent READ cardTransparent WRITE setCardTransparent NOTIFY cardTransparentChanged FINAL)
+    // 面板级"卡片名称显示"：在每张卡片下方显示小组件本地化名称。**仅全局生效**，
+    // 刻意不提供任何按实例的读写接口；开启时卡片等比缩小让出名称空间（长宽比不变）。
+    Q_PROPERTY(bool showCardNames READ showCardNames WRITE setShowCardNames NOTIFY showCardNamesChanged FINAL)
     // 多任务视图（MMV）避让运行时状态：true 时面板窗口临时隐藏。仅由 kwin 的
     // MultitaskStateChanged 信号驱动，不持久化，也不改变 visible/托盘高亮；
     // MMV 退出后绑定表达式自动恢复面板显示
@@ -55,6 +58,8 @@ public:
     void setPinned(bool pinned);
     bool cardTransparent() const;
     void setCardTransparent(bool cardTransparent);
+    bool showCardNames() const;
+    void setShowCardNames(bool showCardNames);
     bool multitaskAvoided() const;
     bool panelAvoided() const;
 
@@ -80,6 +85,7 @@ Q_SIGNALS:
     void visibleChanged(bool visible);
     void pinnedChanged(bool pinned);
     void cardTransparentChanged(bool cardTransparent);
+    void showCardNamesChanged(bool showCardNames);
     void multitaskAvoidedChanged(bool multitaskAvoided);
     void panelAvoidedChanged(bool panelAvoided);
     // 菜单动作信号（D-Bus ExportAllSignals 导出，QML Connections 监听）
@@ -109,6 +115,8 @@ private:
     bool m_visible = true;
     bool m_pinned = true;
     bool m_cardTransparent = false;
+    // 卡片名称显示：默认开启（功能本身即"显示名称"，默认关会让人以为不存在）
+    bool m_showCardNames = true;
     bool m_multitaskAvoided = false;
 
     WidgetManager *m_widgetManager = nullptr;

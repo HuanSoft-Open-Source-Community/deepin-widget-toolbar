@@ -70,7 +70,7 @@ Window {
         // 卡片视觉位置稳定。程序化写入的 contentY 不会被 Flickable 自动
         // 钳制（Qt 6.8 实测越界值会残留），必须按目标内容高度显式钳制。
         gridFlickable.contentY += (gridTopRow - lastGridTopRow)
-            * (cellHeight + cellSpacing)
+            * (cellHeight + cellSpacingY)
         let maxContentY = Math.max(gridContentHeight(), gridFlickable.height)
             - gridFlickable.height
         gridFlickable.contentY = Math.max(0,
@@ -127,7 +127,7 @@ Window {
     function cellY(instanceId) {
         let p = root.gridPositions[instanceId]
         let gy = p ? p.y : Panel.widgetManager.instanceGridY(instanceId)
-        return (gy - root.gridTopRow) * (cellHeight + cellSpacing)
+        return (gy - root.gridTopRow) * (cellHeight + cellSpacingY)
     }
 
     Connections {
@@ -144,9 +144,32 @@ Window {
     property int gridColumns: 4
     // 卡片间距：8 → 12，不再紧凑但也不显空旷
     property int cellSpacing: 12
+    // 名称条与卡片之间的间隙（上侧）：纵向格距在显示名称时取同一数值，于是
+    // "文字到上方卡片"与"文字到下方卡片"的距离严格相等——名称盒上缘距本卡
+    // cardLabelGap、下缘距下一行卡片也是 cardLabelGap，文字在盒内垂直居中，
+    // 两侧余量相同，故与字号无关地保持对称（不需要测量文字高度）。
+    readonly property int cardLabelGap: 2
+    // 纵向格距（行距里的空隙）：横向恒用 cellSpacing（列宽与横向对齐不变）；
+    // 纵向在**显示名称时**取 cardLabelGap，即把"文字下间距"砍到与上间距相同。
+    // 关闭名称时等于 cellSpacing，几何与没有本功能时逐像素一致。
+    // 注：纵向格距同时也是多行卡片内部的格距，故多行卡片会随 rows−1 相应变矮
+    //（2 行 −6px、4 行 −18px，相对未启用名称时），这是统一行距下的必然结果。
+    readonly property int cellSpacingY: Panel.showCardNames ? cardLabelGap : cellSpacing
     property int cellWidth: Math.floor((gridArea.width - (gridColumns - 1) * cellSpacing) / gridColumns)
-    // 格子为正方形；2×2 小组件占 (2*cellWidth + spacing) 见方
-    property int cellHeight: cellWidth
+    // 卡片下方名称条的高度（按主题 t7 字号推导，字体放大时同步增高，不会挤压）；
+    // 关闭名称时为 0，格高与卡片几何逐像素等于没有本功能时。
+    readonly property int cardLabelHeight: Panel.showCardNames
+        ? Math.round(DTK.fontManager.t7.pixelSize + 9) : 0
+    // 名称条里由卡片让出的高度上限：其余增量由格高承担（"卡片最多缩小 4 像素"）。
+    // 只影响高度，**卡片宽度任何时候都不缩**，故各卡宽度与关闭时完全一致。
+    readonly property int cardLabelShrink: 4
+    // 关闭名称：格子为正方形，2×2 小组件占 (2*cellWidth + spacing) 见方（旧行为）。
+    // 启用名称：格子变为略高的长方形（高 = 宽 + 名称条高 − 4），名称占用格底一条，
+    // 卡片因此保持满列宽——宽度视觉谐调、横向对齐不破；名称条每卡只有一条而格高
+    // 每行都增，多行卡片随格高相应变高（1×1/4×1 只矮 4px）。
+    // 行距/坐标/滚动范围都读 cellHeight，故格高一变即自动跟随，无需改动那些公式。
+    property int cellHeight: cellWidth + (Panel.showCardNames
+        ? cardLabelHeight - cardLabelShrink : 0)
 
     // 网格内容总高度：占用区跨度 = 最上卡片顶行 → 最下卡片底行（含），
     // 上/下方的空白格不再计入滚动范围。拖拽中末尾多留一行，保证能把
@@ -167,7 +190,7 @@ Window {
             maxY = Math.max(maxY, y + rows)
         }
         let bottomRow = maxY + (root.dragging ? 1 : 0)
-        return (bottomRow - minY) * (cellHeight + cellSpacing) - cellSpacing
+        return (bottomRow - minY) * (cellHeight + cellSpacingY) - cellSpacingY
     }
 
     // ===== 拖放状态 =====
@@ -237,7 +260,7 @@ Window {
         // 最上卡片顶行，见 gridTopRow）。
         let targetX = Math.floor((pointerX - root.dragGrabOffsetX) / (cellWidth + cellSpacing))
         let targetY = Math.max(0, Math.floor((pointerY - root.dragGrabOffsetY)
-            / (cellHeight + cellSpacing))) + root.gridTopRow
+            / (cellHeight + cellSpacingY))) + root.gridTopRow
         targetX = Math.max(0, Math.min(targetX, gridColumns - root.dragCols))
         root.dragTargetX = targetX
         root.dragTargetY = targetY
@@ -251,7 +274,7 @@ Window {
         let previewWidth = root.dragCols * cellWidth
             + (root.dragCols - 1) * cellSpacing
         let previewHeight = root.dragRows * cellHeight
-            + (root.dragRows - 1) * cellSpacing
+            + (root.dragRows - 1) * cellSpacingY
         dragPreview.x = Math.max(0,
             Math.min(pointerX - root.dragGrabOffsetX,
                      Math.max(0, gridCanvas.width - previewWidth)))
@@ -712,6 +735,10 @@ Window {
                             }
                             cellWidth: root.cellWidth
                             cellSpacing: root.cellSpacing
+                            cellSpacingY: root.cellSpacingY
+                            cellHeight: root.cellHeight
+                            cardLabelHeight: root.cardLabelHeight
+                            cardLabelGap: root.cardLabelGap
                             dimmed: root.dragging && modelData === root.dragInstanceId
                             panelDragging: root.dragging
                             dragSurface: gridCanvas
@@ -740,7 +767,7 @@ Window {
                         visible: false
                         z: 10
                         width: root.dragCols * cellWidth + (root.dragCols - 1) * cellSpacing
-                        height: root.dragRows * cellHeight + (root.dragRows - 1) * cellSpacing
+                        height: root.dragRows * cellHeight + (root.dragRows - 1) * cellSpacingY
                         // 拖拽预览平滑跟随指针，避免逐格硬跳
                         Behavior on x {
                             SmoothedAnimation {

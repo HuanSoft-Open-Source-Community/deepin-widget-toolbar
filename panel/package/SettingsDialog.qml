@@ -10,7 +10,8 @@ import org.deepin.ds 1.0
 
 // 设置弹出面板（与添加小组件面板同框架）：
 //  - 基于 PanelPopup（DPanel 辅助窗口）：无 Qt 窗口标题、失焦自动关闭、跟随主窗口定位
-//  - 面板显示与置顶两项，直接写回 Panel 属性（经 DConfig 持久化）
+//  - 面板显示、置顶、卡片透明模式、卡片名称显示四项，直接写回 Panel 属性
+//    （经 DConfig 持久化）
 PanelPopup {
     id: control
 
@@ -20,7 +21,8 @@ PanelPopup {
     windowTitle: "dde-shell/widgettoolbar-settings"
 
     width: 320
-    height: 200
+    // 四行设置：12 上下边距 + 标题行 + 4×(行高≈30 + 间距 12)，留少量余量
+    height: 244
 
     // 右上角圆形叉号关闭按钮
     Rectangle {
@@ -102,6 +104,28 @@ PanelPopup {
                     // 只作用于卡片背景叠层，经 Panel 属性持久化到 DConfig
                     checked: Panel.cardTransparent
                     onToggled: Panel.cardTransparent = checked
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("Show card names")
+                    font: DTK.fontManager.t6
+                    color: palette.windowText
+                }
+
+                Switch {
+                    Layout.preferredHeight: Math.max(
+                        implicitHeight,
+                        (indicator ? indicator.implicitHeight : 0) + 6)
+                    // 卡片名称显示：只有这一个全局开关，刻意不做单卡片显隐；
+                    // 开启时卡片等比缩小让出下方名称条（长宽比不变），网格几何不变
+                    checked: Panel.showCardNames
+                    onToggled: Panel.showCardNames = checked
                 }
             }
         }

@@ -3,11 +3,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Controls
+import org.deepin.dtk 1.0
 import org.deepin.ds 1.0
 
 // 单个小组件实例的宿主容器（主面板网格 Repeater 的委托）：
 // 由主面板传入网格几何与拖拽状态；内部负责小组件 Loader、
-// 拖放层（普通点击透传给组件内容、长按进入拖拽）、右键菜单层，
+// 拖放层（普通点击透传给组件内容、长按进入拖拽）、右键菜单层、
+// 卡片下方的名称条（全局开关；名称开销取自高度：格高变高 + 卡片最多让 4px，
+// 卡片宽度始终保持满列宽，故各卡宽度视觉一致），
 // 以及实例上下文注入（dataDir/instanceId/widgetConfig/hostCols/hostRows/
 // hostCardTransparent）。拖拽与右键事件以 dragSurface/menuSurface
 // 空间的坐标发出，由主面板的拖拽状态机/菜单逻辑处理。
@@ -21,7 +25,23 @@ Item {
     property int cols: 2
     property int rows: 2
     property real cellWidth: 0
+    // 格高：关闭名称时等于格宽（正方形），启用名称时略高于格宽。槽高按它计算，
+    // 故行距/坐标/滚动范围（主面板侧）与这里始终同源，不会出现卡片与槽位错位。
+    property real cellHeight: 0
     property real cellSpacing: 0
+    // 纵向格距：与网格行距里的空隙同源（主面板在显示名称时取 cardLabelGap，
+    // 使文字上下间距相等）。默认跟横向格距，独立复用时行为与旧版一致。
+    property real cellSpacingY: root.cellSpacing
+    // 卡片下方名称条高度，由主面板按全局开关给出；0 = 不显示名称，
+    // 此时卡片恰好铺满槽位，几何与未提供本功能时逐像素一致。
+    property real cardLabelHeight: 0
+    // 名称盒与本卡片之间的间隙；主面板在显示名称时把纵向格距也设为它，
+    // 于是名称盒上下两侧的间隙相同、盒内文字垂直居中 ⇒ 文字上下间距相同。
+    property real cardLabelGap: 2
+
+    // 本实例槽位尺寸（= 本 Item 的 width/height，网格坐标系不变）
+    readonly property real slotWidth: root.cols * root.cellWidth + (root.cols - 1) * root.cellSpacing
+    readonly property real slotHeight: root.rows * root.cellHeight + (root.rows - 1) * root.cellSpacingY
     // 拖拽中淡化原实例，预览快照随指针移动
     property bool dimmed: false
     // 面板拖拽状态机是否进行中（由主面板同步）
@@ -38,8 +58,9 @@ Item {
 
     x: root.gridX
     y: root.gridY
-    width: root.cols * root.cellWidth + (root.cols - 1) * root.cellSpacing
-    height: root.rows * root.cellWidth + (root.rows - 1) * root.cellSpacing
+    // 宿主容器始终占满槽位：卡片在其中缩小，名称条落在卡片下方的槽内余量里
+    width: root.slotWidth
+    height: root.slotHeight
     opacity: root.dimmed ? 0.35 : 1.0
     // 位置变化动画：拖拽中其它实例实时让位、松手落位、整理、回弹都走这里
     Behavior on x {
@@ -60,22 +81,62 @@ Item {
         NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
     }
 
+    // 卡片实际渲染框：满列宽、顶对齐，槽底那条留给名称。
+    // 宽度在任何开关状态下都等于槽宽（不缩放）——各卡片左右边缘始终与列对齐，
+    // 名称的开销只从高度上取：格高增量承担大部分，卡片自己只让出 4px。
+    // 只做定位盒，不裁剪；小组件按这里的真实像素重排布局。
+    // 不加 Behavior：宿主自身的 width/height/y 已有缓动，本盒作为绑定跟随即可，
+    // 名称条高度在动画全程恒为 cardLabelHeight，不会跳动。
+    Item {
+        id: cardBox
+        x: 0
+        y: 0
+        width: root.slotWidth
+        height: Math.max(0, root.slotHeight - root.cardLabelHeight)
+    }
+
     // 小组件渲染入口（qrc 或本地文件），由宿主按 widgetId 解析。
     // 面板隐藏时卸载小组件对象树（释放 QML 对象与纹理内存），
     // 显示时异步重建；各小组件 Component.onDestruction 已实现
     // 采集/监控清理（setActive(false)/releaseMonitor 等）。
     Loader {
         id: widgetLoader
-        anchors.fill: parent
+        anchors.fill: cardBox
         active: Panel.visible
         asynchronous: true
         source: Panel.widgetManager.entryUrl(Panel.widgetManager.instanceWidgetId(root.instanceId))
     }
 
-    // 拖放层：普通点击透传给组件内容，长按进入拖拽
+    // 卡片下方名称：全局开关控制（无单卡片粒度），宽度锚定卡片——也就是整列宽，
+    // 故"不超过卡片宽度 + 溢出省略号"由几何天然成立，且可用宽度最大化（省略更少）。
+    // 只依赖 widgetId，小组件对象树卸载期间照常显示；随宿主 opacity 一并淡化。
+    Text {
+        id: cardNameLabel
+        anchors.horizontalCenter: cardBox.horizontalCenter
+        anchors.top: cardBox.bottom
+        anchors.topMargin: root.cardLabelGap
+        width: cardBox.width
+        // 盒底恰好落在槽底：名称条高 cardLabelHeight 中，上侧让出 cardLabelGap，
+        // 其余归文字盒；盒下沿到下一行卡片的距离由纵向格距给出，主面板在显示
+        // 名称时设成同一个 cardLabelGap，故上下对称、文字垂直居中于两张卡片之间。
+        height: Math.max(0, root.cardLabelHeight - root.cardLabelGap)
+        visible: root.cardLabelHeight > 0
+        text: Panel.widgetManager.displayName(
+            Panel.widgetManager.instanceWidgetId(root.instanceId))
+        font: DTK.fontManager.t7
+        color: palette.windowText
+        opacity: 0.75
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+        elide: Text.ElideRight
+    }
+
+    // 拖放层：普通点击透传给组件内容，长按进入拖拽。
+    // 与 Loader 同样锚定 cardBox：本层局部坐标即小组件坐标，
+    // 卡片缩小后 handleHost* 转交的坐标才不会偏移。
     MouseArea {
         id: widgetDragArea
-        anchors.fill: parent
+        anchors.fill: cardBox
         z: widgetLoader.z + 1
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
@@ -147,7 +208,9 @@ Item {
         }
     }
 
-    // 右键菜单层：只接收右键，不影响左键点击与长按拖拽
+    // 右键菜单层：只接收右键，不影响左键点击与长按拖拽。
+    // 刻意保持铺满**整个槽位**（而非 cardBox）：卡片缩小后名称条落在槽内余量里，
+    // 右键名称也要弹出该组件的菜单，而不是落到面板空白区弹出面板菜单。
     MouseArea {
         id: widgetContextArea
         anchors.fill: parent

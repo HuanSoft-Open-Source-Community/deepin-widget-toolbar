@@ -103,8 +103,10 @@ bool WidgetToolbarPanel::init()
         m_visible = m_config->value("visible", true).toBool();
         m_pinned = m_config->value("pinned", true).toBool();
         m_cardTransparent = m_config->value("cardTransparent", false).toBool();
+        m_showCardNames = m_config->value("showCardNames", true).toBool();
     } else {
-        qWarning() << "DConfig invalid, use defaults (visible=true, pinned=true, cardTransparent=false)";
+        qWarning() << "DConfig invalid, use defaults (visible=true, pinned=true,"
+                      " cardTransparent=false, showCardNames=true)";
     }
 
     // 注册 D-Bus 服务，供托盘触发按钮控制显隐
@@ -284,6 +286,26 @@ void WidgetToolbarPanel::setCardTransparent(bool cardTransparent)
 void WidgetToolbarPanel::toggle()
 {
     setVisible(!m_visible);
+}
+
+// 卡片名称显示：全局唯一开关，刻意没有按实例的读写接口（避免面板出现每卡各自
+// 的显隐状态）。开启时由**格高变高**让出名称空间、卡片宽度保持不变（见 main.qml
+// 的 cardLabelHeight/cardLabelShrink/cardSpacingY），多行卡片随之相应变高。
+bool WidgetToolbarPanel::showCardNames() const
+{
+    return m_showCardNames;
+}
+
+void WidgetToolbarPanel::setShowCardNames(bool showCardNames)
+{
+    if (m_showCardNames == showCardNames) {
+        return;
+    }
+    m_showCardNames = showCardNames;
+    if (m_config && m_config->isValid()) {
+        m_config->setValue("showCardNames", showCardNames);
+    }
+    Q_EMIT showCardNamesChanged(showCardNames);
 }
 
 void WidgetToolbarPanel::show()

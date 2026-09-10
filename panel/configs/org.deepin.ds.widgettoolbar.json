@@ -34,6 +34,17 @@
             "description[zh_CN]": "所有小组件卡片使用半透明底色；与小组件自身的透明背景开关相互独立",
             "permissions": "readwrite",
             "visibility": "private"
+        },
+        "showCardNames": {
+            "value": true,
+            "serial": 0,
+            "flags": [],
+            "name": "Show card names",
+            "name[zh_CN]": "显示卡片名称",
+            "description": "Show each widget's name under its card; global only - there is no per-card override; while on, grid cells become slightly taller rectangles (cell height = cell width + name height - 4) so every card keeps the same width as with names off and only single-row cards lose 4 px of height",
+            "description[zh_CN]": "在每张卡片下方显示小组件名称；仅全局生效，不提供单卡片粒度；开启时单元格由正方形变为略高的长方形（格高 = 格宽 + 名称条高 − 4），卡片宽度与关闭时完全一致，只有单行卡片高度少 4 像素",
+            "permissions": "readwrite",
+            "visibility": "private"
         }
     }
 }
