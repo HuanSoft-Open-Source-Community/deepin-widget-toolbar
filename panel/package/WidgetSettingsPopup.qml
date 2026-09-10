@@ -88,8 +88,46 @@ PanelPopup {
         return false
     }
 
+    // 透明模式（全局卡片透明或本卡 transparentBackground 任一生效）下不再
+    // 生效的颜色配置键：卡片底/内部区域底色改画半透明叠层、文字改主题自适应
+    // 色（themeTextColor），对应设置行从面板隐藏。逐卡片对照渲染分支核实：
+    //   - 卡片底/区域底：各卡 backgroundColor 与日历标题/星期头、便签标题/
+    //     内容底（todo）——透明分支不再绘制或改画叠层；
+    //   - 文字色：calendar/systemmonitor/todo/worldtime 的文字在透明下由
+    //     themeTextColor 接管（clock 的 textColor 仅模拟表盘数字使用，保留）；
+    //   - calendar gridColor、todo lineColor：透明下不绘制；
+    //   - applauncher unitBackgroundColor：单元底色矩形整体隐藏。
+    // 指针/高亮/条形等内容色（dialColor、手色、highlightColor、barColor 等）
+    // 透明下仍生效，一律保留。第三方小组件查表 miss 不受影响。
+    readonly property var transparentHiddenColors: ({
+        applauncher: ["backgroundColor", "labelColor", "unitBackgroundColor"],
+        clock: ["backgroundColor", "dialBackgroundColor"],
+        calendar: ["backgroundColor", "textColor", "titleBackgroundColor",
+            "titleTextColor", "weekdayBackgroundColor", "weekdayTextColor",
+            "gridColor"],
+        systemmonitor: ["backgroundColor", "textColor", "titleTextColor",
+            "labelTextColor", "valueTextColor"],
+        player: ["backgroundColor"],
+        todo: ["textColor", "titleBackgroundColor", "titleTextColor",
+            "contentBackgroundColor", "lineColor"],
+        worldtime: ["backgroundColor", "textColor", "dialBackgroundColor"],
+        lyrics: ["backgroundColor"],
+        spectrum: ["backgroundColor"]
+    })
+
     function rebuildVisibleSchema() {
         var cols = Panel.widgetManager.instanceCols(control.instanceId)
+        // 全局卡片透明模式或本卡透明开关任一生效即视为透明
+        var transparent = Panel.cardTransparent === true
+            || control.values.transparentBackground === true
+        var transparentHidden = transparent
+            ? (control.transparentHiddenColors[control.widgetId] || [])
+            : []
+        // 全局透明开启时：内置卡片的单卡透明开关恒被全局覆盖（任一生效即
+        // 为透明），开关无视觉效果，一并隐藏；第三方组件的卡片未必响应
+        // 全局模式（hostCardTransparent 仅作用于 WidgetCard 系），其开关保留。
+        var hideTransparentSwitch = Panel.cardTransparent === true
+            && Panel.widgetManager.isBuiltin(control.widgetId)
         var result = []
         for (var i = 0; i < control.schema.length; ++i) {
             var item = control.schema[i]
@@ -111,6 +149,14 @@ PanelPopup {
                     || item.key === "unitBackgroundColor")) {
                 continue
             }
+            // 透明模式：失效的颜色设置行不再展示（与沉浸模式隐藏取并集）
+            if (transparentHidden.indexOf(item.key) >= 0) {
+                continue
+            }
+            // 全局透明下内置卡片的单卡透明开关同样失效，一并隐藏
+            if (hideTransparentSwitch && item.key === "transparentBackground") {
+                continue
+            }
             result.push(item)
         }
         control.visibleSchema = result
@@ -128,7 +174,8 @@ PanelPopup {
         control.values = next
         Panel.widgetManager.saveInstanceConfig(control.instanceId, next)
         if ((control.widgetId === "player" && key === "playerMode")
-            || (control.widgetId === "applauncher" && key === "immersiveMode"))
+            || (control.widgetId === "applauncher" && key === "immersiveMode")
+            || key === "transparentBackground")
             control.rebuildVisibleSchema()
     }
 
@@ -401,6 +448,15 @@ PanelPopup {
             function onPlayersChanged() {
                 if (control.needsPlayers())
                     control.playerOptions = MediaPlayers.players
+            }
+        }
+
+        Connections {
+            target: Panel
+            // 面板设置切换全局卡片透明模式时，已打开的卡片设置面板即时
+            // 增删透明下失效的颜色设置行
+            function onCardTransparentChanged() {
+                control.rebuildVisibleSchema()
             }
         }
 
