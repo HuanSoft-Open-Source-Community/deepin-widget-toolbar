@@ -5,12 +5,21 @@
 import QtQuick
 import org.deepin.ds 1.0
 
-// 面板与任务栏之间的间距计算与轮询（原 main.qml 中的边距逻辑）：
+// 面板与任务栏之间的间距计算（原 main.qml 中的边距逻辑）：
 // 动态跟随任务栏位置——dock 在底部→面板在其上方、顶部→面板在其下方、
 // 右侧→面板整体左移（dock 在其它屏幕时不处理）。
-// DS.applet() 的返回值不是 QML 可跟踪依赖，只能靠轮询重绑感知就绪时机，
-// 因此本组件持有轮询 Timer，输出 topMargin/rightMargin/bottomMargin 属性，
-// 主面板以绑定消费；窗口显示/重建后调用 restart() 重启轮询。
+//
+// 分工（两段式，缺一不可）：
+//  1) dock applet 对象由本组件的有界轮询"取得"。DS.applet() 是函数调用，其返回值
+//     不是 QML 可跟踪依赖，只有拿到对象、赋给 dockApplet 属性，下游才有可挂钩的东西；
+//  2) 三条边距写成读该对象 Q_PROPERTY 的**绑定**。position / screenName /
+//     frontendWindowRect 都是带 NOTIFY 的属性（实测 org.deepin.ds.dock.so 的
+//     moc 符号有 positionChanged/screenNameChanged/frontendWindowRectChanged），
+//     QML 求值绑定时会捕获函数体内对这些属性的读取，任务栏一有变化即自动重算。
+// 故本组件不再常驻轮询：取得对象后即静默，边距的后续更新全靠绑定跟踪。
+// C++ 端 WindowGuard 监听 DLayerShellWindow::marginsChanged 重放锚定几何，
+// 边距变则面板变——面板**显示中**调整任务栏同样自适应，无需隐藏再显示
+// （旧实现把边距当命令式赋值、且轮询在边距稳定后 1 拍即停，正是该回归的根因）。
 // 根必须是 Item（QtObject 无 default property，无法容纳 Timer 子对象）。
 Item {
     id: root
@@ -22,25 +31,31 @@ Item {
     // 面板距 dock 的空隙 = 距屏幕其他边缘的空隙，视觉对称。
     property int contentPadding: 10
 
-    // 三条边距的下限恒为 contentPadding（desiredMargin = layerShellMargin + contentPadding），
-    // 0 从来不是合法值：初值直接取 contentPadding，保证主面板 DLayerShellWindow 绑定
-    // 首次求值即非 0——否则窗口首次映射（visible 绑定先于边距绑定求值）会以 0 边距
-    // 计算几何，X11 模拟层把面板拉满全高（上下边距视觉为 0）。
-    property int topMargin: contentPadding
-    property int rightMargin: contentPadding
-    property int bottomMargin: contentPadding
+    // dock applet 对象缓存（DS.applet("org.deepin.ds.dock") 的返回值，实际类型是
+    // dock 自己的面板类，frontendWindowRect/position/screenName 都挂在它身上）。
+    // null = 尚未取得，此时三条边距按 0 计（外加 contentPadding 下限）。
+    property var dockApplet: null
 
-    // dock 位置枚举与 dde-shell dock 一致：0=Top 1=Right 2=Bottom 3=Left
-    function windowMargin(position) {
-        let dockApplet = DS.applet("org.deepin.ds.dock")
-        if (!dockApplet) {
+    // 三条边距的下限恒为 contentPadding（desiredMargin = layerShellMargin + contentPadding），
+    // 0 从来不是合法值：绑定首次求值即得 contentPadding，保证主面板 DLayerShellWindow
+    // 绑定首次求值即非 0——否则窗口首次映射（visible 绑定先于边距绑定求值）会以 0 边距
+    // 计算几何，X11 模拟层把面板拉满全高（上下边距视觉为 0）。
+    readonly property int topMargin: desiredMargin(0)
+    readonly property int rightMargin: desiredMargin(1)
+    readonly property int bottomMargin: desiredMargin(2)
+
+    // dock 位置枚举与 dde-shell dock 一致：0=Top 1=Right 2=Bottom 3=Left。
+    // applet 必须作为参数显式传入：在函数体内读它的属性即建立本绑定的依赖，
+    // 若在这里再调 DS.applet() 就又变成不可跟踪的了。
+    function windowMargin(applet, position) {
+        if (!applet) {
             return 0
         }
 
         // dock 代理属性可能晚于窗口创建就绪（值为 undefined/null）：
         // 全部判空后返回 0，避免任何属性访问抛 TypeError 导致绑定被禁用
-        // （绑定禁用后 margin 永不更新、面板被拉满全高）。
-        let dockScreen = dockApplet.screenName
+        // （绑定一旦禁用永不恢复，边距停在旧值、面板被拉满全高）。
+        let dockScreen = applet.screenName
         if (typeof dockScreen !== "string" || dockScreen.length === 0) {
             return 0
         }
@@ -51,13 +66,13 @@ Item {
             return 0
         }
 
-        let dockPosition = dockApplet.position
+        let dockPosition = applet.position
         if (typeof dockPosition !== "number" || dockPosition !== position) {
             return 0
         }
 
         // frontendWindowRect 为物理像素，除以 dpr 得到逻辑尺寸
-        let frontendRect = dockApplet.frontendWindowRect
+        let frontendRect = applet.frontendWindowRect
         if (!frontendRect
             || typeof frontendRect.x !== "number"
             || typeof frontendRect.y !== "number"
@@ -103,21 +118,21 @@ Item {
         if (Qt.platform.pluginName === "wayland") {
             return 0
         }
-        return windowMargin(position)
+        return windowMargin(root.dockApplet, position)
     }
 
-    // dock 数据是否已可用于边距计算。DS.applet() 的返回值不是 QML 可跟踪依赖，
-    // 只能靠轮询重绑感知就绪时机；dock 在其它屏幕时也算就绪（无需继续等待）。
+    // dock 数据是否已可用于边距计算。只用于判定"轮询可以停了"：对象与属性
+    // 的有效性由绑定自己保证（属性变化即重算），不再需要轮询维持数值。
     function dockDataReady() {
-        let dockApplet = DS.applet("org.deepin.ds.dock")
-        if (!dockApplet || typeof dockApplet.screenName !== "string"
-            || dockApplet.screenName.length === 0 || !root.screenRef) {
+        let applet = root.dockApplet
+        if (!applet || typeof applet.screenName !== "string"
+            || applet.screenName.length === 0 || !root.screenRef) {
             return false
         }
-        if (dockApplet.screenName !== root.screenRef.name) {
+        if (applet.screenName !== root.screenRef.name) {
             return true
         }
-        let frontendRect = dockApplet.frontendWindowRect
+        let frontendRect = applet.frontendWindowRect
         if (!frontendRect
             || typeof frontendRect.x !== "number"
             || typeof frontendRect.y !== "number"
@@ -128,53 +143,49 @@ Item {
         return true
     }
 
+    // 取整显式化：dock 矩形除以 dpr 是非整数，边距属性为 int
     function desiredMargin(position) {
-        return layerShellMargin(position) + contentPadding
+        return Math.round(layerShellMargin(position) + root.contentPadding)
     }
 
-    // 直接赋值三条 margin 属性：值不变时 setter 无操作，变化时触发
-    // marginsChanged 供主面板的 DLayerShellWindow 绑定更新。
-    function refresh() {
-        root.topMargin = desiredMargin(0)
-        root.rightMargin = desiredMargin(1)
-        root.bottomMargin = desiredMargin(2)
+    // 取得（或换血后重取）dock applet 对象：仅在身份变化时赋值，避免无谓的
+    // 绑定重算；赋值即让三条边距绑定改挂到新对象的 NOTIFY 上。
+    function acquireDockApplet() {
+        const applet = DS.applet("org.deepin.ds.dock")
+        if (applet !== root.dockApplet) {
+            root.dockApplet = applet
+        }
     }
 
-    // 窗口显示/重建后调用：立即刷新并重启轮询，直到 dock 数据就绪且
-    // 边距连续两次稳定（最多约 10s，之后静默保留当前边距）。
-    property int marginRefreshTicks: 0
+    // 窗口显示/重建后调用：重新取得对象并重启**有界**轮询，直到 dock 数据可用
+    // （最多约 10s 后静默）。轮询只为取得对象与等其属性就绪，数值更新由绑定负责。
+    property int marginAcquireTicks: 0
     function restart() {
-        refresh()
-        marginRefreshTicks = 0
-        marginRefreshTimer.restart()
+        acquireDockApplet()
+        marginAcquireTicks = 0
+        marginAcquireTimer.restart()
     }
 
     Timer {
-        id: marginRefreshTimer
+        id: marginAcquireTimer
         interval: 250
         repeat: true
         onTriggered: {
-            root.marginRefreshTicks++
-            if (root.marginRefreshTicks > 40) {
+            root.marginAcquireTicks++
+            if (root.marginAcquireTicks > 40) {
                 stop()
                 return
             }
-            const beforeTop = root.topMargin
-            const beforeRight = root.rightMargin
-            const beforeBottom = root.bottomMargin
-            root.refresh()
-            if (root.dockDataReady()
-                && root.topMargin === beforeTop
-                && root.rightMargin === beforeRight
-                && root.bottomMargin === beforeBottom) {
+            root.acquireDockApplet()
+            if (root.dockDataReady()) {
                 stop()
             }
         }
     }
 
-    // 子组件先于父组件（主面板 Window）完成：这里先刷新一次，让边距在
-    // 主面板 onCompleted 之前就已就绪，不依赖调用方的 restart() 纪律。
+    // 子组件先于父组件（主面板 Window）完成：这里先取一次对象，让边距绑定在
+    // 主面板 onCompleted 之前就挂上 dock 属性，不依赖调用方的 restart() 纪律。
     Component.onCompleted: {
-        root.refresh()
+        root.acquireDockApplet()
     }
 }

@@ -91,6 +91,7 @@ cmake --build build -j$(nproc)
 
 - Panel appears on the right edge, 380 px wide, with a title and a pin button.
 - The dock tray button toggles the panel; its highlight follows the panel state.
+- While the panel is shown, changing the dock's position, size or hide mode updates its margins and height immediately; no hide-and-show cycle is needed for the panel to follow.
 - Pinned panels are not covered by normal windows; unpinned panels can be.
 - Clicking outside the panel never closes it.
 - Right-clicking a widget offers only the sizes declared by its manifest; resizing persists and avoids other widgets; Remove deletes the instance.

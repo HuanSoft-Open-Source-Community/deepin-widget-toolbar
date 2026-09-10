@@ -15,9 +15,12 @@ import "widgets/components" as Components
 Window {
     id: root
 
-    // 获取 dock 所在的屏幕，侧栏跟随该屏幕显示
+    // 获取 dock 所在的屏幕，侧栏跟随该屏幕显示。
+    // 对象取自 DockMarginHelper 缓存的 dockApplet，而非现场调 DS.applet()：
+    // 后者是函数调用、返回值不可被 QML 跟踪，读缓存对象的 screenName 属性才会让
+    // 本绑定在 dock 换屏时自动重算（缓存未就绪时回退首屏，与旧行为一致）。
     function getDockScreen() {
-        let dockApplet = DS.applet("org.deepin.ds.dock")
+        let dockApplet = dockMargin.dockApplet
         if (!dockApplet) {
             return Qt.application.screens[0]
         }
@@ -33,7 +36,7 @@ Window {
         return Qt.application.screens[0]
     }
 
-    // 与任务栏之间的间距计算与轮询已迁移到 components/DockMarginHelper.qml
+    // 与任务栏之间的间距计算已迁移到 components/DockMarginHelper.qml
     function blendColorAlpha(fallback) {
         var appearance = DS.applet("org.deepin.ds.dde-appearance")
         if (!appearance || appearance.opacity < 0)
@@ -498,9 +501,9 @@ Window {
     onVisibleChanged: {
         if (visible) {
             applyLayerFlags()
-            // 每次显示都重启边距轮询：dock 数据（DS.applet 返回值）不是
-            // QML 可跟踪依赖，窗口重建后必须重新求值，否则边距保持旧值/0，
-            // 同时兜底 dock 代理异步就绪晚于窗口创建的场景。
+            // 每次显示都重新取得 dock 对象并重启**有界**取对象轮询：dock 代理
+            // 异步就绪可能晚于窗口创建，DS.applet() 返回值又不可跟踪。边距数值
+            // 本身已由 DockMarginHelper 里的绑定跟踪，无需靠轮询维持。
             dockMargin.restart()
         }
     }
@@ -530,7 +533,8 @@ Window {
               | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint
     }
 
-    // 与任务栏间距：计算与轮询在 DockMarginHelper，输出属性供绑定消费
+    // 与任务栏间距：边距是读 dock 属性的绑定（dock 一变即重算），
+    // DockMarginHelper 只用有界轮询取得 dock applet 对象；输出属性供本窗口绑定消费
     Components.DockMarginHelper {
         id: dockMargin
         screenRef: root.screen
