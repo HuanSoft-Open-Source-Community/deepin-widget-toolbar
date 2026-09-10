@@ -14,8 +14,8 @@ import "../components" as Components
 //
 // 待办模式（manifest 设置 todoMode，经 widgetConfig 实时生效）：
 //  - 每个逻辑行行首缺省一个空心圆点，点击圆点在空心/实心间交替；
-//  - 实心（完成）行：文字叠半透明底色"洗浅"，并由 strikeCanvas 画删除线；
-//    空心行不作任何处理；
+//  - 实心（完成）行：文字叠半透明底色"洗浅"（仅配色模式，见 washColor），
+//    并由 strikeCanvas 画删除线；空心行不作任何处理；
 //  - 内容区 Flickable + 全高 TextArea：可滚动页面高度随行数动态增长（无限滚动），
 //    圆点/洗色/删除线与文字同处内容坐标系，随滚动整体移动。
 //  圆点与行状态按"行索引"绑定：回车新增行缺省空心，上方插行后既有标记不随行迁移。
@@ -52,11 +52,13 @@ Components.WidgetCard {
     property bool syncingFlags: false
     // 圆点/文字颜色：配色模式跟文字色，透明模式跟主题文字色（与正文一致）
     property color dotColor: root.effectiveTransparent ? root.themeTextColor : root.textColor
-    // 完成行"洗浅"色：配色模式用内容底色，透明模式（底色不可知）退主题窗口色
-    readonly property color washColor: {
-        var c = root.effectiveTransparent ? palette.window : root.contentBackgroundColor
-        return Qt.rgba(c.r, c.g, c.b, 0.55)
-    }
+    // 完成行"洗浅"色：仅配色模式使用——把行洗向"内容底色"，浅底深字观感为变浅。
+    // 透明模式不适用（该模式＝配色模式前样式，卡片底是主题雾底、无内部色块，
+    // 与 lineCanvas 无行底线同理）：此处任何实色叠在半透雾底上都会糊出一条比文字
+    // 更醒目的色带（回归现象），故透明模式整条不画，完成态由实心圆点 + 删除线表达。
+    readonly property color washColor: Qt.rgba(root.contentBackgroundColor.r,
+                                               root.contentBackgroundColor.g,
+                                               root.contentBackgroundColor.b, 0.55)
     // 圆点列宽度（仅待办模式占位，文字整体右移让位）
     property int dotGutter: root.todoMode ? Math.max(18, Math.round(root.lineHeight * 0.85)) : 0
     property int dotSize: Math.max(9, Math.round(root.lineHeight * 0.36))
@@ -537,7 +539,8 @@ Components.WidgetCard {
                     }
 
                     // 完成行"洗浅"矩形：半透明内容底色叠于文字上（z 高于 TextArea），
-                    // 深字浅底/浅字深底/透明模式三种配色下都呈现"变浅"观感
+                    // 深字浅底两种配色下都呈现"变浅"观感。透明模式不叠（见 washColor：
+                    // 雾底之上任何色块都会糊成突兀高亮带），完成态仍有实心点与删除线。
                     Repeater {
                         model: root.todoMode ? noteArea.lineCount : 0
                         delegate: Rectangle {
@@ -548,7 +551,7 @@ Components.WidgetCard {
                             width: noteArea.width
                             height: root.lineHeights[index]
                             color: root.washColor
-                            visible: root.isDone(index)
+                            visible: root.isDone(index) && !root.effectiveTransparent
                         }
                     }
 
