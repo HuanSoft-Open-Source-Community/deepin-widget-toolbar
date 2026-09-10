@@ -75,7 +75,7 @@
 由宿主动态枚举；当前无播放器时下拉为空且禁用。配置面板应在 `playerMode` 为
 `locked` 时才显示该行。
 
-内置组件示例：clock 允许 `1×1 / 2×2 / 4×2 / 4×4` 并声明 `clockMode` 配置；lyrics 声明 `lyricsFont` 与 `lyricsColor`；applauncher（应用快捷启动器）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格）并声明 `launchers`（launcherList，默认空，新实例由组件自行预置浏览器/终端/文本编辑器/邮箱四个默认程序）、`immersiveMode`、`showLabels`/`labelColor`/`unitBackgroundColor`/`backgroundColor`/`transparentBackground` 等配置。
+内置组件示例：clock 允许 `1×1 / 2×2 / 4×2 / 4×4` 并声明 `clockMode` 配置；lyrics 声明 `lyricsFont` 与 `lyricsColor`；applauncher（应用快捷启动器）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格）并声明 `launchers`（launcherList，默认空，新实例由组件自行预置浏览器/终端/文本编辑器/邮箱四个默认程序）、`immersiveMode`、`showLabels`/`labelColor`/`unitBackgroundColor`/`backgroundColor`/`transparentBackground` 等配置；worldtime（世界时间）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格：指针模式为单行四块方形表盘，数字模式为单行四列、隐去标题、格内时间与地区名上下排列）。
 
 ## 4. 布局模型
 

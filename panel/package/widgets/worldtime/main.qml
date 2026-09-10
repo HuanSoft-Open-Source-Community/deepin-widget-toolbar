@@ -14,7 +14,8 @@ import "dialslogic.js" as DialsLogic
 // 无需维护偏移文本框。表盘列表按实例持久化（widgetConfig.dials，
 // 元素为 {zone, auto}）。两种模式槽数一致（hostCols*hostRows），切片显示、
 // 可少于格子数并留空；数字模式取纵向双列（每个 2×2 区恰 4 单位），
-// 仅 1×1 退化为单格并隐去标题，窄格（1×1/2×2）内地区名与时间上下排列。
+// 仅 1×1 退化为单格并隐去标题，窄格（1×1/2×2）内地区名与时间上下排列；
+// 4×1 长条数字模式退化为单行四列并隐去标题，方块格与 2×2 同形、同样上下排列。
 // 新实例缺省为指针模式并预置四块表盘（默认 2×2 恰好放满）：当前时区一块，
 // 其余三块取旧版四城市（北京/东京/伦敦/纽约）中不与当前时区重复的前三个。
 // 预置仅在实例尚无任何已保存配置（config 文件不存在）时生成并持久化；
@@ -82,11 +83,15 @@ Components.WidgetCard {
 
     // 数字模式布局：单位数与指针模式一致（hostCols*hostRows），排列取纵向
     // 双列（每个 2×2 区恰 4 单位：中 2×2→2×2、宽 4×2→2×4、大 4×4→2×8）；
-    // 小卡（1×1）退化为单格并隐去标题；窄格（hostCols<4）内上下排列
+    // 小卡（1×1）退化为单格并隐去标题；窄格（hostCols<4）内上下排列；
+    // 长条（4×1）单行高度只容一排，退化为单行四列并隐去标题——其单元格
+    // 恰为正方形（与 2×2 同形），沿用上下排列样式
     property int digitalSlots: root.hostCols * root.hostRows
     property bool digitalCompact: root.hostCols < 2
-    property bool digitalVerticalCells: root.hostCols < 4
-    property int digitalCols: root.digitalCompact ? 1 : 2
+    property bool digitalStrip: root.hostRows === 1 && root.hostCols > 1
+    property bool digitalVerticalCells: root.hostCols < 4 || root.digitalStrip
+    property int digitalCols: root.digitalCompact ? 1
+        : (root.digitalStrip ? root.hostCols : 2)
     property int digitalRows: root.digitalSlots / root.digitalCols
 
     // 当前尺寸下的槽数：指针模式铺满网格，数字模式按上表
@@ -311,7 +316,7 @@ Components.WidgetCard {
         zoneInfos: root.zoneInfos
         times: root.times
         layoutSpacing: root.layoutSpacing
-        titleText: root.digitalCompact ? "" : qsTr("World Time")
+        titleText: (root.digitalCompact || root.digitalStrip) ? "" : qsTr("World Time")
         titlePixelSize: root.titlePixelSize
         cols: root.digitalCols
         rows: root.digitalRows
