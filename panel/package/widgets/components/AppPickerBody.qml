@@ -34,8 +34,8 @@ Item {
     signal appPicked(var desktopIdList)
     signal canceled()
 
-    // 宿主程序库（DesktopApps 单例）随应用增删刷新；过滤不破坏原模型
-    property var appEntries: DesktopApps.entries
+    // 宿主程序库（DesktopApps 单例）随应用增删刷新；过滤不破坏原模型。
+    // 过滤直接读 DesktopApps.entries（filteredApps 内部读取），不再单独声明副本。
     property string filterText: ""
     property var shownApps: body.filteredApps()
 

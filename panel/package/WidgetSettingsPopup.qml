@@ -160,8 +160,6 @@ PanelPopup {
             result.push(item)
         }
         control.visibleSchema = result
-        // 尺寸/实例变化导致的重建同样触发 launcherList 会话重同步
-        control.launcherEditSession++
     }
 
     function commit(key, value) {
@@ -302,7 +300,7 @@ PanelPopup {
     }
 
     // 恢复默认四应用（浏览器/终端/文本编辑器/邮箱）：
-    // 容量放不下时只保留第一个（如 1×1 小卡）
+    // 按当前卡片容量裁剪（与卡片首启播种同一策略）——1×1 小卡只保留第一个
     function restoreDefaultLaunchers(key) {
         var ids = DesktopApps.defaultAppIds()
         var resolved = []
@@ -312,8 +310,9 @@ PanelPopup {
         }
         if (resolved.length === 0)
             return
-        if (resolved.length > control.launcherCapacity())
-            resolved = [resolved[0]]
+        var capacity = Math.max(1, control.launcherCapacity())
+        if (resolved.length > capacity)
+            resolved = resolved.slice(0, capacity)
         control.commit(key, resolved)
     }
 
@@ -431,8 +430,16 @@ PanelPopup {
 
         Connections {
             target: Panel.widgetManager
-            function onInstancesChanged() { control.rebuildVisibleSchema() }
-            function onLayoutChanged() { control.rebuildVisibleSchema() }
+            // 尺寸/实例变化会改卡片容量，需让 launcherList 行会话重同步
+            // （launcherCapacity() 是函数调用，靠 session 计数制造绑定依赖）
+            function onInstancesChanged() {
+                control.rebuildVisibleSchema()
+                control.launcherEditSession++
+            }
+            function onLayoutChanged() {
+                control.rebuildVisibleSchema()
+                control.launcherEditSession++
+            }
         }
 
         Connections {

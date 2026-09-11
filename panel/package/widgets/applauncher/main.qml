@@ -61,11 +61,12 @@ Components.WidgetCard {
         if (root.instanceId.length === 0)
             return
         root.cfg = Panel.widgetManager.instanceConfig(root.instanceId)
-        console.warn("[applauncher] reload", root.instanceId.slice(0, 8),
-                    "launchers", root.launchers.length,
-                    "rawType", typeof root.cfg.launchers,
-                    "rawIsArray", Array.isArray(root.cfg.launchers),
-                    "seeded", root.seeded)
+        if (Panel.debugMode)
+            console.warn("[applauncher] reload", root.instanceId.slice(0, 8),
+                         "launchers", root.launchers.length,
+                         "rawType", typeof root.cfg.launchers,
+                         "rawIsArray", Array.isArray(root.cfg.launchers),
+                         "seeded", root.seeded)
         root.trySeedDefaults()
     }
 
@@ -178,8 +179,15 @@ Components.WidgetCard {
             if (String(ids[i]).length > 0 && resolved.indexOf(ids[i]) < 0)
                 resolved.push(String(ids[i]))
         }
-        console.warn("[applauncher] seed attempt resolved", JSON.stringify(resolved),
-                    "librarySize", DesktopApps.entries.length)
+        // 与设置面板的「恢复默认」同一策略：按当前卡片容量裁剪。默认尺寸 4×1
+        // 装得下四个默认程序，但用户把卡片缩到 1×1 后，播种 4 个只会在设置面板里
+        // 显示成"另有 3 个已收起"，与恢复默认（裁到容量）行为不一致。
+        if (resolved.length > root.capacity)
+            resolved = resolved.slice(0, root.capacity)
+        if (Panel.debugMode)
+            console.warn("[applauncher] seed attempt resolved", JSON.stringify(resolved),
+                         "capacity", root.capacity,
+                         "librarySize", DesktopApps.entries.length)
         if (resolved.length === 0) {
             // 应用库未就绪/默认解析暂空：随事件重试，另加有界轮询兜底
             root.startSeedPolling()
@@ -189,7 +197,8 @@ Components.WidgetCard {
             "launchers": resolved,
             "_launchersSeeded": true
         })
-        console.warn("[applauncher] seed save result:", saved)
+        if (Panel.debugMode)
+            console.warn("[applauncher] seed save result:", saved)
     }
 
     // 有界轮询兜底：默认解析短暂为空时每 1.5s 重试（最多 10 次），
@@ -252,7 +261,8 @@ Components.WidgetCard {
         root.hoveredUnit = unit
         if (unit < 0)
             return
-        console.warn("[applauncher] click unit", unit, "apps", root.visibleApps)
+        if (Panel.debugMode)
+            console.warn("[applauncher] click unit", unit, "apps", root.visibleApps)
         if (unit < root.visibleApps) {
             DesktopApps.launch(String(root.launchers[unit]))
         } else if (root.hasAddUnit) {

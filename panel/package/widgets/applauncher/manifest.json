@@ -5,7 +5,7 @@
     "description": "Launch your favourite apps from one card",
     "description[zh_CN]": "把常用软件收纳进一张卡片，随时一键启动",
     "version": "1.0.0",
-    "apiVersion": "1.2",
+    "apiVersion": "1.7",
     "author": "deepin-widget-toolbar",
     "icon": "system-run",
     "runtime": "qml",
