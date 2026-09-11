@@ -82,11 +82,11 @@ Q_SIGNALS:
 
 private:
     void setAmAvailable(bool available);
-    void setupDirectoryWatchers();
+    // 让 QFileSystemWatcher 跟上实际存在的条目目录（新增/移除），见实现处注释
+    void refreshDirectoryWatchers(const QStringList &entryDirs);
     void rescanDirectories();
     void rebuildEntries();
     Entry *findEntry(const QString &desktopId);
-    bool launchViaManager(Entry *entry);
     bool launchExecFallback(QString exec, const QString &appName);
     QString defaultMimeHandler(const QStringList &mimeKeys) const;
     QString firstExistingId(const QStringList &candidates) const;

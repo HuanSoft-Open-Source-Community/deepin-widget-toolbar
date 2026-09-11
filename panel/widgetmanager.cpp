@@ -629,6 +629,18 @@ void WidgetManager::scanWidgets()
     });
 
     DebugLogger::instance()->log(DebugLogger::Level::Info, QStringLiteral("widgetmanager"), QString("scanWidgets() complete: %1 个内置，%2 个第三方").arg(builtinCount).arg(thirdPartyCount));
+    // 逐项记 id@version：manifest 的 version 字段此前没有任何读取方，
+    // 排障时"装的是哪个版本的组件"只能去翻文件，这里顺手带上。
+    if (DebugLogger::instance()->isEnabled()) {
+        QStringList summary;
+        for (int i = 0; i < m_widgets.size(); ++i) {
+            const WidgetInfo &w = m_widgets.at(i);
+            summary.append(w.id + QLatin1Char('@')
+                           + (w.version.isEmpty() ? QStringLiteral("-") : w.version));
+        }
+        DebugLogger::instance()->log(DebugLogger::Level::Debug, QStringLiteral("widgetmanager"),
+                                     QStringLiteral("installed widgets: ") + summary.join(QStringLiteral(", ")));
+    }
 }
 
 WidgetManager::WidgetInfo WidgetManager::readManifest(const QString &dir, bool builtin) const
@@ -655,10 +667,20 @@ WidgetManager::WidgetInfo WidgetManager::readManifest(const QString &dir, bool b
     info.builtin = builtin;
     info.dir = dir;
 
-    // 校验：apiVersion 兼容（当前宿主仅支持 1.x）
-    if (!info.apiVersion.startsWith("1.")) {
+    // 校验：apiVersion 兼容。宿主实现 1.0~kWidgetApiMinor，主版本必须为 1；
+    // 声明次版本高于宿主时照常加载（同 Qt 插件惯例：缺的是宿主尚不提供的能力，
+    // 组件自身应有降级分支），但给出明确告警，便于定位"某组件功能不全"。
+    if (!info.apiVersion.startsWith(QLatin1String("1."))) {
         qWarning() << "readManifest: unsupported apiVersion" << info.apiVersion << "for" << info.id;
         return WidgetInfo();
+    }
+    bool minorOk = false;
+    const int declaredMinor = QStringView(info.apiVersion).mid(2).toInt(&minorOk);
+    if (minorOk && declaredMinor > WidgetTypes::kApiMinorVersion) {
+        qWarning() << "readManifest: widget" << info.id << "declares apiVersion"
+                   << info.apiVersion << "newer than the host implements (1."
+                   << QString::number(WidgetTypes::kApiMinorVersion)
+                   << "); loading anyway, features may be missing";
     }
     // 校验：entry 不能是绝对路径或含 .. 逃逸
     if (info.entry.isEmpty() || info.entry.startsWith('/') || info.entry.contains("..")) {

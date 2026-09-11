@@ -1,7 +1,7 @@
 # 小组件接口规范（v1.7）
 
 > 本文档定义 deepin-widget-toolbar 面板（宿主）与小组件之间的开放接口契约。
-> 当前宿主接口版本：1.7；同时兼容 1.0~1.6 小组件。
+> 当前宿主接口版本：1.7；兼容 1.0~1.7 小组件（声明更高次版本的组件仍会加载，但宿主会告警）。
 
 ## 1. 架构
 
@@ -32,8 +32,8 @@
 | `name[zh_CN]` | string | 否 | 指定语言的显示名称（`name[<locale>]` 通用） |
 | `description` | string | 否 | 一句话描述 |
 | `icon` | string | 否 | 主题图标名（如 `appointment-new`），面板列表中显示 |
-| `version` | string | 是 | 语义化版本号，如 `1.0.0` |
-| `apiVersion` | string | 是 | 所需接口版本，当前为 `1.3`；宿主兼容所有 `1.x`，不兼容则拒绝加载 |
+| `version` | string | 是 | 组件自身版本，语义化版本号，如 `1.0.0`；宿主目前仅用于诊断（调试日志里记 `id@version`），不参与加载判定 |
+| `apiVersion` | string | 是 | 所需接口版本，当前为 `1.7`。宿主实现 `1.0`~`1.7`：主版本必须为 `1`（否则拒绝加载并告警），次版本高于宿主时**照常加载**但会打告警（缺的只是宿主尚未提供的能力，组件应自行降级） |
 | `author` | string | 否 | 作者 |
 | `runtime` | string | 否 | 渲染运行时，当前仅支持 `qml`（默认值） |
 | `entry` | string | 是 | 入口文件（相对小组件目录），如 `main.qml` |
@@ -297,7 +297,7 @@
 
 ### DesktopApps（桌面程序条目 / 默认程序 / 启动）
 
-> **系统能力代理**：小组件不允许自行扫描系统目录或解析 `.desktop`；桌面条目、默认程序与应用启动统一经本代理提供。条目聚合与 dde-launchpad/dde-shell 应用列表同源同规则：合并 XDG 启动器目录（用户 `~/.local/share/applications`、系统 `/usr/share/applications` 等）、flatpak exports（`/var/lib/flatpak/...` 与 `~/.local/share/flatpak/...`）、如意玲珑 entries（`/var/lib/linglong/entries/apps/...` 与 `~/.linglong/...`）、deepin 应用商店 `/opt/apps/<id>/entries/applications`，按目录优先级去重，过滤 `Hidden`/非 `Application`/`OnlyShowIn` 不含 X-Deepin 等不应显示的条目；`NoDisplay` 条目（如控制中心"默认程序"创建的自定义启动器）保留为可解析、可启动并参与默认程序匹配，但不进 `entries` 应用列表；宿主监听目录变化，软件装/卸后自动刷新（无需手动调用）。启动则经 dde 应用管理器（会话总线 `org.desktopspec.ApplicationManager1`，dde-application-manager 提供，负责 linglong/flatpak 容器化包装），服务不可用或调用失败时降级为直接执行解析后的 Exec（已含 `ll-cli`/`flatpak run` 包装前缀）。
+> **系统能力代理**：小组件不允许自行扫描系统目录或解析 `.desktop`；桌面条目、默认程序与应用启动统一经本代理提供。条目聚合与 dde-launchpad/dde-shell 应用列表同源同规则：合并 XDG 启动器目录（用户 `~/.local/share/applications`、系统 `/usr/share/applications` 等）、flatpak exports（`/var/lib/flatpak/...` 与 `~/.local/share/flatpak/...`）、如意玲珑 entries（`/var/lib/linglong/entries/apps/...` 与 `~/.linglong/...`）、deepin 应用商店 `/opt/apps/<id>/entries/applications`，按目录优先级去重（同一 desktop id 以优先级最高的目录为准，与 XDG 语义一致），过滤 `Hidden`/非 `Application`/`OnlyShowIn` 不含 X-Deepin 等不应显示的条目；`NoDisplay` 条目（如控制中心"默认程序"创建的自定义启动器）保留为可解析、可启动并参与默认程序匹配，但不进 `entries` 应用列表——注意按上述去重规则，用户在 `~/.local/share/applications` 放一份 `NoDisplay=true` 的同 id 覆盖文件会让该应用从列表消失（这正是"隐藏某个应用"的标准做法）。宿主监听各条目目录**及其可能长出子目录的根**（`/opt/apps`、各 XDG 数据目录）并在每次重扫时同步监听集合，因此软件装/卸（包括商店 deb 新建 `/opt/apps/<id>/entries/applications`）后会自动刷新，无需手动调用。启动则经 dde 应用管理器（会话总线 `org.desktopspec.ApplicationManager1`，dde-application-manager 提供，负责 linglong/flatpak 容器化包装），服务不可用或调用失败时降级为直接执行解析后的 Exec（已含 `ll-cli`/`flatpak run` 包装前缀）。
 
 | 属性/方法 | 类型/签名 | 说明 |
 |---|---|---|
@@ -336,7 +336,7 @@
 
 ## 9. 版本兼容策略
 
-- 小组件声明 `apiVersion`；宿主加载时校验，不兼容则拒绝加载并提示，不静默失败。
+- 小组件声明 `apiVersion`；宿主加载时先校验主版本：非 `1` 则拒绝加载并告警（不静默失败）；次版本高于宿主实现（当前 `1.7`）时照常加载，但会打一条明确告警，便于定位"组件功能不全"。宿主版本常量见 `panel/widgettypes.h` 的 `WidgetTypes::kApiMinorVersion`，须与本文档保持一致。
 - 宿主新增接口走次版本递增，不破坏既有小组件（1.0 小组件仍可加载）。
 - 当前宿主实现：`apiVersion = "1.7"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型；1.5 新增 `AudioVisualizer` 系统音频频谱代理；1.6 新增 `WidgetHost.activateWindow` 键盘焦点请求；1.7 新增 `DesktopApps` 桌面程序代理与 `launcherList` 设置类型（三级应用选择面板、`_` 前缀内部键，及内置应用快捷启动器与 `4×1` 长条规格）。
 

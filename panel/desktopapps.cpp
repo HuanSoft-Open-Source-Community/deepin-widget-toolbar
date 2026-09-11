@@ -379,16 +379,45 @@ DesktopApps::DesktopApps(QObject *parent)
                     m_rescanTimer->start();
             });
 
-    const QStringList dirs = fallbackApplicationsDirs();
-    QStringList existing;
-    for (const QString &dir : dirs) {
-        if (QDir(dir).exists())
-            existing.append(dir);
-    }
-    if (!existing.isEmpty())
-        m_fsWatcher->addPaths(existing);
-
     rescanDirectories();
+}
+
+// 让监听集合跟上实际存在的条目目录：每次重扫后把新出现的目录加进来、已消失的
+// 移除。仅监听从构造时就存在的目录是不够的——软件商店 deb 包的条目目录是
+// /opt/apps/<id>/entries/applications，安装新应用会**新建**这个目录，构造时
+// 它还不存在、永远不会被监听，于是"装完应用选择列表不刷新"。因此同时监听可能
+// 长出子目录的根（/opt/apps 与各 XDG 数据目录），根一变动就会触发重扫，重扫时
+// 再把新目录纳入监听。
+void DesktopApps::refreshDirectoryWatchers(const QStringList &entryDirs)
+{
+    QStringList desired = entryDirs;
+    // 可能新增子目录的根：/opt/apps（商店 deb 约定）+ 各条目目录的父目录
+    desired.append(QStringLiteral("/opt/apps"));
+    for (const QString &dir : entryDirs)
+        desired.append(QFileInfo(dir).absolutePath());
+
+    QStringList wanted;
+    for (const QString &dir : desired) {
+        const QString clean = QDir::cleanPath(dir);
+        if (QDir(clean).exists() && !wanted.contains(clean))
+            wanted.append(clean);
+    }
+
+    const QStringList watched = m_fsWatcher->directories();
+    QStringList toAdd;
+    for (const QString &dir : wanted) {
+        if (!watched.contains(dir))
+            toAdd.append(dir);
+    }
+    QStringList toRemove;
+    for (const QString &dir : watched) {
+        if (!wanted.contains(dir))
+            toRemove.append(dir);
+    }
+    if (!toAdd.isEmpty())
+        m_fsWatcher->addPaths(toAdd);
+    if (!toRemove.isEmpty())
+        m_fsWatcher->removePaths(toRemove);
 }
 
 DesktopApps::~DesktopApps() = default;
@@ -450,6 +479,7 @@ DesktopApps::Entry *DesktopApps::findEntry(const QString &desktopId)
 void DesktopApps::rescanDirectories()
 {
     const QStringList dirs = fallbackApplicationsDirs();
+    refreshDirectoryWatchers(dirs);
     QHash<QString, Entry> next;
     next.reserve(m_apps.size() + 64);
 
@@ -461,6 +491,11 @@ void DesktopApps::rescanDirectories()
                                                     QDir::Files | QDir::Readable);
         for (const QFileInfo &file : files) {
             const QString id = normalizeDesktopId(file.fileName());
+            // 去重按 XDG 语义：同一 desktop id 以优先级最高的目录为准（首见即占用）。
+            // 注意这条判定先于下面的 noDisplay 赋值，因此高优先级的 NoDisplay 条目
+            // 会占住 id 键、遮蔽低优先级目录里的同 id 可见条目——这正是"在
+            // ~/.local/share/applications 放一份 NoDisplay 覆盖文件即隐藏该应用"的
+            // 标准做法，属预期行为（见 docs/widget-api.md 的 DesktopApps 段）。
             if (id.isEmpty() || next.contains(id))
                 continue;
             const RawDesktopFile raw = parseDesktopFile(file.absoluteFilePath());

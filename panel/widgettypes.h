@@ -15,6 +15,11 @@
 // 避免各模块互相包含形成循环依赖。
 namespace WidgetTypes {
 
+// 宿主实现的小组件接口次版本（主版本恒为 1）：与 docs/widget-api.md 里
+// "当前宿主接口版本" 保持一致。声明次版本高于本值的组件仍会加载（缺的是宿主
+// 尚未提供的能力，组件应自行降级），但 readManifest 会打一条明确告警。
+inline constexpr int kApiMinorVersion = 7;
+
 // 小组件静态元数据（来自 manifest.json）
 struct WidgetInfo {
     QString id;
