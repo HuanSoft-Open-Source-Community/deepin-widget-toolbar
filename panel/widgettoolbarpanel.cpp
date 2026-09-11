@@ -93,8 +93,10 @@ bool WidgetToolbarPanel::init()
     // 内部在独立线程采集（dlopen libpulse），仅输出只读数值，绝不触麦克风
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "AudioVisualizer",
                                  new AudioVisualizer(this));
-    // 桌面程序条目代理：应用快捷启动器经它枚举应用（AM 优先、目录降级）、
-    // 解析默认程序与启动应用；图标经 image provider 与 dde-shell 同源渲染
+    // 桌面程序条目代理：应用快捷启动器经它取条目、解析默认程序与启动应用。
+    // 注意条目枚举**始终**来自目录扫描（见 desktopapps.cpp 的 fallbackApplicationsDirs），
+    // ApplicationManager1 只影响 launch() 的启动通道（不可用时降级直执行 Exec）；
+    // 图标经 image provider（dwtappicon）与 dde-shell 同源渲染。
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "DesktopApps",
                                  new DesktopApps(this));
 

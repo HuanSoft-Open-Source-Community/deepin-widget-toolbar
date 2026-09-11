@@ -8,6 +8,7 @@
 #include "widgettoolbarpanel.h"
 #include "windowguard.h"
 
+#include <QDebug>
 #include <QQuickWindow>
 
 WidgetHost::WidgetHost(WidgetManager *manager, QObject *parent)
@@ -32,9 +33,15 @@ QStringList WidgetHost::usedZones(const QString &excludingInstanceId)
 
 void WidgetHost::activateWindow()
 {
+    // 契约：宿主单例必须以面板为 parent（widgettoolbarpanel.cpp 注册时如此传入），
+    // 面板窗口由它取出交给 WindowGuard 直设 X 输入焦点。若将来改挂到别的 parent，
+    // 这里会取不到面板——静默返回会让"便签点了却打不进字"变得无从下手，故告警。
     auto *panel = qobject_cast<WidgetToolbarPanel *>(parent());
-    if (!panel)
+    if (!panel) {
+        qWarning() << "WidgetHost::activateWindow: parent is not WidgetToolbarPanel;"
+                   << "keyboard focus request dropped (check the singleton registration)";
         return;
+    }
     WindowGuard::ensureKeyboardFocus(panel->rootWindow());
 }
 
