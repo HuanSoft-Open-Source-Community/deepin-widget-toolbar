@@ -126,6 +126,28 @@ Components.WidgetCard {
             lineCanvas.requestPaint()
         if (strikeCanvas)
             strikeCanvas.requestPaint()
+        // 记录本次测量所用的几何键（见 rebuildLineTopsIfGeometryChanged）
+        root.measuredWidth = noteArea.width
+        root.measuredLeftPadding = noteArea.leftPadding
+        root.measuredLines = root.lineStarts.length
+    }
+
+    // 行几何重测的去抖入口：只有「会影响行 y/高」的输入变化才重测——noteArea 宽度、
+    // 左内边距（待办模式下为圆点让位，切换待办模式或改字号都会变）与行数。
+    // 三个键都没变就直接返回，因此把它挂在宽高/内边距的变更处理器上也不会给击键
+    // 路径增加重测开销；卡片尺寸切换与待办模式开关此前完全不触发重测，圆点与
+    // 删除线的 y 会滞后到下一次文本或字号变化才对齐。
+    property real measuredWidth: -1
+    property real measuredLeftPadding: -1
+    property int measuredLines: -1
+    function rebuildLineTopsIfGeometryChanged() {
+        if (!noteArea)
+            return
+        if (Math.abs(noteArea.width - measuredWidth) < 0.5
+                && Math.abs(noteArea.leftPadding - measuredLeftPadding) < 0.5
+                && root.lineStarts.length === measuredLines)
+            return
+        rebuildLineTops()
     }
 
     // y（noteArea 内容坐标）→ 行号：取最后一个行顶 <= y 的行
@@ -154,6 +176,8 @@ Components.WidgetCard {
         root.syncFlags()
         if (strikeCanvas) strikeCanvas.requestPaint()
         if (lineCanvas) lineCanvas.requestPaint()
+        // 待办模式会改 leftPadding（圆点让位），行几何需重测（键未变则内部直接返回）
+        Qt.callLater(root.rebuildLineTopsIfGeometryChanged)
     }
     onDoneFlagsChanged: if (strikeCanvas) strikeCanvas.requestPaint()
 
@@ -442,6 +466,10 @@ Components.WidgetCard {
                         value: root.dotGutter + 4
                         restoreMode: Binding.RestoreBindingOrValue
                     }
+                    // 卡片尺寸切换 / 待办内边距变化都会改行几何：去抖重测（键未变则返回）
+                    onWidthChanged: Qt.callLater(root.rebuildLineTopsIfGeometryChanged)
+                    onHeightChanged: Qt.callLater(root.rebuildLineTopsIfGeometryChanged)
+                    onLeftPaddingChanged: Qt.callLater(root.rebuildLineTopsIfGeometryChanged)
                     FontMetrics {
                         id: noteFontMetrics
                         font: noteArea.font
