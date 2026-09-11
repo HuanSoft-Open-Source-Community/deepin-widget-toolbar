@@ -3,6 +3,12 @@
 /build-tests/
 /CMakeFiles/
 
+# Local-only test harness and probe tools: deliberately untracked, so a fresh
+# clone cannot enable -DWIDGETTOOLBAR_BUILD_TESTS (its subdirectory is absent).
+# Track the directory instead (and drop /tests/ here) if it should be shared.
+/tests/
+/tools/
+
 # AI agent tooling artifacts
 /.reasonix/
 /AGENTS.md
