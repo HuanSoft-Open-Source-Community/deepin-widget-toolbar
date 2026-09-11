@@ -78,12 +78,17 @@ Window {
         : root.liveGridTopRow
     property int lastGridTopRow: 0
     onGridTopRowChanged: {
-        // 顶行变化（删除最上卡片/避让预览移动顶卡）时同步平移视口，保持
-        // 卡片视觉位置稳定。程序化写入的 contentY 不会被 Flickable 自动
-        // 钳制（Qt 6.8 实测越界值会残留），必须按目标内容高度显式钳制。
-        gridFlickable.contentY += (gridTopRow - lastGridTopRow)
+        // 顶行变化（删除最上卡片/避让预览移动顶卡）时同步平移视口，保持卡片视觉
+        // 位置稳定：卡片画布坐标 = (gy - gridTopRow) * pitch，顶行每增大 1 行，
+        // 同一张卡在画布上就上移一个 pitch；要让它在屏幕上不动，视口在内容坐标里
+        // 必须同样上移一个 pitch，即 contentY 减去同一个增量（方向与 cellY 相反）。
+        // 钳制用 animatedGridContentHeight（真正驱动 contentHeight/canvas 高度的
+        // 动画值），而非即时的 gridContentHeight，否则动画期间两者不等、钳制会失真。
+        // 程序化写入的 contentY 不会被 Flickable 自动钳制（Qt 6.8 实测越界值会残留），
+        // 故必须显式钳到 [0, maxContentY]。
+        gridFlickable.contentY -= (gridTopRow - lastGridTopRow)
             * (cellHeight + cellSpacingY)
-        let maxContentY = Math.max(gridContentHeight(), gridFlickable.height)
+        let maxContentY = Math.max(animatedGridContentHeight, gridFlickable.height)
             - gridFlickable.height
         gridFlickable.contentY = Math.max(0,
             Math.min(gridFlickable.contentY, maxContentY))
@@ -309,9 +314,12 @@ Window {
         dragPreview.x = Math.max(0,
             Math.min(pointerX - root.dragGrabOffsetX,
                      Math.max(0, gridCanvas.width - previewWidth)))
+        // 纵向可达范围用「目标内容高度」而非 gridCanvas.height：后者绑的是
+        // 220ms 动画中的 animatedGridContentHeight，虚影下移时上限会滞后一个动画周期。
         dragPreview.y = Math.max(0,
             Math.min(pointerY - root.dragGrabOffsetY,
-                     Math.max(0, gridCanvas.height - previewHeight)))
+                     Math.max(0, Math.max(root.gridContentHeight(), gridFlickable.height)
+                              - previewHeight)))
         if (root.dragTargetValid && targetChanged) {
             // 实时避让：目标格被占用时，被占组件立即动画让位（双向联动）
             let layout = Panel.widgetManager.previewMove(
