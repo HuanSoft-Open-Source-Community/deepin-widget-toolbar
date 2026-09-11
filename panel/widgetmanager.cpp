@@ -56,6 +56,7 @@ WidgetManager::WidgetManager(QObject *parent)
 
 void WidgetManager::init()
 {
+    if (DebugLogger::instance()->isEnabled())
     DebugLogger::instance()->log(DebugLogger::Level::Trace, QStringLiteral("widgetmanager"), "init() called");
 
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
@@ -70,6 +71,7 @@ void WidgetManager::init()
     // 一次性规范化旧数据：越界/重叠位置修复，不做持续补位
     normalizeLayout();
 
+    if (DebugLogger::instance()->isEnabled())
     DebugLogger::instance()->log(DebugLogger::Level::Debug, QStringLiteral("widgetmanager"), QString("初始化完成：%1 个内置组件，%2 个已安装实例")
                  .arg(m_widgets.size())
                  .arg(m_instances.count()));
@@ -457,6 +459,7 @@ QStringList WidgetManager::usedZones(const QString &excludingInstanceId) const
 
 bool WidgetManager::addWidget(const QString &widgetId)
 {
+    if (DebugLogger::instance()->isEnabled())
     DebugLogger::instance()->log(DebugLogger::Level::Debug, QStringLiteral("widgetmanager"), QString("addWidget(%1)").arg(widgetId));
 
     if (findWidget(widgetId) == nullptr) {
@@ -489,6 +492,7 @@ bool WidgetManager::addWidget(const QString &widgetId)
     // 预创建实例数据目录（FileIO 沙箱内）
     QDir().mkpath(widgetDataDir(widgetId));
 
+    if (DebugLogger::instance()->isEnabled())
     DebugLogger::instance()->log(DebugLogger::Level::Info, QStringLiteral("widgetmanager"), QString("added instance: %1 -> %2").arg(widgetId).arg(inst.instanceId));
 
     Q_EMIT instancesChanged();
@@ -497,6 +501,7 @@ bool WidgetManager::addWidget(const QString &widgetId)
 
 bool WidgetManager::removeInstance(const QString &instanceId)
 {
+    if (DebugLogger::instance()->isEnabled())
     DebugLogger::instance()->log(DebugLogger::Level::Debug, QStringLiteral("widgetmanager"), QString("removeInstance(%1)").arg(instanceId));
 
     for (int i = 0; i < m_instances.size(); ++i) {
@@ -510,6 +515,7 @@ bool WidgetManager::removeInstance(const QString &instanceId)
                 qWarning() << "removeInstance: failed to save, rolled back";
                 return false;
             }
+            if (DebugLogger::instance()->isEnabled())
             DebugLogger::instance()->log(DebugLogger::Level::Info, QStringLiteral("widgetmanager"), QString("removed instance: %1").arg(removed.instanceId));
             Q_EMIT instancesChanged();
             return true;
@@ -590,6 +596,7 @@ QString WidgetManager::widgetDir(const QString &widgetId) const
 
 void WidgetManager::scanWidgets()
 {
+    if (DebugLogger::instance()->isEnabled())
     DebugLogger::instance()->log(DebugLogger::Level::Debug, QStringLiteral("widgetmanager"), "scanWidgets() started");
 
     m_widgets.clear();
@@ -628,6 +635,7 @@ void WidgetManager::scanWidgets()
         return a.name < b.name;
     });
 
+    if (DebugLogger::instance()->isEnabled())
     DebugLogger::instance()->log(DebugLogger::Level::Info, QStringLiteral("widgetmanager"), QString("scanWidgets() complete: %1 个内置，%2 个第三方").arg(builtinCount).arg(thirdPartyCount));
     // 逐项记 id@version：manifest 的 version 字段此前没有任何读取方，
     // 排障时"装的是哪个版本的组件"只能去翻文件，这里顺手带上。
@@ -638,8 +646,10 @@ void WidgetManager::scanWidgets()
             summary.append(w.id + QLatin1Char('@')
                            + (w.version.isEmpty() ? QStringLiteral("-") : w.version));
         }
-        DebugLogger::instance()->log(DebugLogger::Level::Debug, QStringLiteral("widgetmanager"),
-                                     QStringLiteral("installed widgets: ") + summary.join(QStringLiteral(", ")));
+        if (DebugLogger::instance()->isEnabled()) {
+            DebugLogger::instance()->log(DebugLogger::Level::Debug, QStringLiteral("widgetmanager"),
+                                         QStringLiteral("installed widgets: ") + summary.join(QStringLiteral(", ")));
+        }
     }
 }
 

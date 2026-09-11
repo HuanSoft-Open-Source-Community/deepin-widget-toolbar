@@ -19,9 +19,10 @@ DebugLogger::DebugLogger(QObject *parent)
     : QObject(parent)
     , m_logDir(logDirectoryPath())
 {
-    // 目录建失败不致命：只是没有日志，绝不能让面板因此起不来
-    if (!m_logDir.exists() && !m_logDir.mkpath(QStringLiteral(".")))
-        qWarning().noquote() << "[WidgetToolbar] cannot create log dir" << m_logDir.absolutePath();
+    // 刻意**不**在这里建目录：单例在面板初始化时无条件构造，若在此 mkpath，
+    // 未开启 debugMode 的用户也会被凭空创建 ~/.cache/logs/deepin-widget-toolbar。
+    // 目录与文件都推迟到首次真正写盘时由 ensureLogFile() 惰性创建（失败不致命：
+    // 没有日志也不能让面板起不来）。
 }
 
 DebugLogger::~DebugLogger()
@@ -49,58 +50,32 @@ QString DebugLogger::logDirectoryPath()
 
 bool DebugLogger::isEnabled() const
 {
-    QMutexLocker locker(&m_mutex);
-    return m_enabled;
-}
-
-qint64 DebugLogger::totalLinesWritten() const
-{
-    return m_totalLines;
-}
-
-int DebugLogger::currentFileLines() const
-{
-    QMutexLocker locker(&m_mutex);
-    return m_lineCount;
+    // 免锁读：调用点（含 DEBUG_* 宏与直接调用处）在热路径上，加锁会拖慢击键/拖拽。
+    return m_enabled.load(std::memory_order_relaxed);
 }
 
 void DebugLogger::setEnabled(bool enabled)
 {
     QMutexLocker locker(&m_mutex);
-    if (m_enabled == enabled) {
+    if (m_enabled.load(std::memory_order_relaxed) == enabled) {
         // 幂等：重复设同值不重开文件，避免每次 DConfig 通知都追加一段会话头
         return;
     }
-    m_enabled = enabled;
+    m_enabled.store(enabled, std::memory_order_relaxed);
     if (enabled) {
-        ensureLogFile();
+        ensureLogFile();   // 目录/文件都在首次真正写盘时惰性创建
     } else if (m_logFile.isOpen()) {
         m_logFile.flush();
         m_logFile.close();
     }
 }
 
-QString DebugLogger::currentLogPath() const
-{
-    QMutexLocker locker(&m_mutex);
-    return m_currentFileName.isEmpty() ? QString() : m_logDir.filePath(m_currentFileName);
-}
-
-void DebugLogger::flushAndRotate()
-{
-    QMutexLocker locker(&m_mutex);
-    if (!m_logFile.isOpen())
-        return;
-    m_logFile.flush();
-    checkRotation(true);
-}
-
 void DebugLogger::log(Level level, const QString &component, const QString &message)
 {
-    // 注意：DEBUG_* 宏已在外部判过 isEnabled 以免构造字符串；这里再判一次，
+    // 注意：DEBUG_LOG 宏已在外部判过 isEnabled 以免构造字符串；这里再判一次，
     // 覆盖直接调用 log() 的路径（如 DEBUG_WARNING 不经宏门控）。
     QMutexLocker locker(&m_mutex);
-    if (!m_enabled)
+    if (!m_enabled.load(std::memory_order_relaxed))
         return;
 
     ensureLogFile();
@@ -109,38 +84,6 @@ void DebugLogger::log(Level level, const QString &component, const QString &mess
 
     writeToFile(formatLine(QDateTime::currentDateTime(), level, component, message));
     ++m_lineCount;
-    ++m_totalLines;
-    checkRotation(false);
-}
-
-void DebugLogger::logThrottled(const QString &key, int intervalMs, Level level,
-                               const QString &component, const QString &message)
-{
-    QMutexLocker locker(&m_mutex);
-    if (!m_enabled)
-        return;
-
-    const QDateTime now = QDateTime::currentDateTime();
-    const auto last = m_lastWritten.constFind(key);
-    if (last != m_lastWritten.constEnd() && last->msecsTo(now) < intervalMs) {
-        // 抑制而非丢弃：攒下的条数在下次真正写入时补报，避免"看起来没发生"
-        m_suppressed[key] = m_suppressed.value(key) + 1;
-        return;
-    }
-
-    QString out = message;
-    const qint64 dropped = m_suppressed.take(key);
-    if (dropped > 0)
-        out += QStringLiteral(" [+%1 suppressed in last %2ms]").arg(dropped).arg(intervalMs);
-
-    m_lastWritten[key] = now;
-
-    ensureLogFile();
-    if (!m_logFile.isOpen())
-        return;
-    writeToFile(formatLine(now, level, component, out));
-    ++m_lineCount;
-    ++m_totalLines;
     checkRotation(false);
 }
 
@@ -226,7 +169,9 @@ void DebugLogger::ensureLogFile()
                    .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")),
                         QString::number(kMaxLinesPerFile));
         ++m_lineCount;
-        ++m_totalLines;
+        // 新文件刚建好，此刻清理最合适：目录内文件总数（含这个活动文件）
+        // 收敛到 kMaxLogFiles，避免只轮转不清理导致长期开启无限累积。
+        pruneLogFiles();
     }
 }
 
@@ -273,6 +218,30 @@ void DebugLogger::checkRotation(bool force)
         m_lineCount = 0;
         ensureLogFile();
     }
+}
+
+// 只清理本插件自己写下的日志文件：目录是插件专属，但仍限定 *.log 且必须是
+// 普通文件（避免误删用户放进来的其它内容）。按修改时间从新到旧排序，保留前
+// kMaxLogFiles 个（含当前活动文件），其余删除。调用方须已持锁。
+void DebugLogger::pruneLogFiles()
+{
+    if (!m_logDir.exists())
+        return;
+
+    const QFileInfoList files = m_logDir.entryInfoList({ QStringLiteral("*.log") },
+                                                      QDir::Files | QDir::Readable | QDir::Writable,
+                                                      QDir::Time); // 修改时间新→旧
+    if (files.size() <= kMaxLogFiles)
+        return;
+
+    int removed = 0;
+    for (int i = kMaxLogFiles; i < files.size(); ++i) {
+        if (QFile::remove(files.at(i).absoluteFilePath()))
+            ++removed;
+    }
+    if (removed > 0)
+        qInfo().noquote() << "[WidgetToolbar] pruned" << removed
+                          << "old log file(s), keeping the newest" << kMaxLogFiles;
 }
 
 QString DebugLogger::formatLine(const QDateTime &time, Level level,

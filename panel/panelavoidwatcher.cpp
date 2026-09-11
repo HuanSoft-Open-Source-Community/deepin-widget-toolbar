@@ -146,6 +146,7 @@ void PanelAvoidWatcher::start()
         qCInfo(panelAvoidLog) << "non-xcb platform, panel avoidance disabled";
         // 正常降级而非故障：Wayland 下 panelAvoided 恒 false，排查"面板被挡"时
         // 需要这条来确认避让功能本就没参与
+        if (DebugLogger::instance()->isEnabled())
         DebugLogger::instance()->log(
             DebugLogger::Level::Info, QStringLiteral("panelavoidwatcher"),
             QStringLiteral("avoidance disabled: platform=%1 (xcb only)").arg(
@@ -157,6 +158,7 @@ void PanelAvoidWatcher::start()
     m_conn = xcb_connect(nullptr, &screenNum);
     if (!m_conn || xcb_connection_has_error(m_conn)) {
         qWarning() << "PanelAvoidWatcher: xcb_connect failed";
+        if (DebugLogger::instance()->isEnabled())
         DebugLogger::instance()->log(
             DebugLogger::Level::Error, QStringLiteral("panelavoidwatcher"),
             QStringLiteral("xcb_connect failed: avoidance permanently off this run"));
@@ -189,6 +191,7 @@ void PanelAvoidWatcher::start()
     qCInfo(panelAvoidLog) << "panel avoidance watcher started, root"
                           << m_root;
     // 一次插件生命周期仅一条：作为日志文件的起点锚，之后所有判定才有参照
+    if (DebugLogger::instance()->isEnabled())
     DebugLogger::instance()->log(
         DebugLogger::Level::Info, QStringLiteral("panelavoidwatcher"),
         QStringLiteral("watcher started: root=0x%1, initial avoided=%2")
@@ -732,6 +735,7 @@ void PanelAvoidWatcher::refreshAvoided()
             ? QStringLiteral("%1,%2 %3x%4")
                   .arg(rect.x()).arg(rect.y()).arg(rect.width()).arg(rect.height())
             : QStringLiteral("(unknown)");
+        if (DebugLogger::instance()->isEnabled())
         DebugLogger::instance()->log(
             DebugLogger::Level::Info, QStringLiteral("panelavoidwatcher"),
             nextAvoided
@@ -799,6 +803,7 @@ void PanelAvoidWatcher::reconcile(bool userRequested)
         if (!attr && xcb_connection_has_error(m_conn)) {
             qWarning().noquote() << "panelavoid: connection error during liveness probe"
                                  << "— reconcile aborts, avoidance unchanged";
+            if (DebugLogger::instance()->isEnabled())
             DebugLogger::instance()->log(
                 DebugLogger::Level::Error, QStringLiteral("panelavoidwatcher"),
                 QStringLiteral("connection error during liveness probe: reconcile aborted, "
@@ -818,6 +823,7 @@ void PanelAvoidWatcher::reconcile(bool userRequested)
                              << "panel=" << panelRect();
         // 权威释放：这是避让真正解除的三条通道之一，且只在窗口确实销毁/不可见
         // 时发生（非每轮对账），低频且信息量高，值得单独留一条
+        if (DebugLogger::instance()->isEnabled())
         DebugLogger::instance()->log(
             DebugLogger::Level::Info, QStringLiteral("panelavoidwatcher"),
             QStringLiteral("released on liveness probe: %1 win=0x%2 (gone or not viewable)")

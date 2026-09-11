@@ -12,22 +12,25 @@
 #include <QObject>
 #include <QString>
 
+#include <atomic>
+
 /**
  * 面板调试日志单例。
  *
  * 落盘目录：~/.cache/logs/deepin-widget-toolbar/
  * 文件名带时间戳（yyyyMMdd_HHmmss.log），单文件满 2500 行即另起新文件，
- * 满额切换时旧文件改名为 <原名>.<序号>.log 存档。
+ * 满额切换时旧文件改名为 <原名>.<序号>.log 存档；目录内日志文件总数
+ * （含当前活动文件）上限 kMaxLogFiles，超出即按修改时间删除最旧的。
  *
  * 是否写盘完全由 DConfig 键 debugMode 决定（缺省关闭）；未开启时 log() 直接
- * 返回，既不构造字符串也不触碰文件系统。
+ * 返回，不构造字符串，也**不创建日志目录**（目录在首次真正写盘时惰性创建）。
  *
  * 锁约定（m_mutex 非递归，务必遵守）：
- *   public 入口（setEnabled / log / logThrottled / flushAndRotate /
- *   currentLogPath）自行加锁；
+ *   public 入口（setEnabled / log）自行加锁；
  *   private 方法（ensureLogFile / checkRotation / writeToFile /
- *   nextTimestampedName）要求**调用方已持锁**，其内部一律不得再加锁，也不得
- *   回调任何 public 加锁方法，否则自死锁。
+ *   pruneArchives / nextTimestampedName）要求**调用方已持锁**，其内部一律不得
+ *   再加锁，也不得回调任何 public 加锁方法，否则自死锁。
+ *   isEnabled() 例外：读原子量、不加锁，可在任意上下文调用。
  */
 class DebugLogger : public QObject
 {
@@ -48,38 +51,18 @@ public:
     /** 单文件行数硬上限：写满即轮转，绝不突破（重启续写同一文件时也受约束）。 */
     static constexpr int kMaxLinesPerFile = 2500;
 
-    /** Check if logging is enabled (controlled by DConfig debugMode). */
+    /** 目录内日志文件总数上限（含当前活动文件）：超出即删最旧的，避免长期开启累积。 */
+    static constexpr int kMaxLogFiles = 20;
+
+    /** Check if logging is enabled (controlled by DConfig debugMode). 免锁。 */
     bool isEnabled() const;
 
     /** Enable or disable logging entirely. */
     void setEnabled(bool enabled);
 
-    /** Get the path to the current log file being written. */
-    QString currentLogPath() const;
-
-    /** 当前活动日志文件的实际行数（含重启前已存在的内容）。 */
-    int currentFileLines() const;
-
-    /** Manually flush and trigger rotation check. */
-    void flushAndRotate();
-
-    /** Get total lines written since session start. */
-    qint64 totalLinesWritten() const;
-
-    /** 日志根目录，供界面提示与外部工具定位。 */
-    static QString logDirectoryPath();
-
 public Q_SLOTS:
     /** Send a log message at various levels. */
     void log(Level level, const QString &component, const QString &message);
-
-    /**
-     * 限频日志：同一 key 在 intervalMs 内最多落一条，超出部分丢弃并累计计数，
-     * 下次真正写入时把"此前已抑制 N 条"补进消息。供将来确需周期心跳的场景使用；
-     * 当前面板逻辑一律用 log() 记跃变，不用它记心跳。
-     */
-    void logThrottled(const QString &key, int intervalMs, Level level,
-                      const QString &component, const QString &message);
 
 private:
     explicit DebugLogger(QObject *parent = nullptr);
@@ -88,8 +71,14 @@ private:
     DebugLogger(const DebugLogger &) = delete;
     DebugLogger &operator=(const DebugLogger &) = delete;
 
+    /** 日志根目录（仅内部使用：目录在首次写盘时惰性创建）。 */
+    static QString logDirectoryPath();
+
     /** Rotate log file if line limit reached. 调用方须已持锁。 */
     void checkRotation(bool force = false);
+
+    /** 只保留最新的 kMaxLogFiles 个日志文件（含活动文件）。调用方须已持锁。 */
+    void pruneLogFiles();
 
     /** Write a single formatted log line to the current file. 调用方须已持锁。 */
     void writeToFile(const QString &line);
@@ -108,15 +97,12 @@ private:
     static int countLinesIn(const QString &path);
 
     // ===== Member variables =====
-    mutable QMutex m_mutex;            // 保护以下全部状态（含 const 方法内的加锁）
-    bool m_enabled = false;            // Overall logging switch
+    mutable QMutex m_mutex;            // 保护文件句柄与路径等状态
+    std::atomic_bool m_enabled{false}; // 开关：原子量，isEnabled() 免锁读
     QFile m_logFile;                   // Current log file handle
     int m_lineCount = 0;               // 当前文件实际行数（初始化时计入既有内容）
     QDir m_logDir;                     // ~/.cache/logs/deepin-widget-toolbar
     QString m_currentFileName;         // Current file name (yyyyMMdd_HHmmss.log)
-    qint64 m_totalLines = 0;           // Total lines written since startup
-    QHash<QString, QDateTime> m_lastWritten;   // logThrottled 的 key -> 上次写入时刻
-    QHash<QString, qint64> m_suppressed;       // logThrottled 的 key -> 已抑制条数
 };
 
 /**
@@ -127,16 +113,16 @@ private:
     do { if (DebugLogger::instance()->isEnabled()) \
          DebugLogger::instance()->log(DebugLogger::Level::Info, QStringLiteral(#component), (message)); } while(0)
 
-#define DEBUG_TRACE(component, message) \
+/**
+ * 组件名需要运行时构造（非字面量）时的守卫版本；同样保证关闭时不构造消息串。
+ * 用法：DEBUG_GUARDED(Debug, QStringLiteral("widgetmanager"), ...)。
+ */
+#define DEBUG_GUARDED(level, component, message) \
     do { if (DebugLogger::instance()->isEnabled()) \
-         DebugLogger::instance()->log(DebugLogger::Level::Trace, QStringLiteral(#component), (message)); } while(0)
-
-#define DEBUG_DETAIL(component, message) \
-    do { if (DebugLogger::instance()->isEnabled()) \
-         DebugLogger::instance()->log(DebugLogger::Level::Debug, QStringLiteral(#component), (message)); } while(0)
+         DebugLogger::instance()->log(DebugLogger::Level::level, (component), (message)); } while(0)
 
 /**
- * 告警/错误：既入日志文件（受 debugMode 门控），也**始终**输出 stderr。
+ * 告警：既入日志文件（受 debugMode 门控），也**始终**输出 stderr。
  * 保留 stderr 是刻意的——线上 dde-shell 以 QT_LOGGING_RULES=*.info=false 运行，
  * 关掉调试开关时排障仍需能看到异常信号，不能被开关吞掉。
  */
@@ -145,11 +131,4 @@ private:
         const QString _dwt_msg = (message); \
         DebugLogger::instance()->log(DebugLogger::Level::Warning, QStringLiteral(#component), _dwt_msg); \
         qWarning().noquote() << "[WidgetToolbar]" << #component << _dwt_msg; \
-    } while(0)
-
-#define DEBUG_ERROR(component, message) \
-    do { \
-        const QString _dwt_msg = (message); \
-        DebugLogger::instance()->log(DebugLogger::Level::Error, QStringLiteral(#component), _dwt_msg); \
-        qCritical().noquote() << "[WidgetToolbar]" << #component << _dwt_msg; \
     } while(0)

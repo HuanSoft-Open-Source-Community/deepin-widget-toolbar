@@ -63,6 +63,24 @@ echo "==> [4/6] 让新增/变更的配置项立即生效（dde-dconfig 守护进
 # 但**写会被拒绝** —— 用户在新开关上的改动当场生效、重启面板后却又回到默认，
 # 看起来像"设置没保存"。这里在描述文件变化、或发现本插件有配置项尚未被守护进程识别时，
 # 重启该服务使其重新解析（亚秒级，仅影响配置读写的一瞬）。
+#
+# 判定"键是否被守护进程识别"不能只看 stdout 是否为空：对**不存在的键**，
+# `dde-dconfig get` 会往 stdout 打两字节的 ""（引号）并以退出码 0 结束，真正的
+# 错误信息只出现在 stderr（实测 "Requires Non-existent configure item ..."），
+# 因此 `[ -z "$(…)" ]` 恒为假、这个分支永远不会触发。改为同时看 stderr 关键字
+# 与 stdout 是否为空（后者防御其它版本的空输出行为）。
+dconfig_key_known() {
+    local key="$1" out err rc
+    err="$(mktemp)"
+    out="$(dde-dconfig get -a "${DCONFIG_APPID}" -r "${PLUGIN_ID}" -k "${key}" 2>"${err}")"
+    rc=$?
+    if [ "${rc}" -ne 0 ] || grep -qi "Non-existent configure item" "${err}"; then
+        rm -f "${err}"
+        return 1
+    fi
+    rm -f "${err}"
+    [ -n "${out}" ]
+}
 if [ -z "${meta_after}" ]; then
     echo "  警告：读不到 ${META_PATH}，跳过（请确认部署是否成功）" >&2
 else
@@ -72,12 +90,13 @@ else
         [ -n "${meta_before}" ] || need_restart="首次安装本插件的配置描述文件"
     elif command -v dde-dconfig >/dev/null 2>&1; then
         for key in $(meta_keys); do
-            # 本插件的配置项都是布尔/字符串：取值非空即视为守护进程已知
-            if [ -z "$(dde-dconfig get -a "${DCONFIG_APPID}" -r "${PLUGIN_ID}" -k "${key}" 2>/dev/null)" ]; then
+            if ! dconfig_key_known "${key}"; then
                 need_restart="配置项 ${key} 尚未被 dde-dconfig 识别（守护进程视图过期）"
                 break
             fi
         done
+    else
+        echo "  未找到 dde-dconfig，无法校验配置项是否已被守护进程识别（跳过）"
     fi
     if [ -z "${need_restart}" ]; then
         echo "  配置项与守护进程视图一致，无需处理"
@@ -86,10 +105,10 @@ else
         sudo -v || true
         if sudo systemctl restart dde-dconfig-daemon.service; then
             for key in $(meta_keys); do
-                if [ -z "$(dde-dconfig get -a "${DCONFIG_APPID}" -r "${PLUGIN_ID}" -k "${key}" 2>/dev/null)" ]; then
-                    echo "  警告：配置项 ${key} 仍未被识别，请在重新登录后确认" >&2
-                else
+                if dconfig_key_known "${key}"; then
                     echo "  已识别 ${key}"
+                else
+                    echo "  警告：配置项 ${key} 仍未被识别，请在重新登录后确认" >&2
                 fi
             done
         else

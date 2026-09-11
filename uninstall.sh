@@ -36,9 +36,14 @@ if [ -n "${purge_settings}" ]; then
     if command -v dde-dconfig >/dev/null 2>&1; then
         echo "==> 清除面板设置（DConfig 用户覆盖）"
         for key in "${DCONFIG_KEYS[@]}"; do
-            # 旧版本的配置描述文件可能没有该键、资源也可能缺失：失败只提示，不中断卸载
+            # 旧版本的配置描述文件可能没有该键、资源也可能缺失：失败只提示，不中断卸载。
+            # 注意 reset 需要插件的配置描述文件仍在（本步骤因此排在删除文件之前）；
+            # 若包已被 dpkg -r 清掉描述文件，重置必然失败、用户覆盖会留在守护进程库里，
+            # 此时明确告知，别让用户以为已经清干净。
             if dde-dconfig reset -a "${DCONFIG_APPID}" -r "${PLUGIN_ID}" -k "${key}" >/dev/null 2>&1; then
                 echo "  已重置 ${key}"
+            elif [ ! -f "/usr/share/dsg/configs/org.deepin.dde.shell/${PLUGIN_ID}.json" ]; then
+                echo "  跳过 ${key}（配置描述文件已不存在，用户覆盖仍留在 dde-dconfig 库中；重装后可在面板设置里手动改回默认）"
             else
                 echo "  跳过 ${key}（配置项不存在或已是默认值）"
             fi
