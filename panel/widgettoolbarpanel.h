@@ -126,6 +126,9 @@ private:
     // 卡片名称显示：默认开启（功能本身即"显示名称"，默认关会让人以为不存在）
     bool m_showCardNames = true;
     bool m_multitaskAvoided = false;
+    // 已收到过 MultitaskStateChanged：用于压掉 watchMultitaskView() 的异步初始态
+    // 应答（迟到的旧值不得覆盖更新的信号值）
+    bool m_multitaskSignalSeen = false;
     bool m_debugMode = false;                      // Debug logging switch (DConfig managed)
 
     WidgetManager *m_widgetManager = nullptr;

@@ -125,10 +125,18 @@ bool WidgetToolbarPanel::init()
             if (m_debugMode == enabled)
                 return;
             m_debugMode = enabled;
-            DebugLogger::instance()->setEnabled(m_debugMode);
+            // 顺序：开启时先启用再写日志；关闭时必须先写日志再关（DEBUG_LOG 会被
+            // isEnabled() 拦掉，否则"切到关闭"这条永远不会落盘）。
+            if (m_debugMode) {
+                DebugLogger::instance()->setEnabled(true);
+                DEBUG_LOG(panel, QStringLiteral("debug mode switched on"));
+            } else {
+                DebugLogger::instance()->log(DebugLogger::Level::Info,
+                                             QStringLiteral("panel"),
+                                             QStringLiteral("debug mode switched off"));
+                DebugLogger::instance()->setEnabled(false);
+            }
             Q_EMIT debugModeChanged(m_debugMode);
-            DEBUG_LOG(panel, QString("debug mode switched %1")
-                                 .arg(m_debugMode ? "on" : "off"));
         });
     }
     DEBUG_LOG(panel, QString("panel init: debugMode=%1, visible=%2, pinned=%3, "
@@ -194,6 +202,8 @@ bool WidgetToolbarPanel::init()
 
 void WidgetToolbarPanel::onMultitaskStateChanged(bool active)
 {
+    // 记下"信号已到"：watchMultitaskView() 的异步初始态应答据此让位（见该函数）
+    m_multitaskSignalSeen = true;
     setMultitaskAvoided(active);
 }
 
@@ -216,7 +226,10 @@ void WidgetToolbarPanel::watchMultitaskView()
         QDBusConnection::sessionBus().asyncCall(query), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this](QDBusPendingCallWatcher *w) {
-                if (!w->isError()) {
+                // 应答只用于补齐"错过的 true 事件"：若查询往返期间已经收到过
+                // MultitaskStateChanged（用户恰好此时开关视图），迟到的旧应答
+                // 会覆盖更新的信号值，故有信号在先就丢弃这次应答。
+                if (!w->isError() && !m_multitaskSignalSeen) {
                     const QList<QVariant> args = w->reply().arguments();
                     if (!args.isEmpty())
                         setMultitaskAvoided(args.first().toBool());
@@ -421,9 +434,17 @@ void WidgetToolbarPanel::setDebugMode(bool debugMode)
     if (m_config && m_config->isValid()) {
         m_config->setValue("debugMode", debugMode);
     }
-    // 先落盘再切 Logger，保证"关闭"这条能写进当前文件、开关状态本身也持久化
-    DebugLogger::instance()->setEnabled(debugMode);
-    DEBUG_LOG(panel, QStringLiteral("debugMode -> %1").arg(debugMode));
+    // 顺序：开启时先启用再写日志；关闭时必须先写日志再关——DEBUG_LOG 会先判
+    // isEnabled()，关闭时该值已为假，那条记录会永远不落盘。
+    if (debugMode) {
+        DebugLogger::instance()->setEnabled(true);
+        DEBUG_LOG(panel, QStringLiteral("debugMode -> 1"));
+    } else {
+        DebugLogger::instance()->log(DebugLogger::Level::Info,
+                                     QStringLiteral("panel"),
+                                     QStringLiteral("debugMode -> 0"));
+        DebugLogger::instance()->setEnabled(false);
+    }
     Q_EMIT debugModeChanged(debugMode);
 }
 

@@ -110,6 +110,12 @@ void WindowGuard::ensureXInputFocus(QQuickWindow *window, int attempt)
         return;
     xcb_connection_t *conn = x11App->connection();
     const xcb_window_t target = window->winId();
+    // 用户在这段有界重试期间点了别的窗口（Qt 侧焦点窗口已换人）时立即收手：
+    // 否则每一拍都会把 X 输入焦点抢回面板，表现为"约 1 秒内点谁都点不住"。
+    // 只对"已换成别的窗口"成立：focusWindow() 为空（无主状态）不中止，
+    // 因为那正是需要直设焦点的情形。
+    if (QWindow *focused = QGuiApplication::focusWindow(); focused && focused != window)
+        return;
     auto cookie = xcb_get_input_focus(conn);
     xcb_get_input_focus_reply_t *reply = xcb_get_input_focus_reply(conn, cookie, nullptr);
     if (reply) {

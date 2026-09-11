@@ -338,6 +338,18 @@ void PanelAvoidWatcher::evaluate(xcb_window_t win, bool authoritative, bool conf
         return;
     WinInfo &info = it.value();
 
+    // 自身窗口永不计数：身份护栏（identityTarget 的 WM_NAME 前缀）依赖窗口标题，
+    // 面板窗标题一旦被改写/继承成目标样式就会自我避让——隐藏的正是自己所在的侧栏，
+    // 且下一轮 reconcile 再看它一眼即自锁。这里用窗口 id 做权威判据。
+    if (m_panel && m_panel->winId() == win) {
+        if (info.counted) {
+            info.counted = false;
+            info.releasePending = 0;
+            refreshAvoided();
+        }
+        return;
+    }
+
     const bool targeted = info.mapped && isTarget(info);
 
     // 叠合判定 + 面板矩形可知性（只在目标在场时才需要）
