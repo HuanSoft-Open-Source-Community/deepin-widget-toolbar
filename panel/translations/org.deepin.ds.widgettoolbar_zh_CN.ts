@@ -83,15 +83,15 @@
     <name>AppPickerBody</name>
     <message>
         <source>Choose app</source>
-        <translation type="unfinished">选择应用</translation>
+        <translation>选择应用</translation>
     </message>
     <message>
         <source>Search apps</source>
-        <translation type="unfinished">搜索应用</translation>
+        <translation>搜索应用</translation>
     </message>
     <message>
         <source>No matching apps</source>
-        <translation type="unfinished">没有匹配的应用</translation>
+        <translation>没有匹配的应用</translation>
     </message>
     <message>
         <source>Selected: %1/%2</source>
@@ -99,18 +99,18 @@
     </message>
     <message>
         <source>Cancel</source>
-        <translation type="unfinished">取消</translation>
+        <translation>取消</translation>
     </message>
     <message>
         <source>Confirm</source>
-        <translation type="unfinished">确认</translation>
+        <translation>确认</translation>
     </message>
 </context>
 <context>
     <name>ColorPickerDialog</name>
     <message>
         <source>Cancel</source>
-        <translation type="unfinished">取消</translation>
+        <translation>取消</translation>
     </message>
     <message>
         <source>OK</source>
@@ -150,6 +150,10 @@
         <source>Show card names</source>
         <translation>显示卡片名称</translation>
     </message>
+    <message>
+        <source>Enable debug mode</source>
+        <translation>启用调试日志</translation>
+    </message>
 </context>
 <context>
     <name>SettingsRow</name>
@@ -163,7 +167,7 @@
     </message>
     <message>
         <source>Add</source>
-        <translation type="unfinished">添加</translation>
+        <translation>添加</translation>
     </message>
 </context>
 <context>
