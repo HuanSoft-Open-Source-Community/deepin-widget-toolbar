@@ -58,9 +58,13 @@ Item {
 
     x: root.gridX
     y: root.gridY
-    // 宿主容器始终占满槽位：卡片在其中缩小，名称条落在卡片下方的槽内余量里
+    // 宿主容器始终占满槽位：卡片在其中缩小，名称条落在卡片下方的槽内余量里。
+    // 尺寸/位置变化由下面的 Behavior 缓动，本 Item 的 width/height 即动画中的
+    // 实时几何；卡片渲染盒（cardBox）绑定这两个动画属性，卡片本体与内部内容
+    // 才随缓动逐帧重排。root 裁剪作为防溢出保险：任何内部绘制不得越出动画框。
     width: root.slotWidth
     height: root.slotHeight
+    clip: true
     opacity: root.dimmed ? 0.35 : 1.0
     // 位置变化动画：拖拽中其它实例实时让位、松手落位、整理、回弹都走这里
     Behavior on x {
@@ -85,14 +89,15 @@ Item {
     // 宽度在任何开关状态下都等于槽宽（不缩放）——各卡片左右边缘始终与列对齐，
     // 名称的开销只从高度上取：格高增量承担大部分，卡片自己只让出 4px。
     // 只做定位盒，不裁剪；小组件按这里的真实像素重排布局。
-    // 不加 Behavior：宿主自身的 width/height/y 已有缓动，本盒作为绑定跟随即可，
-    // 名称条高度在动画全程恒为 cardLabelHeight，不会跳动。
+    // 绑定宿主的**动画几何**（root.width/height，Behavior 每帧驱动其变化），
+    // 于是尺寸切换时卡片背景与内部内容整段缓动缩放，而非单帧跳终值；
+    // 名称条高度在动画全程恒为 cardLabelHeight，落点随卡片下缘平滑移动。
     Item {
         id: cardBox
         x: 0
         y: 0
-        width: root.slotWidth
-        height: Math.max(0, root.slotHeight - root.cardLabelHeight)
+        width: root.width
+        height: Math.max(0, root.height - root.cardLabelHeight)
     }
 
     // 小组件渲染入口（qrc 或本地文件），由宿主按 widgetId 解析。
