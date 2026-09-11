@@ -123,7 +123,8 @@ PanelPopup {
                         implicitHeight,
                         (indicator ? indicator.implicitHeight : 0) + 6)
                     // 卡片名称显示：只有这一个全局开关，刻意不做单卡片显隐；
-                    // 开启时卡片等比缩小让出下方名称条（长宽比不变），网格几何不变
+                    // 开启后格高变高承载名称条、卡片仍保持满列宽（宽度不变），
+                    // 关闭时布局逐像素回到旧行为
                     checked: Panel.showCardNames
                     onToggled: Panel.showCardNames = checked
                 }

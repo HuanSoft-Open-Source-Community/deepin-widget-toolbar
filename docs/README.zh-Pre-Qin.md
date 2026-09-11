@@ -84,7 +84,7 @@ cmake --build build -j$(nproc)
 
 `./install.sh` 又令**新加之 DConfig 項即效**：`dde-dconfig-daemon` 唯於啟時解析配置描述之文，故就地升之之後，新加之鍵於彼為"未有"——讀尚可賴插件內之兜底（此正新能升級即見之由），然**寫則見拒**，用戶撥新闕之擇將於下次重啟悄然失之。是以描述之文有變、或察本插件有項未識，安裝之文即重啟其守（亞秒之事），並逐項復查。
 
-欄之設（顯隱、置頂、卡片透明之式、卡名之顯）皆 DConfig 之項，人之所改則為*用戶之覆*而存焉，**重裝必襲其覆**——此正"卸而復裝，透明之式猶啟"之所由也。故卸載之文**問**汝是否清除此覆，且唯重置本插件之鍵（`visible`/`pinned`/`cardTransparent`/`showCardNames`/`debugMode`），必不犯 dock 等 dde-shell 之他設。重置必在插件之配置描述猶存之時，故此問居首、其行亦先於諸刪；組件持久數據之問仍留於舊步。答 `n` 則二者皆存；亦可獨重置一項：`dde-dconfig reset -a org.deepin.dde.shell -r org.deepin.ds.widgettoolbar -k cardTransparent`。
+欄之設（顯隱、置頂、卡片透明之式、卡名之顯、調試之誌）皆 DConfig 之項，人之所改則為*用戶之覆*而存焉，**重裝必襲其覆**——此正"卸而復裝，透明之式猶啟"之所由也。故卸載之文**問**汝是否清除此覆，且唯重置本插件之鍵（`visible`/`pinned`/`cardTransparent`/`showCardNames`/`debugMode`），必不犯 dock 等 dde-shell 之他設。重置必在插件之配置描述猶存之時，故此問居首、其行亦先於諸刪；組件持久數據之問仍留於舊步。答 `n` 則二者皆存；亦可獨重置一項：`dde-dconfig reset -a org.deepin.dde.shell -r org.deepin.ds.widgettoolbar -k cardTransparent`。
 
 ## 用
 

@@ -20,6 +20,21 @@ deepin-widget-toolbar (0.2.0.0) unstable; urgency=medium
     drop the completed-row wash band in transparent mode
   * fix(settings): hide transparent-inert color rows and the redundant
     per-card switch
+  * fix(panel): correct the grid scroll compensation so deleting the topmost
+    card no longer shifts the remaining cards by twice the row delta
+  * fix(todo): re-measure line geometry when the card is resized or todo mode
+    is toggled, so the dots and the strikethrough stay aligned
+  * fix(panel): keep the panel's own window out of the avoidance target set,
+    stop the focus retry from stealing focus back, discard a late multitask
+    answer and record the debug switch being turned off
+  * fix(widgets): seed the launcher list within the card capacity, gate the
+    widget's diagnostics behind debug mode and declare apiVersion 1.7
+  * fix(apps): watch newly created entry directories so the app picker
+    refreshes after a store install, and reject or warn on apiVersion
+    mismatches instead of checking only the major prefix
+  * fix(scripts): detect config items the dde-dconfig daemon has not parsed
+    yet, create the log directory only when logging is enabled, and cap the
+    number of log files kept
   * build(deb): keep the packaging output free of harmless CMake/Qt notices,
     write the full build log to dist/build.log, and cross-check the app, about
     and package versions before building

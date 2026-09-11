@@ -318,6 +318,18 @@ bool WidgetToolbarPanel::panelAvoided() const
     return m_panelAvoidWatcher && m_panelAvoidWatcher->avoided();
 }
 
+QString WidgetToolbarPanel::appVersion() const
+{
+    // WIDGETTOOLBAR_VERSION 由 panel/CMakeLists.txt 从工程 PROJECT_VERSION 注入；
+    // 万一构建系统没定义（例如被别的工程直接编译本文件），退回 "unknown" 而不是
+    // 编译失败，也不在 QML 侧再维护一份会过期的常量。
+#ifdef WIDGETTOOLBAR_VERSION
+    return QStringLiteral(WIDGETTOOLBAR_VERSION);
+#else
+    return QStringLiteral("unknown");
+#endif
+}
+
 void WidgetToolbarPanel::setMultitaskAvoided(bool avoided)
 {
     if (m_multitaskAvoided == avoided)

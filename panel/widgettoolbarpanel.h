@@ -33,7 +33,9 @@ class WidgetToolbarPanel : public DPanel
     // 面板级"卡片透明模式"：全局卡片底半透明叠层，与小组件自身 transparentBackground 解耦
     Q_PROPERTY(bool cardTransparent READ cardTransparent WRITE setCardTransparent NOTIFY cardTransparentChanged FINAL)
     // 面板级"卡片名称显示"：在每张卡片下方显示小组件本地化名称。**仅全局生效**，
-    // 刻意不提供任何按实例的读写接口；开启时卡片等比缩小让出名称空间（长宽比不变）。
+    // 刻意不提供任何按实例的读写接口；开启后名称条由**格高**承担（格高变为
+    // 格宽 + 名称条高 − 4），卡片保持满列宽、宽度不变，网格几何随之变化
+    // 详见 panel/package/main.qml 的 cellHeight / cellSpacingY 注释。
     Q_PROPERTY(bool showCardNames READ showCardNames WRITE setShowCardNames NOTIFY showCardNamesChanged FINAL)
     // 多任务视图（MMV）避让运行时状态：true 时面板窗口临时隐藏。仅由 kwin 的
     // MultitaskStateChanged 信号驱动，不持久化，也不改变 visible/托盘高亮；
@@ -47,6 +49,9 @@ class WidgetToolbarPanel : public DPanel
     Q_PROPERTY(bool panelAvoided READ panelAvoided NOTIFY panelAvoidedChanged FINAL)
     // 调试模式开关：全局启用/禁用面板的调试日志系统。默认关闭，仅在故障排查时开启
     Q_PROPERTY(bool debugMode READ debugMode WRITE setDebugMode NOTIFY debugModeChanged FINAL)
+    // 应用版本：来自 CMake 工程版本（编译期注入 WIDGETTOOLBAR_VERSION），
+    // 关于对话框直接读它，避免 QML 里再维护一份手写版本号。
+    Q_PROPERTY(QString appVersion READ appVersion CONSTANT)
     // 小组件宿主接口：QML 通过 Panel.widgetManager / Panel.widgetListModel 访问
     Q_PROPERTY(WidgetManager *widgetManager READ widgetManager CONSTANT)
     Q_PROPERTY(WidgetListModel *widgetListModel READ widgetListModel CONSTANT)
@@ -67,6 +72,8 @@ public:
     void setShowCardNames(bool showCardNames);
     bool multitaskAvoided() const;
     bool panelAvoided() const;
+    // 应用版本（编译期注入，见 panel/CMakeLists.txt 的 WIDGETTOOLBAR_VERSION）
+    QString appVersion() const;
     bool debugMode() const;
     void setDebugMode(bool debugMode);
 

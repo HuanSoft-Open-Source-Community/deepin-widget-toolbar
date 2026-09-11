@@ -167,10 +167,15 @@ Window {
     // 两侧余量相同，故与字号无关地保持对称（不需要测量文字高度）。
     readonly property int cardLabelGap: 2
     // 纵向格距（行距里的空隙）：横向恒用 cellSpacing（列宽与横向对齐不变）；
-    // 纵向在**显示名称时**取 cardLabelGap，即把"文字下间距"砍到与上间距相同。
-    // 关闭名称时等于 cellSpacing，几何与没有本功能时逐像素一致。
-    // 注：纵向格距同时也是多行卡片内部的格距，故多行卡片会随 rows−1 相应变矮
-    //（2 行 −6px、4 行 −18px，相对未启用名称时），这是统一行距下的必然结果。
+    // 纵向在**显示名称时**取 cardLabelGap（2，而不是关闭时的 cellSpacing 12），
+    // 即把"文字下间距"砍到与上间距相同。关闭名称时等于 cellSpacing，几何与
+    // 没有本功能时逐像素一致。
+    // 注：纵向格距同时也是多行卡片内部的格距（12→2，每处内距少 10），而格高每行
+    // 增加 (cardLabelHeight − 4)，两相抵消后按**卡片高度**算：
+    //   差值 = cardLabelHeight × (rows − 1) − 14 × rows + 10
+    // 单行卡片恒为 −4（即 cardLabelShrink，与字号无关）；多行卡片在
+    // cardLabelHeight = t7.pixelSize + 9 > 14 时为正，即**变高**（如 t7=14 ⇒
+    // L=23：2 行 +5px、4 行 +23px）。
     readonly property int cellSpacingY: Panel.showCardNames ? cardLabelGap : cellSpacing
     property int cellWidth: Math.floor((gridArea.width - (gridColumns - 1) * cellSpacing) / gridColumns)
     // 卡片下方名称条的高度（按主题 t7 字号推导，字体放大时同步增高，不会挤压）；

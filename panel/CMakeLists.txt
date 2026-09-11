@@ -93,5 +93,10 @@ endif()
 
 dtk_add_config_meta_files(APPID "org.deepin.dde.shell" FILES configs/org.deepin.ds.widgettoolbar.json)
 
+# 应用版本单一来源：把工程的 PROJECT_VERSION 编译进来，关于对话框由
+# Panel.appVersion 读取，不再在 QML 里手写常量（此前三处版本号靠人工同步，
+# 漏改只能靠 build-deb.sh 的自检事后提醒）。
+target_compile_definitions(ds-widget-toolbar PRIVATE WIDGETTOOLBAR_VERSION="${PROJECT_VERSION}")
+
 ds_install_package(PACKAGE org.deepin.ds.widgettoolbar TARGET ds-widget-toolbar)
 ds_handle_package_translation(PACKAGE org.deepin.ds.widgettoolbar)

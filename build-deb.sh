@@ -38,10 +38,9 @@ if ! dpkg-checkbuilddeps >/dev/null 2>&1; then
     exit 1
 fi
 
-# 版本自检：应用版本记录在三处（CMake 工程版本、关于对话框、包 changelog），
-# 不一致时只提示、不阻断构建，避免带着错版本发布。
+# 版本自检：应用版本来自 CMake 工程版本（关于对话框由 Panel.appVersion 读它，
+# 不再手写），包版本由 debian/changelog 决定；两处不一致时只提示、不阻断构建。
 APP_VERSION="$(sed -n 's/^project([^)]*VERSION[[:space:]]\+\([^ )]*\).*/\1/p' CMakeLists.txt | head -n 1)"
-ABOUT_VERSION="$(sed -n 's/.*qsTr("Version") + ": \([^"]*\)".*/\1/p' panel/package/AboutPopup.qml | head -n 1)"
 PKG_VERSION="$(dpkg-parsechangelog -SVersion 2>/dev/null | head -n 1 || true)"
 PKG_UPSTREAM="${PKG_VERSION%-*}" # 3.0 (native) 不允许带 -修订号，比对前先剥掉
 
@@ -54,9 +53,10 @@ if [ -n "${PKG_UPSTREAM}" ] && [ -n "${APP_VERSION}" ] && [ "${PKG_UPSTREAM}" !=
     echo "WARNING: package version (debian/changelog) is ${PKG_UPSTREAM} but the app version" >&2
     echo "         (CMakeLists.txt) is ${APP_VERSION}." >&2
 fi
-if [ -n "${ABOUT_VERSION}" ] && [ -n "${APP_VERSION}" ] && [ "${ABOUT_VERSION}" != "${APP_VERSION}" ]; then
-    echo "WARNING: about-dialog version (AboutPopup.qml) is ${ABOUT_VERSION} but the app version" >&2
-    echo "         (CMakeLists.txt) is ${APP_VERSION}." >&2
+# 关于对话框必须继续从宿主读版本；若被改回手写常量，这里立刻提醒
+if ! grep -q 'Panel\.appVersion' panel/package/AboutPopup.qml; then
+    echo "WARNING: AboutPopup.qml no longer reads Panel.appVersion; the about dialog may show" >&2
+    echo "         a version that drifts from CMakeLists.txt (project VERSION ${APP_VERSION})." >&2
 fi
 
 BUILD_TMP="$(mktemp -d)"

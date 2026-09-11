@@ -60,7 +60,8 @@ PanelPopup {
 
             Text {
                 Layout.fillWidth: true
-                text: qsTr("Version") + ": 0.2.0.0"
+                // 版本来自 CMake 工程版本（Panel.appVersion），此处不再手写常量
+                text: qsTr("Version") + ": " + Panel.appVersion
                 font: DTK.fontManager.t6
                 color: palette.windowText
                 opacity: 0.8

@@ -78,7 +78,7 @@ cmake --build build -j$(nproc)
 
 `./install.sh` 还会让**新增的 DConfig 配置项立即可用**：`dde-dconfig-daemon` 只在启动时解析配置描述文件，所以就地升级后它并不认识新加的键——读还能走插件内置的兜底值（这正是新功能升级后立刻出现的原因），但**写会被拒绝**，用户拨动新开关的选择会在下次重启时被悄悄丢掉。因此当描述文件发生变化、或发现本插件有配置项未被识别时，安装脚本会重启该服务（亚秒级）并逐个复查配置项。
 
-面板设置（显隐、置顶、卡片透明模式、卡片名称）都是 DConfig 配置项，用户每次改动都会形成持久化的*用户覆盖*——**重装会沿用该覆盖**，这正是"卸载重装后卡片透明模式仍是开启"的来源。因此卸载脚本会**询问**是否清除这些覆盖，且只 reset 本插件自己的键（`visible`/`pinned`/`cardTransparent`/`showCardNames`/`debugMode`），绝不触碰 dock 等其它 dde-shell 配置。重置必须在插件的配置描述文件仍存在时执行，故这个问题在最前面问、也在删除任何文件之前执行；小组件持久化数据的询问仍留在原有的清理步骤里。回答 `n` 则两者都保留；也可手动只重置某一项：`dde-dconfig reset -a org.deepin.dde.shell -r org.deepin.ds.widgettoolbar -k cardTransparent`。
+面板设置（显隐、置顶、卡片透明模式、卡片名称、调试日志）都是 DConfig 配置项，用户每次改动都会形成持久化的*用户覆盖*——**重装会沿用该覆盖**，这正是"卸载重装后卡片透明模式仍是开启"的来源。因此卸载脚本会**询问**是否清除这些覆盖，且只 reset 本插件自己的键（`visible`/`pinned`/`cardTransparent`/`showCardNames`/`debugMode`），绝不触碰 dock 等其它 dde-shell 配置。重置必须在插件的配置描述文件仍存在时执行，故这个问题在最前面问、也在删除任何文件之前执行；小组件持久化数据的询问仍留在原有的清理步骤里。回答 `n` 则两者都保留；也可手动只重置某一项：`dde-dconfig reset -a org.deepin.dde.shell -r org.deepin.ds.widgettoolbar -k cardTransparent`。
 
 ## 🖱️ 使用
 
