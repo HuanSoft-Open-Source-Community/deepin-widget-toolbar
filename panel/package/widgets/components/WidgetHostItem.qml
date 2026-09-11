@@ -66,12 +66,16 @@ Item {
     height: root.slotHeight
     clip: true
     opacity: root.dimmed ? 0.35 : 1.0
-    // 位置变化动画：拖拽中其它实例实时让位、松手落位、整理、回弹都走这里
+    // 位置变化动画：拖拽中其它实例实时让位、虚影吸附落点、松手落位、整理、
+    // 回弹都走这里。改用弹簧动画（SpringAnimation）而非定时补间：拖拽中目标格
+    // 随指针逐格改判，弹簧按物理连续追踪、无需每次重启曲线，落定带轻微过冲
+    // （"弹性"观感）。spring/damping 取 Qt 文档跟踪示例值，epsilon 按像素坐标
+    // 取文档建议的 0.25。尺寸与透明度动画仍用 NumberAnimation，不受影响。
     Behavior on x {
-        NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+        SpringAnimation { spring: 2; damping: 0.2; epsilon: 0.25 }
     }
     Behavior on y {
-        NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+        SpringAnimation { spring: 2; damping: 0.2; epsilon: 0.25 }
     }
     // 尺寸切换动画：让组件在 1×1/2×2/4×2/4×4 之间平滑缩放
     Behavior on width {

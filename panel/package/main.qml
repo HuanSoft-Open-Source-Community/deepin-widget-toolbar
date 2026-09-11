@@ -58,12 +58,24 @@ Window {
     // 占用区顶行（最上卡片的最顶行）：滚动内容与卡片渲染的归一化基准。
     // 最上卡片上方的空洞格不计入滚动高度（新增实例会自动填充首个空闲
     // 矩形，空洞本就不可见）；空网格为 0。
-    property int gridTopRow: {
+    property int liveGridTopRow: {
         let minY = Infinity
         for (let id in gridPositions)
             minY = Math.min(minY, gridPositions[id].y)
         return minY === Infinity ? 0 : minY
     }
+    // 拖拽期间冻结的顶行（gridTopRow 的取值来源）：虚影（被拖实例）在拖拽中也留在
+    // gridPositions 里并随目标格移动，若归一化基准跟着它走，拖着最上卡片下移会在
+    // 拖拽中途改变基准——整块网格重排，同时位移视口补偿与"指针→网格"换算
+    // （目标格会跳格）。冻结只压住"顶行抬升"：虚影下移、原位让出空洞都不许抬升
+    // 基准；但避让把某张卡临时挪到基准之上时仍跟随下降（取两者较小），否则那张卡
+    // 会渲染在画布上边界之外、拖拽全程不可见。startDrag 捕获、endDrag 末尾释放；
+    // 释放时布局已定型，故只在落位处产生一次顶行变化（与改动前同一时机）。
+    property bool topRowFrozen: false
+    property int frozenGridTopRow: 0
+    property int gridTopRow: root.topRowFrozen
+        ? Math.min(root.frozenGridTopRow, root.liveGridTopRow)
+        : root.liveGridTopRow
     property int lastGridTopRow: 0
     onGridTopRowChanged: {
         // 顶行变化（删除最上卡片/避让预览移动顶卡）时同步平移视口，保持
@@ -171,7 +183,7 @@ Window {
     property int cellHeight: cellWidth + (Panel.showCardNames
         ? cardLabelHeight - cardLabelShrink : 0)
 
-    // 网格内容总高度：占用区跨度 = 最上卡片顶行 → 最下卡片底行（含），
+    // 网格内容总高度：占用区跨度 = 渲染基准顶行 → 最下卡片底行（含），
     // 上/下方的空白格不再计入滚动范围。拖拽中末尾多留一行，保证能把
     // 卡片拖到当前最底行之下落位（canDrop 对行数无上限）。空网格为 0
     // （由 animatedGridContentHeight 钳到可视区高度）。
@@ -189,6 +201,10 @@ Window {
             minY = Math.min(minY, y)
             maxY = Math.max(maxY, y + rows)
         }
+        // 画布从渲染基准（gridTopRow）起算，而不是从"当前最上卡片"起算：拖拽中
+        // 虚影离开顶行后两者会差出一段空洞，按最上卡片算会让渲染位置落到内容
+        // 高度之外（底部被裁、预览钳制失真）。非拖拽时两者恒等，行为不变。
+        minY = Math.min(minY, root.gridTopRow)
         let bottomRow = maxY + (root.dragging ? 1 : 0)
         return (bottomRow - minY) * (cellHeight + cellSpacingY) - cellSpacingY
     }
@@ -221,6 +237,13 @@ Window {
             let item = layout[i]
             positions[item.instanceId] = Qt.point(item.gridX, item.gridY)
         }
+        // 虚影落点：previewMove 的 computeAvoidance 把拖拽源固定在原位（fixedId），
+        // 这里把它覆写为吸附后的目标格——原位的半透明虚影跟着目标格逐格移动，
+        // 松手前即可看到"会落在哪"。覆写值与 moveInstance 提交后的坐标逐格一致
+        // （两侧都基于同一次 computeAvoidance + 目标格），故落位无二次位移；
+        // 目标无效时 updateDrag 整体回退到 committedPositions，虚影随之弹回原位。
+        if (root.dragging && root.dragTargetValid)
+            positions[root.dragInstanceId] = Qt.point(root.dragTargetX, root.dragTargetY)
         root.gridPositions = positions
         root.layoutVersion++
     }
@@ -229,6 +252,9 @@ Window {
     function startDrag(host, pointerX, pointerY) {
         if (root.dragging)
             return
+        // 顶行基准在拖拽全程冻结（此时 gridPositions 仍是已提交布局）
+        root.frozenGridTopRow = root.gridTopRow
+        root.topRowFrozen = true
         root.dragging = true
         root.dragInstanceId = host.instanceId
         root.dragCols = Panel.widgetManager.instanceCols(host.instanceId)
@@ -241,13 +267,18 @@ Window {
             root.committedPositions[key] = root.gridPositions[key]
         gridFlickable.interactive = false
         dragPreviewImage.source = ""
+        // 先按指针瞬移到位、再显示、再恢复平滑跟随：Behavior 若在本次拖拽的
+        // 首个位置赋值时生效，预览会从上一次拖拽的停留点（面板首次拖拽为 0,0）
+        // 补间飞向指针，方向随历史变化——即"莫名从四个方向飞入"。
+        dragPreview.snapToPointer = true
+        root.updateDrag(pointerX, pointerY)
         dragPreview.visible = true
+        dragPreview.snapToPointer = false
         // 抓取组件快照作为拖放预览（失败则仅显示占位框）
         host.grabToImage(function(result) {
             if (result && result.url.toString().length > 0)
                 dragPreviewImage.source = result.url
         }, Qt.size(host.width, host.height))
-        root.updateDrag(pointerX, pointerY)
     }
 
     // 按指针吸附到网格并更新预览
@@ -320,6 +351,12 @@ Window {
         root.lastDragTargetY = -1
         root.dragGrabOffsetX = 0
         root.dragGrabOffsetY = 0
+        dragPreview.snapToPointer = false
+        // 顶行冻结最后释放：此刻 gridPositions 已是提交或回滚后的最终布局
+        // （moveInstance 的 layoutChanged 同步写回），只产生一次顶行变化，
+        // 与改动前的落位时机一致；取消/回滚时冻结值就是已提交布局的顶行，
+        // 释放不触发视口补偿。
+        root.topRowFrozen = false
     }
 
     // 自动整理：压实布局并回到顶部（整理按钮与右键菜单共用）
@@ -768,14 +805,22 @@ Window {
                         z: 10
                         width: root.dragCols * cellWidth + (root.dragCols - 1) * cellSpacing
                         height: root.dragRows * cellHeight + (root.dragRows - 1) * cellSpacingY
+                        // 本次拖拽的首个位置赋值必须瞬移：Behavior 若在此刻生效，
+                        // 预览会从上一次拖拽的停留点（面板首次拖拽为 0,0）补间飞向
+                        // 指针，方向随历史变化——即"莫名从四个方向飞入"。
+                        // snapToPointer 期间关闭跟随动画，由 startDrag 一次性写入
+                        // 抓取位置后立即恢复平滑跟随。
+                        property bool snapToPointer: false
                         // 拖拽预览平滑跟随指针，避免逐格硬跳
                         Behavior on x {
+                            enabled: !dragPreview.snapToPointer
                             SmoothedAnimation {
                                 velocity: 1000
                                 reversingMode: SmoothedAnimation.Immediate
                             }
                         }
                         Behavior on y {
+                            enabled: !dragPreview.snapToPointer
                             SmoothedAnimation {
                                 velocity: 1000
                                 reversingMode: SmoothedAnimation.Immediate
