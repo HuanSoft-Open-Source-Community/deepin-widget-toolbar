@@ -1,3 +1,37 @@
+deepin-widget-toolbar (0.2.0.0) unstable; urgency=medium
+
+  * feat(widget): add app launcher widget with five sizes, a three-level app
+    picker, launcherList settings and the DesktopApps proxy
+  * feat(widget): add todo mode with XML persistence to the sticky note,
+    enabled by default
+  * feat(widget): show each card's name below it and add a 4x1 long strip
+    size to the world time widget
+  * feat(panel): hide the sidebar while it overlaps external panels or the
+    multitask view
+  * feat(debug): add opt-in rotating debug logs for the panel
+  * fix(panel): settle avoidance release by liveness so a stale state can no
+    longer hide the panel for good
+  * fix(panel): keep dock margins and the grid scroll range in sync with live
+    layout changes, and let card contents follow host resize easing
+  * fix(panel): snap the drag preview and let the ghost track the drop cell
+  * fix(panel): steer X input focus to the panel on note click, center the
+    pin icons and anchor the add-widget popup to its trigger
+  * fix(widget): localize the world time title, rework its digital layout and
+    drop the completed-row wash band in transparent mode
+  * fix(settings): hide transparent-inert color rows and the redundant
+    per-card switch
+  * build(deb): keep the packaging output free of harmless CMake/Qt notices,
+    write the full build log to dist/build.log, and cross-check the app, about
+    and package versions before building
+  * chore: clear DConfig overrides on uninstall and refresh the daemon view
+    on install
+  * chore(translations): refresh catalogues for the new widgets and the
+    debug-mode label
+  * docs: cover the app launcher widget and bump the widget API spec to v1.7
+  * chore: drop the in-repo test hook and ignore the local-only test harness
+
+ -- 燕戏竹林 <yxzl666xx@outlook.com>  Fri, 11 Sep 2026 20:36:32 +0800
+
 deepin-widget-toolbar (0.1.1.0-1) unstable; urgency=medium
 
   * fix(panel): ensure non-zero layer-shell margins on first map
