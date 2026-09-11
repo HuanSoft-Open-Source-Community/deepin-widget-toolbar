@@ -36,14 +36,20 @@ constexpr int kPopupMinHeight = 64;
 // 边缘（差几像素）的弹出仍算冲突；严格求交会漏掉这类贴边遮挡。
 constexpr int kAvoidPad = 4;
 
-// 取一个 STRING/UTF8_STRING 属性为 QString（用于 WM_NAME）
-QString readTextProperty(xcb_connection_t *conn, xcb_window_t win,
-                         xcb_atom_t property, xcb_atom_t type)
+// 面板直读几何的最小可信边长（root 像素）：窗口重建/WindowGuard 纠正期间 X 侧
+// 可能仍是 1x1/16x16 一类默认小窗，读值须明显大于占位才写入缓存（防污染）。
+constexpr int kMinRealPanelWidth = 32;
+
+// 对账遍历上限：深度（root=0；4 层覆盖 root→WM装饰框→Qt容器→业务窗）与窗数
+// 预算。超限截断只影响"发现新目标"（事件路径不受限），避让中去留由活性直查
+// 独管（reconcile R6），深度不足不再可能误撤避让。
+constexpr int kMaxScanDepth = 4;
+constexpr int kWalkWindowBudget = 4000;
+
+// 从已发出的 get_property cookie 收取文本（批量预筛用：先发齐再收）
+QString readTextCookie(xcb_connection_t *conn, xcb_get_property_cookie_t cookie)
 {
-    auto *reply = xcb_get_property_reply(
-        conn,
-        xcb_get_property(conn, false, win, property, type, 0, 256),
-        nullptr);
+    auto *reply = xcb_get_property_reply(conn, cookie, nullptr);
     if (!reply)
         return QString();
     QString out;
@@ -54,6 +60,32 @@ QString readTextProperty(xcb_connection_t *conn, xcb_window_t win,
     }
     free(reply);
     return out;
+}
+
+// 取一个 STRING/UTF8_STRING 属性为 QString（用于 WM_NAME）
+QString readTextProperty(xcb_connection_t *conn, xcb_window_t win,
+                         xcb_atom_t property, xcb_atom_t type)
+{
+    return readTextCookie(conn,
+                          xcb_get_property(conn, false, win, property, type, 0, 256));
+}
+
+// 从已发出的 WM_CLASS cookie 收取两段 NUL 分隔字符串（res_name / res_class）
+void readClassCookie(xcb_connection_t *conn, xcb_get_property_cookie_t cookie,
+                     QString &resName, QString &className)
+{
+    auto *reply = xcb_get_property_reply(conn, cookie, nullptr);
+    if (!reply)
+        return;
+    const char *value = static_cast<const char *>(xcb_get_property_value(reply));
+    const int len = xcb_get_property_value_length(reply);
+    if (value && len > 0) {
+        resName = QString::fromUtf8(value);
+        const int second = resName.size() + 1; // 跳过首段与 NUL
+        if (len > second)
+            className = QString::fromUtf8(value + second, len - second);
+    }
+    free(reply);
 }
 
 } // namespace
@@ -72,6 +104,19 @@ PanelAvoidWatcher::PanelAvoidWatcher(QObject *parent)
             return;
         }
         qCDebug(panelAvoidLog) << "recheck tick (panel currently avoided)";
+        reconcile();
+    });
+
+    // 双确认的快确认通道：首个"非权威解除"只记 1/2 并挂此单发定时器，
+    // 500ms 后对在册窗口复评——真实离场此时会由第二轮确认释放，
+    // 单轮瞬态误读则在此期间自纠、避让不动。
+    m_releaseConfirmTimer.setInterval(500);
+    m_releaseConfirmTimer.setSingleShot(true);
+    connect(&m_releaseConfirmTimer, &QTimer::timeout, this, [this]() {
+        if (!m_conn)
+            return;
+        // 走完整对账而非仅复评缓存：待确认者可能已不在树中，其陈旧缓存态
+        // 恒判"仍冲突"，唯有窗口树真值能给第二轮确认（见 reconcile/reconcileWalk）。
         reconcile();
     });
 }
@@ -148,7 +193,11 @@ void PanelAvoidWatcher::attachPanel(QWindow *panel)
     if (QWindow *old = m_panel.data())
         disconnect(old, nullptr, this, nullptr);
     m_panel = panel;
-    m_panelRectCached = QRect();
+    // 刻意**不**清空 m_panelRectCached：同一侧栏的 X11 窗口 hide/show 重建后
+    // 其逻辑矩形不变，缓存继续在"隐藏期"兜底；若在此清空，隐藏期直读不可用、
+    // 锚定公式又暂缺（新窗口 margins 尚未回填）时 panelRect 会退化到
+    // mapToGlobal 的 (0,0) 假矩形——正是避让被误撤的通道。新窗口首次可见后
+    // 直读到真值即自然覆盖旧缓存。
 
     if (QWindow *win = m_panel.data()) {
         auto reevaluate = [this]() { reevaluateAll(); };
@@ -169,25 +218,30 @@ void PanelAvoidWatcher::attachPanel(QWindow *panel)
 //  1) 面板**可见**时：直接读它自己的 X11 窗口矩形（geometry + translate）——像素级
 //     精确、含模拟层偏移、无需 DPR 折算，读到的值同时写入缓存。刻意只在可见时读：
 //     面板隐藏时其原生窗口可能已被销毁，此时调用 winId() 会让 Qt 惰性重建一个位置
-//     未定的窗口，读出错误矩形（那是"漏避让"的来源）。
+//     未定的窗口，读出错误矩形（那是"漏避让"的来源）。窗口重建/WindowGuard 纠正
+//     期间 X 侧可能仍是默认小几何，故只接受 ≥kMinRealPanelWidth 的读值，宁缺毋滥。
 //  2) 面板**隐藏**时（避让中即此情形）：用锚定公式——屏幕几何 + DLayerShellWindow
 //     三边边距 + 窗口宽高（与 WindowGuard 同源），该式不依赖曝光、且跟随边距/屏幕变化。
-//  3) 公式不可用则退回上次有效值，再退回 QWindow 全局位置 × DPR。
-// 全部失败返回空矩形表示"未知"（conflictsWithPanel 对未知采取 fail-open）。
+//  3) 公式不可用则退回上次有效值。
+// 已**删除 mapToGlobal 兜底**：隐藏+窗口重建期它给出贴 (0,0) 的假矩形，与右侧
+// 卡片必然"不叠合"——正是避让被整轮对账误撤的通道（实测振荡与此吻合）。
+// 全部失败返回空矩形表示"未知"：evaluate 对未知采取"保持现状"（不再判无冲突）。
 QRect PanelAvoidWatcher::panelRect() const
 {
     QWindow *panel = m_panel.data();
     if (!panel)
         return QRect();
 
-    // 1) 可见：直读真实窗口矩形
+    // 1) 可见：直读真实窗口矩形（拒绝默认小几何污染缓存）
     if (m_conn && panel->isVisible() && panel->handle()) {
         const xcb_window_t win = panel->winId();
         if (win != XCB_WINDOW_NONE) {
             auto *geo = xcb_get_geometry_reply(m_conn, xcb_get_geometry(m_conn, win), nullptr);
             auto *tr = xcb_translate_coordinates_reply(
                 m_conn, xcb_translate_coordinates(m_conn, win, m_root, 0, 0), nullptr);
-            const bool ok = geo && tr && geo->width > 0 && geo->height > 0;
+            const bool ok = geo && tr
+                            && geo->width >= kMinRealPanelWidth
+                            && geo->height >= kMinRealPanelWidth;
             const QRect rect = ok ? QRect(tr->dst_x, tr->dst_y, geo->width, geo->height) : QRect();
             if (geo)
                 free(geo);
@@ -200,9 +254,9 @@ QRect PanelAvoidWatcher::panelRect() const
         }
     }
 
-    // 2) 隐藏中：优先锚定公式（不依赖曝光、跟随边距与屏幕变化）；没有 DLayerShellWindow
-    //    或公式不可用时，**宁可用"上次可见时直读到的精确矩形"**，也不要用 mapToGlobal
-    //    —— 实测隐藏后 mapToGlobal 会给出错误位置/尺寸（如 y=0、高度被拉满）。
+    // 2) 隐藏中：优先锚定公式（不依赖曝光、跟随边距与屏幕变化）；不可用时
+    //    用"上次可见时直读的精确矩形"。不再退回 mapToGlobal——它在窗口销毁/
+    //    重建期给出 (0,0) 起点的假矩形，把"避让中"误翻成"无冲突"。
     QScreen *screen = panel->screen();
     const qreal dpr = screen ? screen->devicePixelRatio() : 1.0;
     if (screen && panel->width() > 0 && panel->height() > 0) {
@@ -226,16 +280,8 @@ QRect PanelAvoidWatcher::panelRect() const
                 }
             }
         }
-        // 上次可见时直读的精确值：胜过 mapToGlobal 的推算
-        if (!m_panelRectCached.isEmpty())
-            return m_panelRectCached;
-        const QPoint global = panel->mapToGlobal(QPoint(0, 0)); // DIP
-        const QRect rect(qRound(global.x() * dpr), qRound(global.y() * dpr), w, h);
-        if (!rect.isEmpty()) {
-            m_panelRectCached = rect;
-            return rect;
-        }
     }
+    // 3) 上次有效值（可能为空 = 未知）
     return m_panelRectCached;
 }
 
@@ -243,8 +289,8 @@ QRect PanelAvoidWatcher::panelRect() const
 // 托盘位，此时完全无需避让）。失败方向刻意不对称：
 //  - 目标窗几何不可知 → 判为冲突（fail-closed）：它会被下一轮对账/事件重新读到，
 //    不会停在未知态，保守一点无副作用；
-//  - 本面板矩形不可知 → 判为**不冲突**（fail-open）：误避会让面板永久消失，
-//    误显只是短暂视觉重叠且随即被纠正。
+//  - 本面板矩形不可知 → 由调用方（evaluate）单列处理，本函数只在 panel 已知时
+//    被调用（未知时的"保持/释放"策略见 evaluate，不在此混为一谈）。
 bool PanelAvoidWatcher::conflictsWithPanel(const WinInfo &info) const
 {
     if (!info.hasPos || info.width <= 0 || info.height <= 0)
@@ -252,11 +298,104 @@ bool PanelAvoidWatcher::conflictsWithPanel(const WinInfo &info) const
 
     QRect panel = panelRect();
     if (panel.isEmpty())
-        return false;
+        return false; // 交由 evaluate 依 panelKnown 再判定
 
     panel.adjust(-kAvoidPad, -kAvoidPad, kAvoidPad, kAvoidPad);
     const QRect target(info.rootX, info.rootY, info.width, info.height);
     return panel.intersects(target);
+}
+
+// 依 mapped + 目标判定 + 叠合判定翻转 counted，并刷新聚合状态。
+// 进入避让（counted false→true）即时；退出避让分两类：
+//  - 权威离场（authoritative=true：Unmap/Destroy、用户显式显示对账）即时释放；
+//  - "身份/尺寸/叠合"这类可能被一次瞬态误读翻转的解除，走双确认，且
+//    **事件驱动的评估（confirmPass=false）只记 1/2 并挂 500ms 快确认**——
+//    一次逻辑变更常连发多条 X 事件，若逐条计数双确认即形同虚设（实测：
+//    同一塌缩在 200ms 内连撤两轮，就是"避让几秒后自动失效"的翻版镜像）。
+//    第二见只认独立复核轮（reconcile/快确认，confirmPass=true）。
+// 面板矩形暂不可知：保持现状（已避让者不撤、未避让者不建），未知不等于无冲突。
+void PanelAvoidWatcher::evaluate(xcb_window_t win, bool authoritative, bool confirmPass)
+{
+    auto it = m_windows.find(win);
+    if (it == m_windows.end())
+        return;
+    WinInfo &info = it.value();
+
+    const bool targeted = info.mapped && isTarget(info);
+
+    // 叠合判定 + 面板矩形可知性（只在目标在场时才需要）
+    bool wantCounted = false;
+    bool panelKnown = true;
+    if (!info.mapped) {
+        wantCounted = false;                    // 窗口不在：权威释放
+    } else if (!targeted) {
+        wantCounted = false;                    // 身份/尺寸脱靶
+    } else {
+        const QRect panel = panelRect();
+        panelKnown = !panel.isEmpty();
+        if (!panelKnown)
+            // 用户显式"显示"触发的对账（authoritative）可在此释放以召回面板；
+            // 被动/定时评估保持现状，不被"暂不可知"误撤。
+            wantCounted = authoritative ? false : info.counted;
+        else
+            wantCounted = conflictsWithPanel(info); // 真叠合才算冲突
+    }
+
+    if (wantCounted) {
+        if (info.releasePending != 0)
+            info.releasePending = 0;            // 恢复冲突：撤销待释放计数
+        if (!info.counted) {
+            info.counted = true;
+            if (targeted)
+                qWarning().noquote() << "panelavoid: AVOID ON, culprit" << info.name
+                                     << info.className << "/" << info.resName
+                                     << "rect=" << QRect(info.rootX, info.rootY, info.width, info.height)
+                                     << "panel=" << panelRect();
+            refreshAvoided();
+        }
+        return;
+    }
+
+    // wantCounted == false —— 需要释放
+    if (!info.counted)
+        return;                                 // 本就没避让，无需处理
+
+    // 面板矩形不可知的"保持"分支不会走到这里（wantCounted==info.counted）。
+    // 走到此处的解除：Unmap/消失或 authoritative 事件即时释放；否则双确认。
+    const bool immediate = authoritative || !info.mapped;
+    if (immediate) {
+        info.counted = false;
+        info.releasePending = 0;
+        if (targeted || info.mapped)
+            qCDebug(panelAvoidLog) << "keep panel (released)" << win << info.name;
+        refreshAvoided();
+        return;
+    }
+
+    // 非权威解除。事件驱动：只把 pending 从 0 抬到 1 并挂快确认，绝不从 1
+    // 抬到 2（那一步只属于复核轮），使同一次变更连发的多条事件只算一次发现。
+    if (!confirmPass) {
+        if (info.releasePending == 0) {
+            info.releasePending = 1;
+            qWarning().noquote() << "panelavoid: release candidate (1/2)" << win
+                                 << info.name << "panel=" << panelRect()
+                                 << "confirming shortly";
+            armReleaseConfirm();
+        }
+        return;
+    }
+
+    // 复核轮（reconcile / 500ms 快确认）：这是独立第二轮观测。
+    if (info.releasePending < 1) {
+        info.releasePending = 1;                 // 本轮仅首轮发现，待再一轮回看
+        armReleaseConfirm();
+    } else {
+        info.counted = false;                    // 第二轮仍无冲突 → 确认释放
+        info.releasePending = 0;
+        qWarning().noquote() << "panelavoid: keep panel (confirmed no conflict)"
+                             << win << info.name;
+        refreshAvoided();
+    }
 }
 
 // 立即按真值重建状态。面板在"用户要求显示"时调用它：先对账再决定是否隐藏，
@@ -265,7 +404,7 @@ void PanelAvoidWatcher::recheck()
 {
     if (!m_conn)
         return;
-    reconcile();
+    reconcile(true);
 }
 
 // 面板矩形变化后重估全部在册窗口：evaluate 只在 counted 翻转时才刷新聚合态，
@@ -321,6 +460,9 @@ void PanelAvoidWatcher::handleEvent(xcb_generic_event_t *event)
         info.mapped = true;
         fetchIdentity(e->window, info);
         evaluate(e->window);
+        // fetchIdentity 的同步往返已掏空 fd 并把期间事件憋进内部队列；此刻
+        // 调用方的 WinInfo& 已离开作用域，安全排水（见类注释「事件投递与自愈」）
+        drainEvents();
         break;
     }
     case XCB_UNMAP_NOTIFY: {
@@ -329,7 +471,8 @@ void PanelAvoidWatcher::handleEvent(xcb_generic_event_t *event)
         if (it == m_windows.end())
             break;
         it->mapped = false;
-        evaluate(e->window);
+        // 权威离场：目标真的不在了，避让即刻解除（关卡通窗口的 UX 首要是快）
+        evaluate(e->window, true);
         break;
     }
     case XCB_CONFIGURE_NOTIFY: {
@@ -424,28 +567,25 @@ void PanelAvoidWatcher::selectEvents(xcb_window_t win)
 
 void PanelAvoidWatcher::fetchIdentity(xcb_window_t win, WinInfo &info)
 {
-    info.name = readTextProperty(m_conn, win, XCB_ATOM_WM_NAME,
-                                 XCB_ATOM_ANY); // 任意类型（UTF8/STRING）
+    // 粘滞身份：合法目标窗的 WM_NAME 不会自己变成空，空只可能是瞬态读失败
+    // （属性恰在被替换/窗口恰在重建）。一次空读不得让已建档的目标脱靶——
+    // 读到空值时保留上一次成功的非空值；新字段成功读到才覆盖。
+    const QString name = readTextProperty(m_conn, win, XCB_ATOM_WM_NAME,
+                                          XCB_ATOM_ANY); // 任意类型（UTF8/STRING）
+    if (!name.isEmpty())
+        info.name = name;
 
-    // WM_CLASS 为两段 NUL 分隔字符串：res_name / res_class
-    auto *reply = xcb_get_property_reply(
-        m_conn,
-        xcb_get_property(m_conn, false, win, XCB_ATOM_WM_CLASS,
-                         XCB_ATOM_STRING, 0, 256),
-        nullptr);
-    info.resName.clear();
-    info.className.clear();
-    if (reply) {
-        const char *value = static_cast<const char *>(xcb_get_property_value(reply));
-        const int len = xcb_get_property_value_length(reply);
-        if (value && len > 0) {
-            info.resName = QString::fromUtf8(value);
-            const int second = info.resName.size() + 1; // 跳过首段与 NUL
-            if (len > second)
-                info.className = QString::fromUtf8(value + second, len - second);
-        }
-        free(reply);
-    }
+    // WM_CLASS 为两段 NUL 分隔字符串：res_name / res_class（同上，空读不覆盖）
+    QString resName;
+    QString className;
+    readClassCookie(m_conn,
+                    xcb_get_property(m_conn, false, win, XCB_ATOM_WM_CLASS,
+                                     XCB_ATOM_STRING, 0, 256),
+                    resName, className);
+    if (!resName.isEmpty())
+        info.resName = resName;
+    if (!className.isEmpty())
+        info.className = className;
 
     auto *geo = xcb_get_geometry_reply(m_conn, xcb_get_geometry(m_conn, win),
                                        nullptr);
@@ -463,9 +603,9 @@ void PanelAvoidWatcher::fetchIdentity(xcb_window_t win, WinInfo &info)
                            << "pos=" << info.rootX << "+" << info.rootY
                            << "target=" << isTarget(info);
 
-    // 本函数由若干同步往返组成：期间到达的事件会被憋进 xcb 内部队列并掏空 fd，
-    // 通知器不会触发，故必须就地排水（见 drainEvents 注释）。
-    drainEvents();
+    // 本函数刻意不在此排水：调用方多持有 WinInfo& / 迭代器，drainEvents 可能经
+    // DestroyNotify 改容器而致悬垂（悬垂引用即状态误翻的隐因）。排水统一放在
+    // 各同步读批次**结束后**（见 handleEvent 的 Map 分支末尾、reconcile 末尾）。
 }
 
 // 该窗左上角在 root 坐标系中的绝对位置（像素）。override-redirect 窗的父即
@@ -486,7 +626,9 @@ void PanelAvoidWatcher::fetchRootPosition(xcb_window_t win, WinInfo &info)
     free(tr);
 }
 
-bool PanelAvoidWatcher::isTarget(const WinInfo &info) const
+// 身份命中（不看尺寸阈值）：对账预筛判据。展开/收起动画中间帧或尚未读到几何时，
+// 尺寸门槛不可判，但身份前缀/类名已足以决定是否补一次全量 fetchIdentity。
+bool PanelAvoidWatcher::identityTarget(const WinInfo &info) const
 {
     const QString &name = info.name;
 
@@ -495,25 +637,14 @@ bool PanelAvoidWatcher::isTarget(const WinInfo &info) const
         || name.startsWith(QLatin1String("dde-shell/widgettoolbar")))
         return false;
 
-    // DS 面板包窗口：WM_NAME 即 pluginId（实测 notificationbubble 等）
     if (name == QLatin1String("org.deepin.ds.notificationbubble")
         || name == QLatin1String("org.deepin.ds.notificationcenter")
         || name == QLatin1String("org.deepin.ds.dde-shutdown"))
         return true;
-
-    // 托盘快捷面板宿主窗：尺寸达阈值才避让。该窗同时承载停驻占位（实测 13x13），
-    // 若占位窗被映射在面板区域，"任何尺寸都算"会直接把面板永久隐藏。
     if (name.startsWith(QLatin1String("dde-shell/panelpopup"))
-        && info.width >= kPopupMinWidth && info.height >= kPopupMinHeight)
+        || name.startsWith(QLatin1String("dde-shell/paneltooltip")))
         return true;
 
-    // 托盘展开小卡：与悬停 tooltip 同窗，尺寸达阈值才算小卡
-    if (name.startsWith(QLatin1String("dde-shell/paneltooltip"))
-        && info.width >= kMiniCardMinWidth && info.height >= kMiniCardMinHeight)
-        return true;
-
-    // 独立应用：按 WM_CLASS（res_class 主，res_name 兜底；Qt 落点大小写
-    // 不一，比对忽略大小写）
     if (info.className.compare(QLatin1String("dde-control-center"),
                                Qt::CaseInsensitive) == 0
         || info.resName.compare(QLatin1String("dde-control-center"),
@@ -524,29 +655,23 @@ bool PanelAvoidWatcher::isTarget(const WinInfo &info) const
         || info.resName.compare(QLatin1String("dde-clipboard"),
                                 Qt::CaseInsensitive) == 0)
         return true;
-
     return false;
 }
 
-void PanelAvoidWatcher::evaluate(xcb_window_t win)
+bool PanelAvoidWatcher::isTarget(const WinInfo &info) const
 {
-    auto it = m_windows.find(win);
-    if (it == m_windows.end())
-        return;
-    WinInfo &info = it.value();
-    // 三段与：映射 → 身份/尺寸命中 → 与侧栏几何叠合。前两段是"是不是它"，
-    // 最后一段是"是否真挡住"；身份命中但位置不冲突者不再触发避让（回归修复）。
-    const bool counted = info.mapped && isTarget(info) && conflictsWithPanel(info);
-    if (counted == info.counted)
-        return;
-    info.counted = counted;
-    if (info.mapped && isTarget(info)) {
-        qCDebug(panelAvoidLog) << (counted ? "avoid" : "keep panel")
-                               << win << info.name << "rect=" << info.rootX
-                               << info.rootY << info.width << "x" << info.height
-                               << "panel=" << panelRect();
-    }
-    refreshAvoided();
+    const QString &name = info.name;
+
+    // 托盘快捷面板宿主窗：尺寸达阈值才避让。该窗同时承载停驻占位（实测 13x13），
+    // 若占位窗被映射在面板区域，"任何尺寸都算"会直接把面板永久隐藏。
+    if (name.startsWith(QLatin1String("dde-shell/panelpopup")))
+        return info.width >= kPopupMinWidth && info.height >= kPopupMinHeight;
+    // 托盘展开小卡：与悬停 tooltip 同窗，尺寸达阈值才算小卡
+    if (name.startsWith(QLatin1String("dde-shell/paneltooltip")))
+        return info.width >= kMiniCardMinWidth && info.height >= kMiniCardMinHeight;
+
+    // 其余（精确标题窗、独立应用类名）无尺寸门槛，身份命中即目标
+    return identityTarget(info);
 }
 
 void PanelAvoidWatcher::refreshAvoided()
@@ -558,15 +683,10 @@ void PanelAvoidWatcher::refreshAvoided()
             break;
         }
     }
-    // 避让开始用 info 级记录（默认可见，无需开 debug 分类）：
-    // 这类"面板莫名消失"的事故下次一条 journalctl 就能定位。
-    if (culprit && !m_avoided) {
-        qCInfo(panelAvoidLog) << "panel avoidance ON, triggered by"
-                              << culprit->name << culprit->className << "/" << culprit->resName
-                              << "rect=" << culprit->rootX << culprit->rootY
-                              << culprit->width << "x" << culprit->height
-                              << "panel=" << panelRect();
-    }
+    // 释放也用 qWarning：dde-shell 以 QT_LOGGING_RULES=*.info=false 运行，
+    // info 级决策日志线上不可见（避让振荡排查正是被这个盲区拖慢的）。
+    if (!culprit && m_avoided)
+        qWarning().noquote() << "panelavoid: OFF (no conflicting window)";
     setAvoided(culprit != nullptr);
 }
 
@@ -582,84 +702,195 @@ void PanelAvoidWatcher::setAvoided(bool avoided)
     else
         m_recheckTimer.stop();
     if (!avoided)
-        qCInfo(panelAvoidLog) << "panel avoidance OFF (no conflicting window)";
+        m_releaseConfirmTimer.stop();
     Q_EMIT avoidedChanged(avoided);
 }
 
-// 按窗口树真值重建状态：这是"漏事件不再等于永久隐藏"的关键——
-// 现行实现对账只更新"见到的"窗口，从不清理"没见到的"，于是被漏掉的 Unmap/Destroy
-// 会让条目永远停在 counted=true。这里改为：本轮见不到的条目一律删除（其状态若
-// 需要，会由后续 Map/Reparent 事件重新建档），再统一重估与收敛。
-void PanelAvoidWatcher::reconcile()
+void PanelAvoidWatcher::armReleaseConfirm()
+{
+    if (!m_releaseConfirmTimer.isActive())
+        m_releaseConfirmTimer.start();
+}
+
+// 按窗口树真值重建状态。**"扫不到"绝不等于"已消失"**：
+//  1) 逐层批量遍历（reconcileWalk）重建"见到"集合；
+//  2) 避让中但未见者走活性直查（R6）：自身 map_state 仍 VIEWABLE → 记为见到、
+//     避让保持；已销毁/失活（读不到属性、UNMAPPED，或祖先被收起导致的
+//     UNVIEWABLE）→ 权威释放。dde 展开卡片实测是 root 直接子窗、以销毁→重建
+//     换 id 的方式轮换，叠加 X11 下 kwin 反复 reparent——任一情形都能让某轮扫描
+//     一时漏见它；旧实现"未见两轮即删"把"扫不到"误当"已离场"，正是"避让几秒后
+//     自动失效"振荡的通道，活性直查把释放判据与扫描可见性解耦；
+//  3) 未避让且未见者为纯垃圾条目，直接删除（需要时由事件路径重建）；
+//  4) 见到者统一走复核轮评估（confirmPass=true），与事件驱动的 1/2 标记
+//     共同构成"两次独立观测"。
+// userRequested=true（托盘/任务栏按钮要求显示）时评估按权威路径执行：面板矩形
+// 暂不可知的避让条目也会即刻释放，保证按钮总能召回面板。
+void PanelAvoidWatcher::reconcile(bool userRequested)
 {
     if (!m_conn)
         return;
 
     m_seen.clear();
-    reconcileWindow(m_root, 0);
+    reconcileWalk();
 
+    // R6 活性直查：避让中但扫描未见者，以自身窗口 id 的属性裁决去留
+    for (auto it = m_windows.begin(); it != m_windows.end(); ++it) {
+        if (!it->counted || m_seen.contains(it.key()))
+            continue;
+        auto *attr = xcb_get_window_attributes_reply(
+            m_conn, xcb_get_window_attributes(m_conn, it.key()), nullptr);
+        if (!attr && xcb_connection_has_error(m_conn)) {
+            qWarning().noquote() << "panelavoid: connection error during liveness probe"
+                                 << "— reconcile aborts, avoidance unchanged";
+            return; // 连接坏了不能拿"读不到"当"窗口没了"
+        }
+        const bool viewable = attr && attr->map_state == XCB_MAP_STATE_VIEWABLE;
+        if (attr)
+            free(attr);
+        if (viewable) {
+            m_seen.insert(it.key()); // 仍可见：当作见到，走统一复核（几何由事件流保鲜）
+            continue;
+        }
+        qWarning().noquote() << "panelavoid: released on liveness probe" << it->name
+                             << "win=" << it.key()
+                             << "(window gone or no longer viewable)"
+                             << "panel=" << panelRect();
+        it->counted = false;
+        it->mapped = false;
+        it->releasePending = 0;
+    }
+
+    // 未见且未避让：垃圾，删
     int pruned = 0;
     for (auto it = m_windows.begin(); it != m_windows.end();) {
         if (m_seen.contains(it.key())) {
             ++it;
             continue;
         }
-        const bool wasCounted = it->counted;
-        const QString name = it->name;
         it = m_windows.erase(it);
         ++pruned;
-        if (wasCounted)
-            qCInfo(panelAvoidLog) << "reconcile: dropped stale avoidance entry"
-                                  << name << "(window gone or no longer viewable)";
     }
     if (pruned > 0)
         qCDebug(panelAvoidLog) << "reconcile pruned" << pruned << "entries,"
                                << m_windows.size() << "remain";
 
-    // 统一重估：覆盖"重建后 counted 需要翻转"的全部情形
+    // 统一复核评估：只评本轮见到的条目（confirmPass=true）
     const auto windows = m_windows;
-    for (auto it = windows.constBegin(); it != windows.constEnd(); ++it)
-        evaluate(it.key());
+    for (auto it = windows.constBegin(); it != windows.constEnd(); ++it) {
+        if (m_seen.contains(it.key()))
+            evaluate(it.key(), userRequested, true);
+    }
     refreshAvoided();
 
     // 对账期间全是同步往返，队列里可能已憋住事件：立刻排水（见 drainEvents 注释）
     drainEvents();
 }
 
-// 递归遍历窗口子树（深度上限 2，覆盖 root→WM装饰框→客户端 与 root→覆盖窗
-// 两类），对每个可见窗建档评估，并对顶层窗订阅自身事件
-void PanelAvoidWatcher::reconcileWindow(xcb_window_t win, int depth)
+// 逐层批量遍历 root 窗口树（见类注释"对账成本控制"）：query_tree、attributes、
+// WM_NAME/WM_CLASS 预筛均按层"先发齐请求再收回复"，同步等待只发生在层边界；
+// 全量 fetchIdentity（几何/位置）仅补发给身份命中或本就建档的窗。
+// 见到的窗一律 m_seen + selectEvents（深层窗的后续事件经直接订阅直达）。
+void PanelAvoidWatcher::reconcileWalk()
 {
-    auto *attr = xcb_get_window_attributes_reply(
-        m_conn, xcb_get_window_attributes(m_conn, win), nullptr);
-    const bool viewable = attr && attr->map_state == XCB_MAP_STATE_VIEWABLE;
-    if (attr)
-        free(attr);
-    if (!viewable && depth > 0)
-        return; // 未映射分支不进入其子树，省查询
+    QVector<xcb_window_t> level;
+    level.append(m_root);
+    QHash<xcb_window_t, xcb_window_t> visitedMap; // win→parent，兼作去重
+    visitedMap.insert(m_root, 0);
+    int visited = 0;
+    bool truncated = false;
 
-    if (depth > 0) {
-        if (viewable) {
-            m_seen.insert(win); // 本轮见到 → reconcile 不会把它当滞留条目清掉
-            WinInfo &info = m_windows[win];
-            info.mapped = true;
-            fetchIdentity(win, info);
-            selectEvents(win);
-            evaluate(win);
+    for (int depth = 1; depth <= kMaxScanDepth && !level.isEmpty() && !truncated; ++depth) {
+        // 1) 批量 query_tree(当前层) → 下一层候选
+        QVector<xcb_window_t> next;
+        QVector<xcb_query_tree_cookie_t> treeCookies;
+        treeCookies.reserve(level.size());
+        for (const xcb_window_t w : std::as_const(level))
+            treeCookies.append(xcb_query_tree(m_conn, w));
+        for (int i = 0; i < level.size(); ++i) {
+            auto *tree = xcb_query_tree_reply(m_conn, treeCookies.at(i), nullptr);
+            if (!tree)
+                continue;
+            const int n = xcb_query_tree_children_length(tree);
+            const xcb_window_t *ch = xcb_query_tree_children(tree);
+            for (int j = 0; j < n; ++j) {
+                if (visitedMap.contains(ch[j]))
+                    continue;
+                if (++visited > kWalkWindowBudget) {
+                    qWarning().noquote() << "panelavoid: walk budget exceeded at depth"
+                                         << depth << "— scan truncated this round";
+                    truncated = true;
+                    break;
+                }
+                visitedMap.insert(ch[j], level.at(i));
+                next.append(ch[j]);
+            }
+            free(tree);
+            if (truncated)
+                break;
         }
-        // 不可见窗口不建档也不记入 m_seen：其旧条目由 reconcile 统一清除，
-        // 之后若重新映射会由 Map/Reparent 事件重新建档
-    }
 
-    if (depth >= 2)
-        return;
-    auto *tree = xcb_query_tree_reply(m_conn, xcb_query_tree(m_conn, win),
-                                      nullptr);
-    if (!tree)
-        return;
-    const int n = xcb_query_tree_children_length(tree);
-    const xcb_window_t *children = xcb_query_tree_children(tree);
-    for (int i = 0; i < n; ++i)
-        reconcileWindow(children[i], depth + 1);
-    free(tree);
+        // 2) 批量 attributes → 只留已映射者（未映射分支不再下探，也自然不入 seen；
+        //    其中避让中者由 R6 活性直查单独裁决，不受扫描深度影响）
+        QVector<xcb_get_window_attributes_cookie_t> attrCookies;
+        attrCookies.reserve(next.size());
+        for (const xcb_window_t w : std::as_const(next))
+            attrCookies.append(xcb_get_window_attributes(m_conn, w));
+        level.clear();
+        for (int i = 0; i < next.size(); ++i) {
+            auto *attr = xcb_get_window_attributes_reply(m_conn, attrCookies.at(i), nullptr);
+            const bool viewable = attr && attr->map_state == XCB_MAP_STATE_VIEWABLE;
+            if (attr)
+                free(attr);
+            if (viewable)
+                level.append(next.at(i));
+        }
+
+        // 3) 批量身份预筛（每窗 WM_NAME + WM_CLASS 两 cookie，一并收取）
+        QVector<xcb_get_property_cookie_t> idCookies;
+        idCookies.reserve(level.size() * 2);
+        for (const xcb_window_t w : std::as_const(level)) {
+            idCookies.append(xcb_get_property(m_conn, false, w, XCB_ATOM_WM_NAME,
+                                              XCB_ATOM_ANY, 0, 256));
+            idCookies.append(xcb_get_property(m_conn, false, w, XCB_ATOM_WM_CLASS,
+                                              XCB_ATOM_STRING, 0, 256));
+        }
+        QVector<xcb_window_t> fullFetch;
+        for (int i = 0; i < level.size(); ++i) {
+            const xcb_window_t w = level.at(i);
+            m_seen.insert(w);
+            selectEvents(w);
+
+            WinInfo probe;
+            probe.mapped = true;
+            probe.name = readTextCookie(m_conn, idCookies.at(2 * i));
+            readClassCookie(m_conn, idCookies.at(2 * i + 1),
+                            probe.resName, probe.className);
+
+            const bool registered = m_windows.contains(w);
+            if (registered) {
+                // 粘滞合并：空读不覆盖在册非空值；判定用合并后的身份
+                WinInfo &old = m_windows[w];
+                old.mapped = true;
+                if (!probe.name.isEmpty())
+                    old.name = probe.name;
+                if (!probe.resName.isEmpty())
+                    old.resName = probe.resName;
+                if (!probe.className.isEmpty())
+                    old.className = probe.className;
+                probe = old;
+            }
+            if (identityTarget(probe)) {
+                if (!registered)
+                    m_windows.insert(w, probe);
+                fullFetch.append(w); // 补全量几何/位置
+            } else if (registered) {
+                fullFetch.append(w); // 在册非目标（如 13x13 驻停 popup）：刷几何以判阈值回升
+            }
+            // 身份不命中且未建档：不建档；其映射会由 Map 事件另行建档
+        }
+
+        // 4) 候选者补全量身份+几何（数量受目标窗自然约束）
+        for (const xcb_window_t w : std::as_const(fullFetch))
+            fetchIdentity(w, m_windows[w]);
+    }
 }

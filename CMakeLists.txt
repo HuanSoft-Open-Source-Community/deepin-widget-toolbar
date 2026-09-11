@@ -26,3 +26,11 @@ find_package(DDEShell REQUIRED)
 
 add_subdirectory(panel)
 add_subdirectory(tray)
+
+# PanelAvoidWatcher 回归测试（直接编译 watcher 源文件，需 X11 会话运行；
+# 非 xcb 平台用例自跳过）。默认关闭：配置时 -DWIDGETTOOLBAR_BUILD_TESTS=ON。
+option(WIDGETTOOLBAR_BUILD_TESTS "Build the PanelAvoidWatcher regression tests" OFF)
+if(WIDGETTOOLBAR_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests/panelavoidwatcher)
+endif()

@@ -184,10 +184,13 @@ Item {
                 suppressClick = false
         }
         onCanceled: function(mouse) {
+            // 抓取被撤销时不一定带事件（如避让中途隐藏面板致 grab cancel）：
+            // 无事件时以 (-1,-1) 转发，只复位按下/悬停态，不读坐标。
             var canceledWidget = widgetLoader.item
             if (canceledWidget
                 && typeof canceledWidget.handleHostReleased === "function")
-                canceledWidget.handleHostReleased(mouse.x, mouse.y)
+                canceledWidget.handleHostReleased(mouse ? mouse.x : -1,
+                                                   mouse ? mouse.y : -1)
             suppressClick = false
             if (root.panelDragging)
                 root.dragEndRequested(root)

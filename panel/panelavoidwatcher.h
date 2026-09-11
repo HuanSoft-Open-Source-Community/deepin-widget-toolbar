@@ -43,9 +43,10 @@ Q_DECLARE_LOGGING_CATEGORY(panelAvoidLog)
 // 身份命中后还要过几何叠合判定：目标窗 root 绝对矩形与本面板 root 绝对矩形
 // 相交（含 kAvoidPad 边距）才算冲突、才置 avoided；展开在侧栏之外的小卡/快捷
 // 面板位置不冲突，无需避让。
-// 失败方向刻意不对称：**本面板矩形不可知时判为"不冲突"（fail-open）**——误避会
-// 让面板永久消失，误显只是短暂重叠且下一轮对账即纠正；而目标窗几何不可知时按
-// "冲突"处理（fail-closed），因为它会被下一轮对账/事件重新读到，不会停在未知态。
+// 失败方向刻意不对称：**本面板矩形不可知时判为"不冲突"（fail-open），但仅对
+// 尚未避让的条目成立**——误避会让面板永久消失；而已避让者遇面板矩形暂不可知
+// 时**保持现状**（隐藏期读不到自身窗口是常态，未知不构成"无冲突"的证据）。
+// 目标窗几何不可知时按"冲突"处理（fail-closed），它会被下一轮对账/事件重新读到。
 // DPI 折算用本面板所在屏的 devicePixelRatio（QWindow 几何为 DIP，X11 为像素）：
 // 单屏或各屏同缩放时精确，混合 DPR 多屏存在原点误差（此时最坏退化为误判叠合，
 // 由目标窗 ConfigureNotify 与本面板位置/尺寸变化事件重估自我收敛）。
@@ -53,9 +54,37 @@ Q_DECLARE_LOGGING_CATEGORY(panelAvoidLog)
 // 事件投递与自愈（重要）：本类用自己的 xcb 连接，只在 QSocketNotifier(fd 可读)
 // 触发时排水；而同步往返（fetchIdentity/reconcile 里的 *_reply）会把期间到达的
 // 事件读进 xcb 内部队列并掏空 fd —— 此时通知器不会触发，事件会被"憋住"。因此：
-//   1) 每批同步读之后都显式 drainEvents()（见 .cpp 注释中的实测复现）；
-//   2) recheck() 会按窗口树真值重建全部状态（见不到的条目一律清掉），并由
+//   1) 同步读批次结束后统一 drainEvents()（fetchIdentity 内部不排水，以免在
+//      调用方持有 WinInfo& 时经事件处理改容器——悬垂引用即误翻状态之源）；
+//   2) recheck() 按窗口树真值重建状态；**"扫不到"与"窗口消失"绝不划等号**：
+//      避让中的条目无论是否被扫描见到，都按自身窗口 id 直接活性核查（get_window_
+//      attributes）——已销毁（无属性可答）或不可见（UNMAPPED/UNVIEWABLE，宿主被
+//      收起时子窗即报 UNVIEWABLE）才权威释放；仍 VIEWABLE 即视为见到、避让保持。
+//      实测（探针 2026-09-11）：dde 展开卡片是 root 直接子窗，且弹出面会以
+//      destroy→create 换 id 的方式轮换重建（journal 中同秒 OFF→ON 重武装即其
+//      形状）；无论卡片窗因何从某一轮扫描中缺席，都不能反推它"已消失"——
+//      旧实现"未见两轮即删"把"扫不到"当成了"离场证据"，正是"避让几秒后自动
+//      失效"振荡的通道；活性直查把释放判据与扫描可见性彻底解耦。
 //      avoided 期间的 2s 定时器兜底，使"漏一条事件 = 面板永久隐藏"在结构上不可能。
+//
+// 对账成本控制（扩深度到 4 的前提）：逐层**批量** query_tree→attributes→
+// WM_NAME/WM_CLASS 预筛（每窗 2 次属性往返），身份命中或本就建档者才补全量
+// fetchIdentity（几何/位置）；窗数预算超限即停并告警。逐窗同步往返实测全树
+// 10 秒量级，2 秒对账周期下不可接受。
+//
+// 释放防抖（对"避让几秒后自动失效"振荡回归的修复）：
+//   * 进入避让（counted false→true）永远即时；
+//   * 退出避让分两类：窗口的**权威离场**（该 id 的 Unmap/Destroy 事件、活性直查
+//     判不可见/已销毁）即时释放；"身份/尺寸/几何/叠合判定翻否"这类可被一次瞬态
+//     误读触发的解除，须连续两次独立观测（事件记 1/2 + 复核轮确认）才真正
+//     uncount——单轮误读（如隐藏期面板矩形暂不可知、WM_NAME 一次空读、尺寸动画
+//     中间帧低于阈值）不再能撤回避让；
+//   * 面板矩形不可知时保持现状：fail-open 只挡"新避让"的建立，不撤"已避让"
+//     （未知≠无冲突；面板隐藏期本就读不到自身窗口，未知是常态而非证据）；
+//   * 身份读失败（空名）保留上一次成功读取的非空值（sticky identity）：
+//     合法窗口的 WM_NAME 不会自己变成空，空只可能是瞬态读失败。
+// 上述决策路径（ON/OFF/活性释放/滞留清理/快确认计数）以 qWarning 级输出：dde-shell
+// 运行环境默认以 QT_LOGGING_RULES 关闭 info 级，qCInfo 的决策日志在线上不可见。
 class PanelAvoidWatcher : public QObject
 {
     Q_OBJECT
@@ -98,6 +127,9 @@ private:
         bool hasPos = false;
         bool mapped = false;
         bool counted = false;
+        // 释放防抖：非权威"解除冲突"的连续确认计数（见类注释）。0=无待确认；
+        // 首次误读到 1，第二次仍解除才真正 uncount；任一帧恢复冲突即清零。
+        int releasePending = 0;
     };
 
     void onEvents();
@@ -111,6 +143,9 @@ private:
     // 对该窗自身订阅 StructureNotify+PropertyChange：被 WM reparent 进
     // 装饰框后，root 不再收到其 Map/Unmap，唯有直接订阅才能继续跟踪
     void selectEvents(xcb_window_t win);
+    // 身份命中（只看 WM_NAME / WM_CLASS，不看尺寸阈值）——对账预筛用：
+    // 未读几何时 isTarget 的尺寸门槛恒假，不能用它做预筛判据。
+    bool identityTarget(const WinInfo &info) const;
     bool isTarget(const WinInfo &info) const;
     // 本面板 root 绝对矩形（像素）：不可知时返回空 QRect
     QRect panelRect() const;
@@ -118,14 +153,27 @@ private:
     bool conflictsWithPanel(const WinInfo &info) const;
     // 重估全部在册窗口（面板矩形变化时用）
     void reevaluateAll();
-    // 依 mapped + 目标判定 + 叠合判定翻转 counted，并刷新聚合状态
-    void evaluate(xcb_window_t win);
+    // 依 mapped + 目标判定 + 叠合判定翻转 counted，并刷新聚合状态。
+    // authoritative=true（Unmap/Destroy、用户显式显示对账）即时释放；否则
+    // 释放走双确认：confirmPass=true 只在"独立复核轮次"（reconcile/快确认）
+    // 传入，事件驱动的评估恒 false——一次逻辑变更可能连着发多条 X 事件，
+    // 若每条都计一次确认，双确认会退化，正是"避让几秒后自动失效"的来源。
+    void evaluate(xcb_window_t win, bool authoritative = false,
+                  bool confirmPass = false);
     void refreshAvoided();
     void setAvoided(bool avoided);
-    // 启动/兜底对账：按窗口树真值重建状态——递归遍历 root 子树（含 WM 装饰框
-    // 下一层）重新建档，并清掉本轮没见到的条目（漏事件的滞留即在此清除）
-    void reconcile();
-    void reconcileWindow(xcb_window_t win, int depth);
+    // 启动/兜底对账：逐层批处理遍历窗口树（reconcileWalk）重建"见到"集合，
+    // 再对"避让中但未见"的条目做活性直查（R6），清掉已销毁/不可见者、把仍可见者
+    // 记为见到；最后统一复核评估。userRequested=true（用户按"显示"按钮触发的
+    // recheck）时按权威路径评估：面板矩形暂不可知的避让条目也即刻释放，保证
+    // 按钮总能召回面板。
+    void reconcile(bool userRequested = false);
+    // 逐层批量遍历 root 子树（深度 ≤kMaxScanDepth、窗数 ≤kWalkWindowBudget）：
+    // 本层 query_tree → 下层 attributes → 命中身份/已建档者补 WM_NAME/WM_CLASS，
+    // 全程只按层同步等待，不再逐窗往返。见到的窗补入 m_seen 并 selectEvents。
+    void reconcileWalk();
+    // 双确认释放：为待确认窗口安排一次快确认评估（首个挂定时器，重复调用幂等）
+    void armReleaseConfirm();
 
     xcb_connection_t *m_conn = nullptr;
     xcb_window_t m_root = 0;
@@ -135,6 +183,8 @@ private:
     QSet<xcb_window_t> m_seen;
     // avoided 期间的定期对账定时器：漏事件时最多滞留一个周期即自愈
     QTimer m_recheckTimer;
+    // 双确认释放的快确认通道（单发 500ms，首个解除候选时挂起）
+    QTimer m_releaseConfirmTimer;
     // 侧栏自身窗口与其最近一次有效矩形（root 像素）：窗口未映射/未 exposed
     // 期间（含正在避让时）用缓存值判定叠合，故缓存由 const 访问器惰性写入
     QPointer<QWindow> m_panel;
