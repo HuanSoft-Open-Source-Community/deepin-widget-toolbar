@@ -10,6 +10,9 @@
 
 #include <QPointer>
 
+// Forward declare DebugLogger from header-only integration
+class DebugLogger;
+
 DS_USE_NAMESPACE
 using Dtk::Core::DConfig;
 
@@ -42,6 +45,8 @@ class WidgetToolbarPanel : public DPanel
     // 照旧避让）。与 multitaskAvoided 独立并列（任一为真即隐藏），仅 X11 平台
     // 生效，不持久化、不改变 visible/托盘高亮。由 PanelAvoidWatcher 驱动。
     Q_PROPERTY(bool panelAvoided READ panelAvoided NOTIFY panelAvoidedChanged FINAL)
+    // 调试模式开关：全局启用/禁用面板的调试日志系统。默认关闭，仅在故障排查时开启
+    Q_PROPERTY(bool debugMode READ debugMode WRITE setDebugMode NOTIFY debugModeChanged FINAL)
     // 小组件宿主接口：QML 通过 Panel.widgetManager / Panel.widgetListModel 访问
     Q_PROPERTY(WidgetManager *widgetManager READ widgetManager CONSTANT)
     Q_PROPERTY(WidgetListModel *widgetListModel READ widgetListModel CONSTANT)
@@ -62,6 +67,8 @@ public:
     void setShowCardNames(bool showCardNames);
     bool multitaskAvoided() const;
     bool panelAvoided() const;
+    bool debugMode() const;
+    void setDebugMode(bool debugMode);
 
     WidgetManager *widgetManager() const;
     WidgetListModel *widgetListModel() const;
@@ -88,6 +95,7 @@ Q_SIGNALS:
     void showCardNamesChanged(bool showCardNames);
     void multitaskAvoidedChanged(bool multitaskAvoided);
     void panelAvoidedChanged(bool panelAvoided);
+    void debugModeChanged(bool debugMode);
     // 菜单动作信号（D-Bus ExportAllSignals 导出，QML Connections 监听）
     void settingsRequested();
     void aboutRequested();
@@ -118,6 +126,7 @@ private:
     // 卡片名称显示：默认开启（功能本身即"显示名称"，默认关会让人以为不存在）
     bool m_showCardNames = true;
     bool m_multitaskAvoided = false;
+    bool m_debugMode = false;                      // Debug logging switch (DConfig managed)
 
     WidgetManager *m_widgetManager = nullptr;
     WidgetListModel *m_widgetListModel = nullptr;

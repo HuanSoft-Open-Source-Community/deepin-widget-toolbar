@@ -4,6 +4,8 @@
 
 #include "panelavoidwatcher.h"
 
+#include "debuglogger.h"
+
 #include <dlayershellwindow.h>
 #include <dsglobal.h>
 
@@ -142,6 +144,12 @@ void PanelAvoidWatcher::start()
     // 仅 X11 有跨客户窗口的 SubstructureNotify 事件流
     if (QGuiApplication::platformName() != QLatin1String("xcb")) {
         qCInfo(panelAvoidLog) << "non-xcb platform, panel avoidance disabled";
+        // 正常降级而非故障：Wayland 下 panelAvoided 恒 false，排查"面板被挡"时
+        // 需要这条来确认避让功能本就没参与
+        DebugLogger::instance()->log(
+            DebugLogger::Level::Info, QStringLiteral("panelavoidwatcher"),
+            QStringLiteral("avoidance disabled: platform=%1 (xcb only)").arg(
+                QGuiApplication::platformName()));
         return;
     }
 
@@ -149,6 +157,9 @@ void PanelAvoidWatcher::start()
     m_conn = xcb_connect(nullptr, &screenNum);
     if (!m_conn || xcb_connection_has_error(m_conn)) {
         qWarning() << "PanelAvoidWatcher: xcb_connect failed";
+        DebugLogger::instance()->log(
+            DebugLogger::Level::Error, QStringLiteral("panelavoidwatcher"),
+            QStringLiteral("xcb_connect failed: avoidance permanently off this run"));
         if (m_conn) {
             xcb_disconnect(m_conn);
             m_conn = nullptr;
@@ -177,6 +188,12 @@ void PanelAvoidWatcher::start()
 
     qCInfo(panelAvoidLog) << "panel avoidance watcher started, root"
                           << m_root;
+    // 一次插件生命周期仅一条：作为日志文件的起点锚，之后所有判定才有参照
+    DebugLogger::instance()->log(
+        DebugLogger::Level::Info, QStringLiteral("panelavoidwatcher"),
+        QStringLiteral("watcher started: root=0x%1, initial avoided=%2")
+            .arg(m_root, 0, 16)
+            .arg(m_avoided));
 }
 
 // 绑定侧栏自身窗口。窗口 hide/show 重建后宿主会再次调用，故先断开上一窗口
@@ -687,6 +704,34 @@ void PanelAvoidWatcher::refreshAvoided()
     // info 级决策日志线上不可见（避让振荡排查正是被这个盲区拖慢的）。
     if (!culprit && m_avoided)
         qWarning().noquote() << "panelavoid: OFF (no conflicting window)";
+    // 只在跃变时落文件日志：本函数由每条结构事件与 2 s 兜底对账驱动，避让常驻
+    // 时属高频点，无条件记录会以每 2 s 数行的速度刷满配额。此刻 m_avoided 仍是
+    // 变更前旧值，故与 next 不等即为真实跃变；panelRect() 有 X 往返，也只在此
+    // 低频分支里调用。
+    const bool nextAvoided = culprit != nullptr;
+    if (nextAvoided != m_avoided) {
+        int counted = 0;
+        for (const WinInfo &info : std::as_const(m_windows)) {
+            if (info.counted)
+                ++counted;
+        }
+        const QRect rect = panelRect();
+        const QString rectText = rect.isValid()
+            ? QStringLiteral("%1,%2 %3x%4")
+                  .arg(rect.x()).arg(rect.y()).arg(rect.width()).arg(rect.height())
+            : QStringLiteral("(unknown)");
+        DebugLogger::instance()->log(
+            DebugLogger::Level::Info, QStringLiteral("panelavoidwatcher"),
+            nextAvoided
+                ? QStringLiteral("AVOID ON: culprit=%1 counted=%2/%3 panel=%4")
+                      .arg(culprit->name.isEmpty() ? QStringLiteral("(unnamed)") : culprit->name)
+                      .arg(counted)
+                      .arg(m_windows.size())
+                      .arg(rectText)
+                : QStringLiteral("AVOID OFF: counted=0/%1 panel=%2")
+                      .arg(m_windows.size())
+                      .arg(rectText));
+    }
     setAvoided(culprit != nullptr);
 }
 
@@ -742,6 +787,10 @@ void PanelAvoidWatcher::reconcile(bool userRequested)
         if (!attr && xcb_connection_has_error(m_conn)) {
             qWarning().noquote() << "panelavoid: connection error during liveness probe"
                                  << "— reconcile aborts, avoidance unchanged";
+            DebugLogger::instance()->log(
+                DebugLogger::Level::Error, QStringLiteral("panelavoidwatcher"),
+                QStringLiteral("connection error during liveness probe: reconcile aborted, "
+                               "avoidance left unchanged"));
             return; // 连接坏了不能拿"读不到"当"窗口没了"
         }
         const bool viewable = attr && attr->map_state == XCB_MAP_STATE_VIEWABLE;
@@ -755,6 +804,13 @@ void PanelAvoidWatcher::reconcile(bool userRequested)
                              << "win=" << it.key()
                              << "(window gone or no longer viewable)"
                              << "panel=" << panelRect();
+        // 权威释放：这是避让真正解除的三条通道之一，且只在窗口确实销毁/不可见
+        // 时发生（非每轮对账），低频且信息量高，值得单独留一条
+        DebugLogger::instance()->log(
+            DebugLogger::Level::Info, QStringLiteral("panelavoidwatcher"),
+            QStringLiteral("released on liveness probe: %1 win=0x%2 (gone or not viewable)")
+                .arg(it->name.isEmpty() ? QStringLiteral("(unnamed)") : it->name)
+                .arg(it.key(), 0, 16));
         it->counted = false;
         it->mapped = false;
         it->releasePending = 0;

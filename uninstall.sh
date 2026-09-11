@@ -15,21 +15,21 @@ TRAY_PLUGIN="libwidget-toolbar.so"
 # DConfig 应用 Id 与配置项，与面板代码里 DConfig::create("org.deepin.dde.shell", PLUGIN_ID)
 # 一致。只 reset 本插件这几个键，绝不触碰 dde-shell 的其它配置（如 dock）。
 DCONFIG_APPID="org.deepin.dde.shell"
-DCONFIG_KEYS=(visible pinned cardTransparent showCardNames)
+DCONFIG_KEYS=(visible pinned cardTransparent showCardNames debugMode)
 
 if [ "$(id -u)" = "0" ]; then
     echo "错误：请以普通用户运行 ./uninstall.sh（脚本内部会自动请求 sudo 密码，勿加 sudo）" >&2
     exit 1
 fi
 
-# 面板设置的清理：面板的显隐/置顶/卡片透明/卡片名称都是 DConfig 配置项，用户改动会形成
+# 面板设置的清理：面板的显隐/置顶/卡片透明/卡片名称/调试日志都是 DConfig 配置项，用户改动会形成
 # "用户覆盖"并由 dde-dconfig 守护进程按 uid 持久化（存放于 /var/lib/dde-dconfig-daemon，
 # root 私有，删 ~/.config 下的文件清不掉），所以重装会沿用上次的选择——例如卡片透明模式
 # 仍是开启，看起来像"缺省值不对"。只能经官方 CLI reset 回到配置描述文件里声明的默认值，
 # 而 reset 要求该描述文件仍在，故这一步必须先于 [1/4] 的删除动作。
 purge_settings=""
 if [ -t 0 ]; then
-    read -r -p "是否清除本插件的面板设置（显隐/置顶/卡片透明/卡片名称）？[y/N] " ans
+    read -r -p "是否清除本插件的面板设置（显隐/置顶/卡片透明/卡片名称/调试日志）？[y/N] " ans
     case "${ans}" in y|Y|yes|YES) purge_settings=1 ;; esac
 fi
 if [ -n "${purge_settings}" ]; then

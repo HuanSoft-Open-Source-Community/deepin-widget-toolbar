@@ -21,8 +21,8 @@ PanelPopup {
     windowTitle: "dde-shell/widgettoolbar-settings"
 
     width: 320
-    // 四行设置：12 上下边距 + 标题行 + 4×(行高≈30 + 间距 12)，留少量余量
-    height: 244
+    // 五行设置（含调试模式）：12 上下边距 + 标题行 + 5×(行高≈30 + 间距 12)，留少量余量
+    height: 274
 
     // 右上角圆形叉号关闭按钮
     Rectangle {
@@ -126,6 +126,29 @@ PanelPopup {
                     // 开启时卡片等比缩小让出下方名称条（长宽比不变），网格几何不变
                     checked: Panel.showCardNames
                     onToggled: Panel.showCardNames = checked
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("Enable debug mode")
+                    font: DTK.fontManager.t6
+                    color: palette.windowText
+                }
+
+                Switch {
+                    Layout.preferredHeight: Math.max(
+                        implicitHeight,
+                        (indicator ? indicator.implicitHeight : 0) + 6)
+                    // 调试模式：全局启用/禁用面板的调试日志，缺省关闭。只有开启时
+                    // 才写盘，日志落 ~/.cache/logs/deepin-widget-toolbar/，文件名带
+                    // 时间戳、单文件满 2500 行自动另起一个（见 panel/debuglogger.cpp）
+                    checked: Panel.debugMode
+                    onToggled: Panel.debugMode = checked
                 }
             }
         }

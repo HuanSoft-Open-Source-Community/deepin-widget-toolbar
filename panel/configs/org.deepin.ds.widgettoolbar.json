@@ -45,6 +45,17 @@
             "description[zh_CN]": "在每张卡片下方显示小组件名称；仅全局生效，不提供单卡片粒度；开启时单元格由正方形变为略高的长方形（格高 = 格宽 + 名称条高 − 4），卡片宽度与关闭时完全一致，只有单行卡片高度少 4 像素",
             "permissions": "readwrite",
             "visibility": "private"
+        },
+        "debugMode": {
+            "value": false,
+            "serial": 0,
+            "flags": [],
+            "name": "Enable debug logging",
+            "name[zh_CN]": "启用调试日志",
+            "description": "When enabled, the panel writes detailed debug logs to disk for troubleshooting. Default: off",
+            "description[zh_CN]": "启用后，面板会向磁盘写入详细的调试日志。默认关闭",
+            "permissions": "readwrite",
+            "visibility": "private"
         }
     }
 }

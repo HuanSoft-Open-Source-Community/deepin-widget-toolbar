@@ -9,6 +9,8 @@ find_package(Dtk6DConfig REQUIRED)
 find_package(Qt6 COMPONENTS LinguistTools Qml DBus Concurrent REQUIRED)
 
 add_library(ds-widget-toolbar SHARED
+    debuglogger.cpp
+    debuglogger.h
     widgettoolbarpanel.cpp
     widgettoolbarpanel.h
     widgetmanager.cpp
@@ -75,6 +77,10 @@ add_library(ds-widget-toolbar SHARED
 # xcb：WindowGuard 在 X11 下直接以 xcb_change_property 恢复窗口类型
 # （_NET_WM_WINDOW_TYPE），防止 kwin 把面板当普通窗口垂直最大化
 find_package(XCB REQUIRED)
+# 调试日志（debuglogger.cpp）刻意只用 Qt 自带的 QFile/QTextStream，不链 Dtk6::Log：
+# DTK6 的 RollingFileAppender 只按时间频率或字节大小轮转，给不出"单文件 2500 行"
+# 这个硬要求；且 Logger::globalInstance() 是进程级单例，本面板跑在 dde-shell 进程内，
+# appender 注册/注销稍有疏漏就会悬垂并拖崩整个 shell。
 target_link_libraries(ds-widget-toolbar PRIVATE Dde::Shell Qt6::Qml Qt6::DBus Qt6::Concurrent m XCB::XCB)
 
 # PipeWire 后端的 SPA POD 使用官方 inline builder（仅需头文件，无链接依赖）；

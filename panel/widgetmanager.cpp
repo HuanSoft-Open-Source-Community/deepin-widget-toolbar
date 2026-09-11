@@ -4,6 +4,7 @@
 
 #include "widgetmanager.h"
 
+#include "debuglogger.h"
 #include "widgetgrid.h"
 #include "widgetpackage.h"
 #include "widgetschema.h"
@@ -55,6 +56,8 @@ WidgetManager::WidgetManager(QObject *parent)
 
 void WidgetManager::init()
 {
+    DebugLogger::instance()->log(DebugLogger::Level::Trace, QStringLiteral("widgetmanager"), "init() called");
+
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     m_dataDir = base + "/org.deepin.ds.widgettoolbar";
     m_widgetsDir = m_dataDir + "/" + kWidgetsDirName;
@@ -66,6 +69,10 @@ void WidgetManager::init()
     loadInstances();
     // 一次性规范化旧数据：越界/重叠位置修复，不做持续补位
     normalizeLayout();
+
+    DebugLogger::instance()->log(DebugLogger::Level::Debug, QStringLiteral("widgetmanager"), QString("初始化完成：%1 个内置组件，%2 个已安装实例")
+                 .arg(m_widgets.size())
+                 .arg(m_instances.count()));
 }
 
 QList<WidgetManager::WidgetInfo> WidgetManager::availableWidgets() const
@@ -450,11 +457,15 @@ QStringList WidgetManager::usedZones(const QString &excludingInstanceId) const
 
 bool WidgetManager::addWidget(const QString &widgetId)
 {
+    DebugLogger::instance()->log(DebugLogger::Level::Debug, QStringLiteral("widgetmanager"), QString("addWidget(%1)").arg(widgetId));
+
     if (findWidget(widgetId) == nullptr) {
+        DEBUG_WARNING(widgetmanager,  QString("unknown widget: %1").arg(widgetId));
         qWarning() << "addWidget: unknown widget" << widgetId;
         return false;
     }
     if (isInstalled(widgetId)) {
+        DEBUG_WARNING(widgetmanager,  QString("already installed: %1").arg(widgetId));
         qWarning() << "addWidget: already installed" << widgetId;
         return false;
     }
@@ -471,11 +482,14 @@ bool WidgetManager::addWidget(const QString &widgetId)
     m_instances.append(inst);
     if (!saveInstances()) {
         m_instances.removeLast();
+        DEBUG_WARNING(widgetmanager,  "failed to save instances after add");
         return false;
     }
 
     // 预创建实例数据目录（FileIO 沙箱内）
     QDir().mkpath(widgetDataDir(widgetId));
+
+    DebugLogger::instance()->log(DebugLogger::Level::Info, QStringLiteral("widgetmanager"), QString("added instance: %1 -> %2").arg(widgetId).arg(inst.instanceId));
 
     Q_EMIT instancesChanged();
     return true;
@@ -483,6 +497,8 @@ bool WidgetManager::addWidget(const QString &widgetId)
 
 bool WidgetManager::removeInstance(const QString &instanceId)
 {
+    DebugLogger::instance()->log(DebugLogger::Level::Debug, QStringLiteral("widgetmanager"), QString("removeInstance(%1)").arg(instanceId));
+
     for (int i = 0; i < m_instances.size(); ++i) {
         if (m_instances.at(i).instanceId == instanceId) {
             const Instance removed = m_instances.at(i);
@@ -490,13 +506,16 @@ bool WidgetManager::removeInstance(const QString &instanceId)
             if (!saveInstances()) {
                 // 保存失败：回滚内存状态
                 m_instances.insert(i, removed);
+                DEBUG_WARNING(widgetmanager,  "failed to save after removal, rolled back");
                 qWarning() << "removeInstance: failed to save, rolled back";
                 return false;
             }
+            DebugLogger::instance()->log(DebugLogger::Level::Info, QStringLiteral("widgetmanager"), QString("removed instance: %1").arg(removed.instanceId));
             Q_EMIT instancesChanged();
             return true;
         }
     }
+    DEBUG_WARNING(widgetmanager,  QString("unknown instance: %1").arg(instanceId));
     qWarning() << "removeInstance: unknown instance" << instanceId;
     return false;
 }
@@ -571,7 +590,11 @@ QString WidgetManager::widgetDir(const QString &widgetId) const
 
 void WidgetManager::scanWidgets()
 {
+    DebugLogger::instance()->log(DebugLogger::Level::Debug, QStringLiteral("widgetmanager"), "scanWidgets() started");
+
     m_widgets.clear();
+    int builtinCount = 0;
+    int thirdPartyCount = 0;
 
     // 内置：qrc:/widgets/<id>/
     const QDir builtinRoot{QLatin1String(kBuiltinPrefix)};
@@ -579,8 +602,10 @@ void WidgetManager::scanWidgets()
         const QStringList builtinIds = builtinRoot.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
         for (const QString &id : builtinIds) {
             const WidgetInfo info = readManifest(QLatin1String(kBuiltinPrefix) + "/" + id, true);
-            if (info.isValid())
+            if (info.isValid()) {
                 m_widgets.append(info);
+                builtinCount++;
+            }
         }
     }
 
@@ -590,8 +615,10 @@ void WidgetManager::scanWidgets()
         const QStringList thirdIds = thirdRoot.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
         for (const QString &id : thirdIds) {
             const WidgetInfo info = readManifest(m_widgetsDir + "/" + id, false);
-            if (info.isValid())
+            if (info.isValid()) {
                 m_widgets.append(info);
+                thirdPartyCount++;
+            }
         }
     }
 
@@ -600,6 +627,8 @@ void WidgetManager::scanWidgets()
             return a.builtin;   // 内置在前
         return a.name < b.name;
     });
+
+    DebugLogger::instance()->log(DebugLogger::Level::Info, QStringLiteral("widgetmanager"), QString("scanWidgets() complete: %1 个内置，%2 个第三方").arg(builtinCount).arg(thirdPartyCount));
 }
 
 WidgetManager::WidgetInfo WidgetManager::readManifest(const QString &dir, bool builtin) const

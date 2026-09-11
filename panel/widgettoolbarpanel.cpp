@@ -4,6 +4,7 @@
 
 #include "widgettoolbarpanel.h"
 
+#include "debuglogger.h"
 #include "panelavoidwatcher.h"
 #include "windowguard.h"
 
@@ -108,6 +109,35 @@ bool WidgetToolbarPanel::init()
         qWarning() << "DConfig invalid, use defaults (visible=true, pinned=true,"
                       " cardTransparent=false, showCardNames=true)";
     }
+
+    // 调试模式：缺省关闭，只有开启时 DebugLogger 才向磁盘写日志（见 debuglogger.cpp）。
+    // 与上面同一份 m_config 取值，故放在其之后、D-Bus 注册之前，不打乱原有语句次序。
+    m_debugMode = m_config && m_config->isValid()
+                      ? m_config->value("debugMode", false).toBool()
+                      : false;
+    DebugLogger::instance()->setEnabled(m_debugMode);
+    if (m_config) {
+        // 开关经 QML/外部工具改动后即时生效，无需重启面板
+        connect(m_config, &DConfig::valueChanged, this, [this](const QString &key) {
+            if (key != QLatin1String("debugMode"))
+                return;
+            const bool enabled = m_config->value(key, false).toBool();
+            if (m_debugMode == enabled)
+                return;
+            m_debugMode = enabled;
+            DebugLogger::instance()->setEnabled(m_debugMode);
+            Q_EMIT debugModeChanged(m_debugMode);
+            DEBUG_LOG(panel, QString("debug mode switched %1")
+                                 .arg(m_debugMode ? "on" : "off"));
+        });
+    }
+    DEBUG_LOG(panel, QString("panel init: debugMode=%1, visible=%2, pinned=%3, "
+                             "cardTransparent=%4, showCardNames=%5")
+                         .arg(m_debugMode)
+                         .arg(m_visible)
+                         .arg(m_pinned)
+                         .arg(m_cardTransparent)
+                         .arg(m_showCardNames));
 
     // 注册 D-Bus 服务，供托盘触发按钮控制显隐
     QDBusConnection bus = QDBusConnection::sessionBus();
@@ -226,9 +256,19 @@ void WidgetToolbarPanel::setVisible(bool visible)
     }
     // 用户要求显示面板时，先按窗口树真值对账一次：避让状态若因漏事件而滞留，
     // 面板会一直不显示且用户无法自救；此刻立即纠正，保证显示按钮永远有效。
-    if (visible && m_panelAvoidWatcher) {
+    const bool rechecked = visible && m_panelAvoidWatcher;
+    if (rechecked) {
         m_panelAvoidWatcher->recheck();
     }
+    // 显隐是排查"面板不见了"的第一现场：记下用户意图、是否已对账、以及此刻
+    // 两个避让量的实际值——三者合起来才能判定窗口为何最终没露出来。
+    DEBUG_LOG(panel, QStringLiteral("visible -> %1 (recheck=%2, multitaskAvoided=%3, "
+                                    "panelAvoided=%4, watcher=%5)")
+                         .arg(visible)
+                         .arg(rechecked)
+                         .arg(m_multitaskAvoided)
+                         .arg(panelAvoided())
+                         .arg(m_panelAvoidWatcher ? "alive" : "null"));
     Q_EMIT visibleChanged(visible);
 }
 
@@ -248,6 +288,10 @@ void WidgetToolbarPanel::setPinned(bool pinned)
     }
     if (m_windowGuard)
         m_windowGuard->setPinned(pinned);
+    // 置顶改变窗口类型（Notification/Dock），会连带影响 kwin 与避让判定，值得留痕
+    DEBUG_LOG(panel, QStringLiteral("pinned -> %1 (windowGuard=%2)")
+                         .arg(pinned)
+                         .arg(m_windowGuard ? "alive" : "null"));
     Q_EMIT pinnedChanged(pinned);
 }
 
@@ -268,6 +312,8 @@ void WidgetToolbarPanel::setMultitaskAvoided(bool avoided)
     m_multitaskAvoided = avoided;
     // 刻意不触碰 m_visible/DConfig/托盘高亮：避让是临时视觉态，
     // 用户显隐语义（含重启恢复）保持不变，退出 MMV 后自动回来
+    // 跃变日志：面板"自己不见了"的另一大来源，且此路径不经 setVisible，无它即无痕迹
+    DEBUG_LOG(panel, QStringLiteral("multitaskAvoided -> %1 (kwin MultitaskStateChanged)").arg(avoided));
     Q_EMIT multitaskAvoidedChanged(avoided);
 }
 
@@ -285,6 +331,7 @@ void WidgetToolbarPanel::setCardTransparent(bool cardTransparent)
     if (m_config && m_config->isValid()) {
         m_config->setValue("cardTransparent", cardTransparent);
     }
+    DEBUG_LOG(panel, QStringLiteral("cardTransparent -> %1").arg(cardTransparent));
     Q_EMIT cardTransparentChanged(cardTransparent);
 }
 
@@ -305,6 +352,7 @@ void WidgetToolbarPanel::setShowCardNames(bool showCardNames)
     if (m_config && m_config->isValid()) {
         m_config->setValue("showCardNames", showCardNames);
     }
+    DEBUG_LOG(panel, QStringLiteral("showCardNames -> %1").arg(showCardNames));
     Q_EMIT showCardNamesChanged(showCardNames);
 }
 
@@ -313,6 +361,7 @@ void WidgetToolbarPanel::toggle()
     // 先对账再翻转：托盘按钮是用户唯一的显隐入口，若面板此刻正被滞留的避让态
     // 隐藏（visible 已是 true，表达式 visible && !panelAvoided 恒假），这一次
     // 点击就应把面板叫回来，而不是被翻成"隐藏"再点第二次。
+    DEBUG_LOG(panel, QStringLiteral("toggle() from tray/D-Bus (current visible=%1)").arg(m_visible));
     if (m_panelAvoidWatcher) {
         m_panelAvoidWatcher->recheck();
     }
@@ -331,24 +380,51 @@ void WidgetToolbarPanel::hide()
 
 void WidgetToolbarPanel::openSettings()
 {
+    DEBUG_LOG(panel, "openSettings() via D-Bus");
     Q_EMIT settingsRequested();
 }
 
 void WidgetToolbarPanel::showAbout()
 {
+    DEBUG_LOG(panel, "showAbout() via D-Bus");
     Q_EMIT aboutRequested();
 }
 
 void WidgetToolbarPanel::openAddWidget()
 {
+    DEBUG_LOG(panel, "openAddWidget() via D-Bus");
     Q_EMIT addWidgetRequested();
 }
 
 void WidgetToolbarPanel::autoArrange()
 {
+    DEBUG_LOG(panel, QStringLiteral("autoArrange() via D-Bus (manager=%1)")
+                         .arg(m_widgetManager ? "alive" : "null"));
     if (m_widgetManager)
         m_widgetManager->autoArrangeAll();
     Q_EMIT autoArrangeRequested();
+}
+
+bool WidgetToolbarPanel::debugMode() const
+{
+    return m_debugMode;
+}
+
+// 调试模式开关：与其余面板级开关同范式——先持久化、后发信号，QML 侧只读写
+// Panel.debugMode，实际是否落盘由 DebugLogger 内部的 enabled 门决定。
+void WidgetToolbarPanel::setDebugMode(bool debugMode)
+{
+    if (m_debugMode == debugMode) {
+        return;
+    }
+    m_debugMode = debugMode;
+    if (m_config && m_config->isValid()) {
+        m_config->setValue("debugMode", debugMode);
+    }
+    // 先落盘再切 Logger，保证"关闭"这条能写进当前文件、开关状态本身也持久化
+    DebugLogger::instance()->setEnabled(debugMode);
+    DEBUG_LOG(panel, QStringLiteral("debugMode -> %1").arg(debugMode));
+    Q_EMIT debugModeChanged(debugMode);
 }
 
 D_APPLET_CLASS(WidgetToolbarPanel)
