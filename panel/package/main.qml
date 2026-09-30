@@ -463,6 +463,18 @@ Window {
         widgetContextMenu.popup()
     }
 
+    // 组件 manifest 自定义动作回调：按 instanceId 定位网格委托，取其加载的
+    // 组件根对象；根对象未实现 actionTriggered(actionId) 时安全忽略
+    function triggerWidgetAction(instanceId, actionId) {
+        var idx = root.instanceIds.indexOf(instanceId)
+        if (idx < 0)
+            return
+        var host = gridRepeater.itemAt(idx)
+        var widget = host ? host.widgetItem : null
+        if (widget && typeof widget.actionTriggered === "function")
+            widget.actionTriggered(actionId)
+    }
+
     // C++ QVariantList 可能以"类数组对象"到达 QML（Array.isArray 不成立），
     // 回写前统一容错提取（与 applauncher/SettingsRow 同一规则）
     function asAppList(value) {
@@ -790,6 +802,7 @@ Window {
                     height: gridFlickable.contentHeight
 
                     Repeater {
+                        id: gridRepeater
                         model: root.instanceIds
                         delegate: Components.WidgetHostItem {
                             instanceId: modelData
@@ -1005,6 +1018,18 @@ Window {
         }
     }
 
+    // 组件 manifest 声明的自定义动作项（label 已由宿主按 locale 解析）
+    Component {
+        id: actionMenuEntry
+
+        MenuItem {
+            property string instanceId: ""
+            property string actionId: ""
+
+            onTriggered: root.triggerWidgetAction(instanceId, actionId)
+        }
+    }
+
     Component {
         id: menuSeparatorEntry
 
@@ -1064,6 +1089,21 @@ Window {
 
             if (hasSize)
                 widgetContextMenu.addEntry(menuSeparatorEntry, {})
+
+            // 组件 manifest 声明的自定义动作：按声明顺序渲染在尺寸项之后、
+            // 配置/移除之前；未声明时此处不产生任何菜单项
+            var widgetActions = root.asAppList(Panel.widgetManager.widgetActions(
+                widgetContextMenu.currentWidgetId))
+            for (var a = 0; a < widgetActions.length; ++a) {
+                var action = widgetActions[a]
+                if (!action || !action.id || !action.label)
+                    continue
+                widgetContextMenu.addEntry(actionMenuEntry, {
+                    "instanceId": instanceId,
+                    "actionId": String(action.id),
+                    "text": String(action.label)
+                })
+            }
 
             if (Panel.widgetManager.widgetSettingsSchema(
                     widgetContextMenu.currentWidgetId).length > 0) {

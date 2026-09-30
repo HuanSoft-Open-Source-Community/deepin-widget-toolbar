@@ -49,6 +49,9 @@ Item {
     // 坐标映射目标：拖拽 → 网格画布；右键菜单 → 窗口内容区
     property var dragSurface: null
     property var menuSurface: null
+    // 小组件加载的根对象（未加载/加载中为 null）：供主面板右键菜单
+    // 调用组件 manifest 声明的 actionTriggered(actionId) 等宿主接口
+    readonly property alias widgetItem: widgetLoader.item
 
     // ===== 事件信号（坐标为 dragSurface/menuSurface 空间） =====
     signal dragStartRequested(var host, real x, real y)

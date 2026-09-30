@@ -361,6 +361,11 @@ QVariantList WidgetManager::widgetSettingsSchema(const QString &widgetId) const
     return w ? w->settingsSchema : QVariantList();
 }
 
+QVariantList WidgetManager::widgetActions(const QString &widgetId) const
+{
+    return m_widgetActions.value(widgetId);
+}
+
 QString WidgetManager::instanceConfigPath(const QString &instanceId) const
 {
     const Instance *inst = findInstance(instanceId);
@@ -600,6 +605,7 @@ void WidgetManager::scanWidgets()
     DebugLogger::instance()->log(DebugLogger::Level::Debug, QStringLiteral("widgetmanager"), "scanWidgets() started");
 
     m_widgets.clear();
+    m_widgetActions.clear();
     int builtinCount = 0;
     int thirdPartyCount = 0;
 
@@ -653,7 +659,7 @@ void WidgetManager::scanWidgets()
     }
 }
 
-WidgetManager::WidgetInfo WidgetManager::readManifest(const QString &dir, bool builtin) const
+WidgetManager::WidgetInfo WidgetManager::readManifest(const QString &dir, bool builtin)
 {
     WidgetInfo info;
     QFile f(dir + "/" + kManifestFile);
@@ -727,6 +733,29 @@ WidgetManager::WidgetInfo WidgetManager::readManifest(const QString &dir, bool b
         info.supportedSizes.prepend(info.defaultSize);
 
     info.settingsSchema = WidgetSchema::parseSettingsSchema(obj.value("settings").toArray());
+
+    // 声明式右键动作：[{ "id": "...", "label": "...", "label[zh_CN]": "..." }]。
+    // 与 settings 的 label 走同一套本地化辅助（WidgetSchema::localeKey）；
+    // id 或 label 缺失的非法项直接丢弃，未声明时保持空列表。
+    QVariantList actions;
+    const QJsonArray actionEntries = obj.value("actions").toArray();
+    const QString localizedActionLabel = WidgetSchema::localeKey("label");
+    for (const QJsonValue &value : actionEntries) {
+        if (!value.isObject())
+            continue;
+        const QJsonObject actionObj = value.toObject();
+        const QString actionId = actionObj.value("id").toString();
+        QString label = actionObj.value("label").toString();
+        if (actionObj.contains(localizedActionLabel))
+            label = actionObj.value(localizedActionLabel).toString();
+        if (actionId.isEmpty() || label.isEmpty())
+            continue;
+        actions.append(QVariantMap{
+            {QStringLiteral("id"), actionId},
+            {QStringLiteral("label"), label},
+        });
+    }
+    m_widgetActions.insert(info.id, actions);
 
     // 多语言名称：name[zh_CN] 等
     const QString lk = WidgetSchema::localeKey("name");
