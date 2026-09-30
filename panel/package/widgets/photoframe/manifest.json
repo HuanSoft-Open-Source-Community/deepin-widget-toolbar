@@ -1,0 +1,107 @@
+{
+    "id": "photoframe",
+    "name": "Photo Frame",
+    "name[zh_CN]": "相框",
+    "description": "A photo frame widget with Bing daily images and custom sources",
+    "description[zh_CN]": "相框小组件，支持 Bing 每日一图与自定义图片源",
+    "version": "1.0.0",
+    "apiVersion": "1.8",
+    "author": "deepin-widget-toolbar",
+    "icon": "insert-image",
+    "runtime": "qml",
+    "entry": "main.qml",
+    "defaultSize": { "cols": 2, "rows": 2 },
+    "sizes": [
+        { "cols": 2, "rows": 2 },
+        { "cols": 4, "rows": 2 },
+        { "cols": 4, "rows": 4 }
+    ],
+    "actions": [
+        {
+            "id": "refresh",
+            "label": "Refresh",
+            "label[zh_CN]": "刷新"
+        }
+    ],
+    "settings": [
+        {
+            "key": "sourceMode",
+            "type": "enum",
+            "label": "Image source",
+            "label[zh_CN]": "图片来源",
+            "default": "bingDaily",
+            "options": [
+                { "value": "bingDaily", "label": "Bing Daily", "label[zh_CN]": "Bing 每日" },
+                { "value": "bingRandom", "label": "Bing Random", "label[zh_CN]": "Bing 随机" },
+                { "value": "bingHistory", "label": "Bing History", "label[zh_CN]": "Bing 往日" },
+                { "value": "url", "label": "Custom URL", "label[zh_CN]": "自定义网址" },
+                { "value": "local", "label": "Local image", "label[zh_CN]": "本地图片" }
+            ]
+        },
+        {
+            "key": "historyDaysAgo",
+            "type": "integer",
+            "label": "Days ago (1-7)",
+            "label[zh_CN]": "回看天数（1-7）",
+            "default": 1
+        },
+        {
+            "key": "bingBlur",
+            "type": "integer",
+            "label": "Bing blur strength (0-50)",
+            "label[zh_CN]": "Bing 模糊强度（0-50）",
+            "default": 0
+        },
+        {
+            "key": "customUrl",
+            "type": "string",
+            "label": "Image URL (https)",
+            "label[zh_CN]": "图片网址（https）",
+            "default": ""
+        },
+        {
+            "key": "localImage",
+            "type": "image",
+            "label": "Local image",
+            "label[zh_CN]": "本地图片",
+            "default": ""
+        },
+        {
+            "key": "frameStyle",
+            "type": "enum",
+            "label": "Frame style",
+            "label[zh_CN]": "边框样式",
+            "default": "solid",
+            "options": [
+                { "value": "none", "label": "None", "label[zh_CN]": "无边框" },
+                { "value": "solid", "label": "Solid", "label[zh_CN]": "实线" },
+                { "value": "dashed", "label": "Dashed", "label[zh_CN]": "虚线" }
+            ]
+        },
+        {
+            "key": "frameColor",
+            "type": "color",
+            "label": "Frame color",
+            "label[zh_CN]": "边框颜色",
+            "default": "#FFFFFFFF",
+            "options": [
+                { "value": "#FFFFFFFF", "label": "Default", "label[zh_CN]": "默认" }
+            ]
+        },
+        {
+            "key": "frameWidth",
+            "type": "integer",
+            "label": "Frame width",
+            "label[zh_CN]": "边框宽度",
+            "default": 4
+        },
+        {
+            "key": "frameRadius",
+            "type": "integer",
+            "label": "Frame radius",
+            "label[zh_CN]": "边框圆角",
+            "default": 8
+        }
+    ],
+    "builtin": true
+}

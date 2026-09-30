@@ -169,6 +169,14 @@
         <source>Add</source>
         <translation></translation>
     </message>
+    <message>
+        <source>Choose image…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>WidgetSettingsPopup</name>
@@ -179,6 +187,14 @@
     <message>
         <source>This widget has no configurable options</source>
         <translation></translation>
+    </message>
+    <message>
+        <source>Choose an image</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Images</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -346,6 +362,30 @@
     <message>
         <source>No song playing</source>
         <translation>No song playing</translation>
+    </message>
+    <message>
+        <source>Service error</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Network timeout</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Network unavailable</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Invalid response</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Image unavailable</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Choose an image in settings</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>

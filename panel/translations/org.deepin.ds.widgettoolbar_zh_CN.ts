@@ -169,6 +169,14 @@
         <source>Add</source>
         <translation>添加</translation>
     </message>
+    <message>
+        <source>Choose image…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>WidgetSettingsPopup</name>
@@ -179,6 +187,14 @@
     <message>
         <source>This widget has no configurable options</source>
         <translation>该小组件没有可配置选项</translation>
+    </message>
+    <message>
+        <source>Choose an image</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Images</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -346,6 +362,30 @@
     <message>
         <source>No song playing</source>
         <translation>无歌曲</translation>
+    </message>
+    <message>
+        <source>Service error</source>
+        <translation>服务错误</translation>
+    </message>
+    <message>
+        <source>Network timeout</source>
+        <translation>网络超时</translation>
+    </message>
+    <message>
+        <source>Network unavailable</source>
+        <translation>网络不可用</translation>
+    </message>
+    <message>
+        <source>Invalid response</source>
+        <translation>响应无效</translation>
+    </message>
+    <message>
+        <source>Image unavailable</source>
+        <translation>图片不可用</translation>
+    </message>
+    <message>
+        <source>Choose an image in settings</source>
+        <translation>点击设置选择图片</translation>
     </message>
 </context>
 </TS>

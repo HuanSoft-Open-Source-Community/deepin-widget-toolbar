@@ -48,5 +48,7 @@
         <file alias="spectrum/manifest.json">package/widgets/spectrum/manifest.json</file>
         <file alias="applauncher/main.qml">package/widgets/applauncher/main.qml</file>
         <file alias="applauncher/manifest.json">package/widgets/applauncher/manifest.json</file>
+        <file alias="photoframe/main.qml">package/widgets/photoframe/main.qml</file>
+        <file alias="photoframe/manifest.json">package/widgets/photoframe/manifest.json</file>
     </qresource>
 </RCC>
