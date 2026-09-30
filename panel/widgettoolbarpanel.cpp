@@ -385,14 +385,33 @@ void WidgetToolbarPanel::setShowCardNames(bool showCardNames)
 
 void WidgetToolbarPanel::toggle()
 {
-    // 先对账再翻转：托盘按钮是用户唯一的显隐入口，若面板此刻正被滞留的避让态
-    // 隐藏（visible 已是 true，表达式 visible && !panelAvoided 恒假），这一次
-    // 点击就应把面板叫回来，而不是被翻成"隐藏"再点第二次。
-    DEBUG_LOG(panel, QStringLiteral("toggle() from tray/D-Bus (current visible=%1)").arg(m_visible));
+    // 按"面板此刻是否真实显示在屏幕上"翻转，而不能盲翻持久化的 m_visible：
+    // 面板被任一避让态（MMV/外部面板，含漏事件造成的滞留）临时隐藏时 m_visible
+    // 仍为 true（避让设计上刻意不触碰它），盲翻会把这一次点击写成用户"隐藏"意图，
+    // 遮挡解除、避让量归零后绑定因 visible=false 不再显示——面板唤不回来，必须再点
+    // 一次。有效可见态必须在任何 recheck 之前捕获：recheck 会同步改写避让量。
+    const bool panelAvoidedNow = panelAvoided();
+    const bool effectivelyVisible =
+        m_visible && !m_multitaskAvoided && !panelAvoidedNow;
+    DEBUG_LOG(panel, QStringLiteral("toggle() from tray/D-Bus (visible=%1, multitaskAvoided=%2, "
+                                    "panelAvoided=%3, effectivelyVisible=%4)")
+                         .arg(m_visible)
+                         .arg(m_multitaskAvoided)
+                         .arg(panelAvoidedNow)
+                         .arg(effectivelyVisible));
+    if (effectivelyVisible) {
+        setVisible(false);
+        return;
+    }
+    // 有效不可见 → 这一次点击表达"要求显示"。先对账滞留避让：m_visible 已为 true 时
+    // setVisible(true) 会因相等早退、不会触发其内的 recheck，故在此显式调用；
+    // 再 setVisible(true)——m_visible 已为 true 时虽早退，但 recheck 释放避让后绑定
+    // 已自动显示；若为真实遮挡（recheck 不释放），m_visible 保持 true，遮挡关闭后
+    // 面板自动回来。
     if (m_panelAvoidWatcher) {
         m_panelAvoidWatcher->recheck();
     }
-    setVisible(!m_visible);
+    setVisible(true);
 }
 
 void WidgetToolbarPanel::show()
