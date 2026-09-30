@@ -682,6 +682,25 @@ Window {
             bottomMargin: contentPadding
         }
 
+        // 标题栏空白处右键菜单：只接受右键，z:0 让上方 header RowLayout 正常拦截左键
+        // 与 header 是兄弟 Item，独立锚定到同一标题栏区域，避免破坏 gridArea 对 header.bottom 的 anchor
+        MouseArea {
+            id: headerContextArea
+            anchors {
+                top: parent.top
+                left: parent.left
+                right: parent.right
+            }
+            height: 40
+            z: 0
+            acceptedButtons: Qt.RightButton
+            onClicked: function(mouse) {
+                var p = headerContextArea.mapToItem(root.contentItem, mouse.x, mouse.y)
+                root.lastPopupMouseY = p.y
+                contextMenu.popup()
+            }
+        }
+
         // 标题栏：标题 + 右上角置顶按钮（与通知中心标题栏同尺寸规范）
         RowLayout {
             id: header
@@ -691,6 +710,7 @@ Window {
                 right: parent.right
             }
             height: 40
+            z: 1
             spacing: 8
 
             Item {
@@ -872,6 +892,27 @@ Window {
             }
         }
 
+        // ===== 底部按钮行右键菜单：只接受右键，z:0 让下方 Arrange/Add 按钮正常拦截左键 =====
+        Item {
+            id: bottomContextArea
+            anchors {
+                left: parent.left
+                right: parent.right
+                bottom: parent.bottom
+                top: addButton.top
+            }
+            z: 0
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.RightButton
+                onClicked: function(mouse) {
+                    var p = bottomContextArea.mapToItem(root.contentItem, mouse.x, mouse.y)
+                    root.lastPopupMouseY = p.y
+                    contextMenu.popup()
+                }
+            }
+        }
+
         // ===== 底部左下角"整理"按钮 =====
         Button {
             id: arrangeButton
@@ -882,6 +923,7 @@ Window {
             width: 88
             height: 32
             text: qsTr("Arrange")
+            z: 1
             onClicked: autoArrangeNow()
         }
 
@@ -896,6 +938,7 @@ Window {
             height: 32
             icon.name: "add"
             text: qsTr("Add")
+            z: 1
             onClicked: {
                 // 与右键菜单/托盘入口一致：先按触发位置（按钮中心）重定位弹窗，
                 // 让二级面板趋向鼠标指针所在高度，而非默认贴面板顶部。
