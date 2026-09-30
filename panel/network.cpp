@@ -30,11 +30,12 @@ Network::Network(QObject *parent)
     // 重定向策略挂管理器上（Qt 6.8 起移除了 QNetworkRequest::setRedirectPolicy）：
     // 只允许同等或更安全协议的重定向（https→https，禁降级明文）
     m_nam->setRedirectPolicy(QNetworkRequest::NoLessSafeRedirectPolicy);
-    // 磁盘缓存：TTL 内存缓存之外的第二层（CacheLocation/http-cache，上限 64MB）
+    // 磁盘缓存：TTL 内存缓存之外的第二层（CacheLocation 下以插件 id 命名空间隔离，上限 64MB；
+    // 显式带插件 id 而非裸 http-cache，避免与宿主 dde-shell 进程的同名缓存混居，卸载脚本可定点清理）
     auto *diskCache = new QNetworkDiskCache(m_nam);
     diskCache->setCacheDirectory(
         QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
-        + QStringLiteral("/http-cache"));
+        + QStringLiteral("/org.deepin.ds.widgettoolbar/http-cache"));
     diskCache->setMaximumCacheSize(64LL * 1024 * 1024);
     m_nam->setCache(diskCache);
 }

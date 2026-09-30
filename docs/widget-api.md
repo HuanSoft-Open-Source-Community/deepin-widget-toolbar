@@ -158,7 +158,8 @@
   与 `FileIO` 同根），请配合 `dataDir` 使用；`getJson` 无落盘。
 - **大小上限**：`getJson` 响应上限 1 MB，`download` 上限 32 MB，超限即中止并报 `too-large`。
 - **缓存**：`getJson` 带 TTL 内存缓存（默认 600 秒，`ttlSeconds` 可调）；之外宿主还挂了
-  64 MB 磁盘缓存（`CacheLocation/http-cache`），对小组件透明。
+  64 MB 磁盘缓存（`CacheLocation/org.deepin.ds.widgettoolbar/http-cache`，以插件 id
+  命名空间隔离，不与宿主进程其它缓存混居），对小组件透明。
 - **安全**：请求 User-Agent 为 `deepin-widget-toolbar/1.8`；重定向仅允许同等或更安全协议
   （https→https，禁降级明文）；传输超时 15 秒。
 
