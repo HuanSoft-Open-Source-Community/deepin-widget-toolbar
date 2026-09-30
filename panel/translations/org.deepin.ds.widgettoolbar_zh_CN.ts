@@ -78,6 +78,22 @@
         <source>Install failed: invalid or unsafe package</source>
         <translation>安装失败：无效或不安全的安装包</translation>
     </message>
+    <message>
+        <source>Network Services Notice</source>
+        <translation>使用网络服务提示</translation>
+    </message>
+    <message>
+        <source>This type of card fetches online content from third-party services (such as Bing wallpapers) through the panel&apos;s network proxy. After you agree, cards in the panel that use the network can fetch content online.</source>
+        <translation>此类卡片会通过面板的网络代理访问第三方服务（如 Bing 壁纸）在线获取内容；同意后，面板内使用网络的卡片才能联网获取内容。</translation>
+    </message>
+    <message>
+        <source>Decline</source>
+        <translation>不同意</translation>
+    </message>
+    <message>
+        <source>Agree &amp; Add</source>
+        <translation>同意并添加</translation>
+    </message>
 </context>
 <context>
     <name>AppPickerBody</name>

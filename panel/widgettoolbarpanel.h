@@ -37,6 +37,9 @@ class WidgetToolbarPanel : public DPanel
     // 格宽 + 名称条高 − 4），卡片保持满列宽、宽度不变，网格几何随之变化
     // 详见 panel/package/main.qml 的 cellHeight / cellSpacingY 注释。
     Q_PROPERTY(bool showCardNames READ showCardNames WRITE setShowCardNames NOTIFY showCardNamesChanged FINAL)
+    // 网络服务同意标记：首次添加声明 requiresNetwork 的组件时由添加面板弹协议
+    // 弹窗，同意后全局生效（此后任何联网组件直接添加，重启保留），经 DConfig 持久化
+    Q_PROPERTY(bool networkConsentGranted READ networkConsentGranted WRITE setNetworkConsentGranted NOTIFY networkConsentGrantedChanged FINAL)
     // 多任务视图（MMV）避让运行时状态：true 时面板窗口临时隐藏。仅由 kwin 的
     // MultitaskStateChanged 信号驱动，不持久化，也不改变 visible/托盘高亮；
     // MMV 退出后绑定表达式自动恢复面板显示
@@ -70,6 +73,8 @@ public:
     void setCardTransparent(bool cardTransparent);
     bool showCardNames() const;
     void setShowCardNames(bool showCardNames);
+    bool networkConsentGranted() const;
+    void setNetworkConsentGranted(bool granted);
     bool multitaskAvoided() const;
     bool panelAvoided() const;
     // 应用版本（编译期注入，见 panel/CMakeLists.txt 的 WIDGETTOOLBAR_VERSION）
@@ -100,6 +105,7 @@ Q_SIGNALS:
     void pinnedChanged(bool pinned);
     void cardTransparentChanged(bool cardTransparent);
     void showCardNamesChanged(bool showCardNames);
+    void networkConsentGrantedChanged(bool granted);
     void multitaskAvoidedChanged(bool multitaskAvoided);
     void panelAvoidedChanged(bool panelAvoided);
     void debugModeChanged(bool debugMode);
@@ -132,6 +138,8 @@ private:
     bool m_cardTransparent = false;
     // 卡片名称显示：默认开启（功能本身即"显示名称"，默认关会让人以为不存在）
     bool m_showCardNames = true;
+    // 网络服务同意标记：默认未同意（首次添加联网组件需弹协议弹窗）
+    bool m_networkConsentGranted = false;
     bool m_multitaskAvoided = false;
     // 已收到过 MultitaskStateChanged：用于压掉 watchMultitaskView() 的异步初始态
     // 应答（迟到的旧值不得覆盖更新的信号值）

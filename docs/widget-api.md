@@ -1,7 +1,7 @@
-# 小组件接口规范（v1.8）
+# 小组件接口规范（v1.9）
 
 > 本文档定义 deepin-widget-toolbar 面板（宿主）与小组件之间的开放接口契约。
-> 当前宿主接口版本：1.8；兼容 1.0~1.8 小组件（声明更高次版本的组件仍会加载，但宿主会告警）。
+> 当前宿主接口版本：1.9；兼容 1.0~1.9 小组件（声明更高次版本的组件仍会加载，但宿主会告警）。
 
 ## 1. 架构
 
@@ -33,13 +33,14 @@
 | `description` | string | 否 | 一句话描述 |
 | `icon` | string | 否 | 主题图标名（如 `appointment-new`），面板列表中显示 |
 | `version` | string | 是 | 组件自身版本，语义化版本号，如 `1.0.0`；宿主目前仅用于诊断（调试日志里记 `id@version`），不参与加载判定 |
-| `apiVersion` | string | 是 | 所需接口版本，当前为 `1.8`。宿主实现 `1.0`~`1.8`：主版本必须为 `1`（否则拒绝加载并告警），次版本高于宿主时**照常加载**但会打告警（缺的只是宿主尚未提供的能力，组件应自行降级） |
+| `apiVersion` | string | 是 | 所需接口版本，当前为 `1.9`。宿主实现 `1.0`~`1.9`：主版本必须为 `1`（否则拒绝加载并告警），次版本高于宿主时**照常加载**但会打告警（缺的只是宿主尚未提供的能力，组件应自行降级） |
 | `author` | string | 否 | 作者 |
 | `runtime` | string | 否 | 渲染运行时，当前仅支持 `qml`（默认值） |
 | `entry` | string | 是 | 入口文件（相对小组件目录），如 `main.qml` |
 | `defaultSize` | object | 是 | 默认占位 `{ "cols": 2, "rows": 2 }`；`cols ∈ [1,4]`，`rows ≥ 1` |
 | `sizes` | array | 否 | 可选尺寸数组，元素为 `{ "cols": 1, "rows": 1 }`；缺失时只允许 `defaultSize`，且 `defaultSize` 必须包含在其中 |
 | `actions` | array | 否 | 右键自定义动作（1.8 新增），元素为 `{ "id": "...", "label": "...", "label[<locale>]" }`；`id` 与 `label` 必填且非空（非法项直接丢弃，未声明时保持空列表）。宿主按声明顺序把动作渲染在右键菜单尺寸项之后、配置/移除之前，点击时回调小组件根对象的 `actionTriggered(actionId)`（根对象未实现该函数则安全忽略） |
+| `requiresNetwork` | bool | 否 | 声明组件需要访问网络（1.9 新增）；宿主在用户首次添加此类组件时弹出"使用网络服务提示"协议弹窗，同意（DConfig `networkConsentGranted`，全局一次、重启保留）后方可添加；仅接受 JSON bool，非 bool 值按 `false` 处理 |
 | `settings` | array | 否 | 配置项声明，供宿主生成右键“配置…”面板；元素字段见下文 |
 | `builtin` | bool | 内置专用 | 内置小组件标记（第三方包的 manifest 中应省略或为 false） |
 
@@ -382,9 +383,9 @@
 
 ## 9. 版本兼容策略
 
-- 小组件声明 `apiVersion`；宿主加载时先校验主版本：非 `1` 则拒绝加载并告警（不静默失败）；次版本高于宿主实现（当前 `1.8`）时照常加载，但会打一条明确告警，便于定位"组件功能不全"。宿主版本常量见 `panel/widgettypes.h` 的 `WidgetTypes::kApiMinorVersion`，须与本文档保持一致。
+- 小组件声明 `apiVersion`；宿主加载时先校验主版本：非 `1` 则拒绝加载并告警（不静默失败）；次版本高于宿主实现（当前 `1.9`）时照常加载，但会打一条明确告警，便于定位"组件功能不全"。宿主版本常量见 `panel/widgettypes.h` 的 `WidgetTypes::kApiMinorVersion`，须与本文档保持一致。
 - 宿主新增接口走次版本递增，不破坏既有小组件（1.0 小组件仍可加载）。
-- 当前宿主实现：`apiVersion = "1.8"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型；1.5 新增 `AudioVisualizer` 系统音频频谱代理；1.6 新增 `WidgetHost.activateWindow` 键盘焦点请求；1.7 新增 `DesktopApps` 桌面程序代理与 `launcherList` 设置类型（三级应用选择面板、`_` 前缀内部键，及内置应用快捷启动器与 `4×1` 长条规格）；1.8 新增 `Network` 网络能力代理、`image` 设置类型与 manifest `actions` 右键动作）。
+- 当前宿主实现：`apiVersion = "1.9"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型；1.5 新增 `AudioVisualizer` 系统音频频谱代理；1.6 新增 `WidgetHost.activateWindow` 键盘焦点请求；1.7 新增 `DesktopApps` 桌面程序代理与 `launcherList` 设置类型（三级应用选择面板、`_` 前缀内部键，及内置应用快捷启动器与 `4×1` 长条规格）；1.8 新增 `Network` 网络能力代理、`image` 设置类型与 manifest `actions` 右键动作；1.9 新增 manifest `requiresNetwork` 声明与添加面板首次网络服务同意门控）。
 
 ## 10. 生命周期（当前范围）
 
@@ -401,4 +402,5 @@
   下载落盘与 `FileIO` 同沙箱），小组件仍不允许直接发起网络请求；也不允许直接访问系统 D-Bus
   与音频服务，只能使用宿主能力代理
   （`FileIO` / `Network` / `SystemInfo` / `Lyrics` / `Timezones` / `ClockTime` / `WidgetHost` / `MediaPlayers` / `MediaPlayer` / `AudioVisualizer` / `DesktopApps`）。
+- 联网组件的添加受同意门控（1.9）：未同意"使用网络服务提示"前不能添加声明 `requiresNetwork` 的组件——不同意/Esc/点击外部关闭均不添加、不写配置；同意一次（DConfig `networkConsentGranted`，全局生效、重启保留）后不再询问。门控仅作用于新增实例流程，不影响已添加实例的运行。
 - 小组件间事件总线（`bus.emit/on`）未实现。

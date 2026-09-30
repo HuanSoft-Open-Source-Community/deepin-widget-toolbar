@@ -366,6 +366,11 @@ QVariantList WidgetManager::widgetActions(const QString &widgetId) const
     return m_widgetActions.value(widgetId);
 }
 
+bool WidgetManager::widgetRequiresNetwork(const QString &widgetId) const
+{
+    return m_widgetRequiresNetwork.value(widgetId, false);
+}
+
 QString WidgetManager::instanceConfigPath(const QString &instanceId) const
 {
     const Instance *inst = findInstance(instanceId);
@@ -606,6 +611,7 @@ void WidgetManager::scanWidgets()
 
     m_widgets.clear();
     m_widgetActions.clear();
+    m_widgetRequiresNetwork.clear();
     int builtinCount = 0;
     int thirdPartyCount = 0;
 
@@ -756,6 +762,11 @@ WidgetManager::WidgetInfo WidgetManager::readManifest(const QString &dir, bool b
         });
     }
     m_widgetActions.insert(info.id, actions);
+
+    // 网络同意门控声明：requiresNetwork 仅接受 JSON bool（spec 约定非 bool 值
+    // 如字符串 "true"、数字 1 一律按 false 处理，防止第三方随手写值绕过门控）
+    const QJsonValue networkFlag = obj.value("requiresNetwork");
+    m_widgetRequiresNetwork.insert(info.id, networkFlag.isBool() && networkFlag.toBool());
 
     // 多语言名称：name[zh_CN] 等
     const QString lk = WidgetSchema::localeKey("name");
