@@ -12,6 +12,7 @@
 
 # AI agent tooling artifacts
 /.reasonix/
+/.trae/
 /AGENTS.md
 
 # Compiled translation files
