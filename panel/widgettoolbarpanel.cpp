@@ -14,6 +14,7 @@
 #include "lyricssource.h"
 #include "mediaplayer.h"
 #include "mediaplayerregistry.h"
+#include "network.h"
 #include "systeminfo.h"
 #include "timezones.h"
 #include "widgethost.h"
@@ -70,11 +71,16 @@ bool WidgetToolbarPanel::init()
     m_widgetListModel->refresh();
 
     // 宿主能力代理（开放接口的一部分）：注册 QML 单例，小组件通过
-    // import org.deepin.widgettoolbar 1.0 使用 FileIO / SystemInfo / Lyrics /
-    // Timezones / ClockTime / WidgetHost
+    // import org.deepin.widgettoolbar 1.0 使用 FileIO / Network / SystemInfo /
+    // Lyrics / Timezones / ClockTime / WidgetHost
     auto *fileIO = new FileIO(this);
     fileIO->setAllowedRoot(m_widgetManager->widgetsDataRoot());
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "FileIO", fileIO);
+    // 网络访问代理：仅 https 的 JSON 拉取（TTL 缓存）与受限下载，落盘与
+    // FileIO 同一沙箱根（widgets 数据目录）
+    auto *network = new Network(this);
+    network->setAllowedRoot(m_widgetManager->widgetsDataRoot());
+    qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "Network", network);
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "SystemInfo", new SystemInfo(this));
     // 端闱乐部歌词代理：小组件通过它读取歌词
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "Lyrics", new LyricsSource(this));

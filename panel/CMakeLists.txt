@@ -6,7 +6,7 @@
 # 与 dde-shell 运行时 DConfig 搜索路径一致；不随 CMAKE_INSTALL_PREFIX 漂移
 
 find_package(Dtk6DConfig REQUIRED)
-find_package(Qt6 COMPONENTS LinguistTools Qml DBus Concurrent REQUIRED)
+find_package(Qt6 COMPONENTS LinguistTools Qml DBus Concurrent Network REQUIRED)
 
 add_library(ds-widget-toolbar SHARED
     debuglogger.cpp
@@ -42,6 +42,8 @@ add_library(ds-widget-toolbar SHARED
     widgetmodel.h
     fileio.cpp
     fileio.h
+    network.cpp
+    network.h
     clocktime.cpp
     clocktime.h
     lyricssource.cpp
@@ -81,7 +83,7 @@ find_package(XCB REQUIRED)
 # DTK6 的 RollingFileAppender 只按时间频率或字节大小轮转，给不出"单文件 2500 行"
 # 这个硬要求；且 Logger::globalInstance() 是进程级单例，本面板跑在 dde-shell 进程内，
 # appender 注册/注销稍有疏漏就会悬垂并拖崩整个 shell。
-target_link_libraries(ds-widget-toolbar PRIVATE Dde::Shell Qt6::Qml Qt6::DBus Qt6::Concurrent m XCB::XCB)
+target_link_libraries(ds-widget-toolbar PRIVATE Dde::Shell Qt6::Qml Qt6::DBus Qt6::Concurrent Qt6::Network m XCB::XCB)
 
 # PipeWire 后端的 SPA POD 使用官方 inline builder（仅需头文件，无链接依赖）；
 # 头文件缺失时回退手写 POD（pipewirebackend.cpp 内 HAVE_SPA_POD_BUILDER=0）
