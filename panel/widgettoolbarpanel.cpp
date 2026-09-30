@@ -113,9 +113,11 @@ bool WidgetToolbarPanel::init()
         m_pinned = m_config->value("pinned", true).toBool();
         m_cardTransparent = m_config->value("cardTransparent", false).toBool();
         m_showCardNames = m_config->value("showCardNames", true).toBool();
+        m_networkConsentGranted = m_config->value("networkConsentGranted", false).toBool();
     } else {
         qWarning() << "DConfig invalid, use defaults (visible=true, pinned=true,"
-                      " cardTransparent=false, showCardNames=true)";
+                      " cardTransparent=false, showCardNames=true,"
+                      " networkConsentGranted=false)";
     }
 
     // 调试模式：缺省关闭，只有开启时 DebugLogger 才向磁盘写日志（见 debuglogger.cpp）。
@@ -387,6 +389,26 @@ void WidgetToolbarPanel::setShowCardNames(bool showCardNames)
     }
     DEBUG_LOG(panel, QStringLiteral("showCardNames -> %1").arg(showCardNames));
     Q_EMIT showCardNamesChanged(showCardNames);
+}
+
+// 网络服务同意标记：与其余面板级开关同范式——先持久化、后发信号。全局一次同意，
+// 由添加面板在网络协议弹窗"同意并添加"时写入，此后联网组件不再询问。
+bool WidgetToolbarPanel::networkConsentGranted() const
+{
+    return m_networkConsentGranted;
+}
+
+void WidgetToolbarPanel::setNetworkConsentGranted(bool granted)
+{
+    if (m_networkConsentGranted == granted) {
+        return;
+    }
+    m_networkConsentGranted = granted;
+    if (m_config && m_config->isValid()) {
+        m_config->setValue("networkConsentGranted", granted);
+    }
+    DEBUG_LOG(panel, QStringLiteral("networkConsentGranted -> %1").arg(granted));
+    Q_EMIT networkConsentGrantedChanged(granted);
 }
 
 void WidgetToolbarPanel::toggle()

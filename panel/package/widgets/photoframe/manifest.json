@@ -10,6 +10,7 @@
     "icon": "insert-image",
     "runtime": "qml",
     "entry": "main.qml",
+    "requiresNetwork": true,
     "defaultSize": { "cols": 2, "rows": 2 },
     "sizes": [
         { "cols": 2, "rows": 2 },

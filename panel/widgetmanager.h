@@ -74,6 +74,9 @@ public:
     // 组件 manifest 声明的自定义右键动作（QVariantList of {"id","label"}，
     // label 已按系统 locale 展开本地化；未声明时返回空列表）
     Q_INVOKABLE QVariantList widgetActions(const QString &widgetId) const;
+    // 组件是否声明 requiresNetwork（首次添加时的网络同意门控判定）；
+    // 未声明或 manifest 值非 JSON bool 一律返回 false
+    Q_INVOKABLE bool widgetRequiresNetwork(const QString &widgetId) const;
     Q_INVOKABLE QVariantMap instanceConfig(const QString &instanceId) const;
     Q_INVOKABLE bool saveInstanceConfig(const QString &instanceId, const QVariantMap &values);
     // 收集其它实例 dials 配置中已使用的时区 id（世界时间跨实例地区唯一性用）
@@ -129,4 +132,7 @@ private:
     QList<Instance> m_instances;
     // 各组件 manifest 声明的自定义右键动作（key 为 widgetId），scanWidgets 时重建
     QHash<QString, QVariantList> m_widgetActions;
+    // 各组件是否声明 requiresNetwork（key 为 widgetId），与 m_widgetActions
+    // 同步重建（requiresNetwork 只作门控判定，不进 WidgetInfo）
+    QHash<QString, bool> m_widgetRequiresNetwork;
 };

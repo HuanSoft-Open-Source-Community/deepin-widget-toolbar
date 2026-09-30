@@ -33,6 +33,8 @@ PanelPopup {
     // 安装/卸载操作结果提示（临时显示）
     property string statusText: ""
     property bool statusError: false
+    // 网络协议弹窗记录的待添加组件：同意后立即添加；不同意/Esc/关闭则清空不添加
+    property string pendingNetworkWidgetId: ""
     function showStatus(text, isError) {
         control.statusText = text
         control.statusError = isError
@@ -172,7 +174,18 @@ PanelPopup {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 enabled: !installed
-                                onClicked: Panel.widgetManager.addWidget(widgetId)
+                                onClicked: {
+                                    // 网络同意门控：首次添加声明 requiresNetwork 的组件时
+                                    // 先弹协议弹窗（记录待添加组件，不立即添加）；同意后
+                                    // 全局落盘并执行本次添加，未声明/已同意则直接添加
+                                    if (Panel.widgetManager.widgetRequiresNetwork(widgetId)
+                                            && !Panel.networkConsentGranted) {
+                                        control.pendingNetworkWidgetId = widgetId
+                                        networkConsentDialog.open()
+                                    } else {
+                                        Panel.widgetManager.addWidget(widgetId)
+                                    }
+                                }
                             }
                         }
                     }
@@ -292,6 +305,74 @@ PanelPopup {
                     control.showStatus(qsTr("Widget installed"), false)
                 } else {
                     control.showStatus(qsTr("Install failed: invalid or unsafe package"), true)
+                }
+            }
+        }
+
+        // 网络服务提示弹窗：首次添加声明 requiresNetwork 的组件时弹出。
+        // 同意 → 写 DConfig（全局一次，重启保留）并立即执行本次添加；
+        // 不同意/Esc/点击外部关闭 = 不添加、不写配置，停留添加面板。
+        Popup {
+            id: networkConsentDialog
+            anchors.centerIn: parent
+            width: parent.width - 40
+            modal: true
+            dim: true
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+            padding: 16
+
+            onClosed: control.pendingNetworkWidgetId = ""
+
+            background: Rectangle {
+                radius: DTK.platformTheme.windowRadius
+                color: palette.window
+                border.width: 1
+                border.color: Qt.rgba(0, 0, 0, 0.15)
+            }
+
+            contentItem: ColumnLayout {
+                spacing: 12
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("Network Services Notice")
+                    font: DTK.fontManager.t5
+                    color: palette.windowText
+                    wrapMode: Text.Wrap
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("This type of card fetches online content from third-party services (such as Bing wallpapers) through the panel's network proxy. After you agree, cards in the panel that use the network can fetch content online.")
+                    font: DTK.fontManager.t6
+                    color: palette.windowText
+                    opacity: 0.8
+                    wrapMode: Text.Wrap
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Button {
+                        text: qsTr("Decline")
+                        onClicked: networkConsentDialog.close()
+                    }
+
+                    Button {
+                        text: qsTr("Agree & Add")
+                        onClicked: {
+                            // 全局同意一次（DConfig 落盘，重启保留），随后立即添加本次组件
+                            Panel.networkConsentGranted = true
+                            if (control.pendingNetworkWidgetId.length > 0)
+                                Panel.widgetManager.addWidget(control.pendingNetworkWidgetId)
+                            networkConsentDialog.close()
+                        }
+                    }
                 }
             }
         }
