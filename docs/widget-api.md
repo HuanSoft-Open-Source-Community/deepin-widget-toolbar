@@ -1,7 +1,7 @@
-# 小组件接口规范（v1.7）
+# 小组件接口规范（v1.8）
 
 > 本文档定义 deepin-widget-toolbar 面板（宿主）与小组件之间的开放接口契约。
-> 当前宿主接口版本：1.7；兼容 1.0~1.7 小组件（声明更高次版本的组件仍会加载，但宿主会告警）。
+> 当前宿主接口版本：1.8；兼容 1.0~1.8 小组件（声明更高次版本的组件仍会加载，但宿主会告警）。
 
 ## 1. 架构
 
@@ -33,12 +33,13 @@
 | `description` | string | 否 | 一句话描述 |
 | `icon` | string | 否 | 主题图标名（如 `appointment-new`），面板列表中显示 |
 | `version` | string | 是 | 组件自身版本，语义化版本号，如 `1.0.0`；宿主目前仅用于诊断（调试日志里记 `id@version`），不参与加载判定 |
-| `apiVersion` | string | 是 | 所需接口版本，当前为 `1.7`。宿主实现 `1.0`~`1.7`：主版本必须为 `1`（否则拒绝加载并告警），次版本高于宿主时**照常加载**但会打告警（缺的只是宿主尚未提供的能力，组件应自行降级） |
+| `apiVersion` | string | 是 | 所需接口版本，当前为 `1.8`。宿主实现 `1.0`~`1.8`：主版本必须为 `1`（否则拒绝加载并告警），次版本高于宿主时**照常加载**但会打告警（缺的只是宿主尚未提供的能力，组件应自行降级） |
 | `author` | string | 否 | 作者 |
 | `runtime` | string | 否 | 渲染运行时，当前仅支持 `qml`（默认值） |
 | `entry` | string | 是 | 入口文件（相对小组件目录），如 `main.qml` |
 | `defaultSize` | object | 是 | 默认占位 `{ "cols": 2, "rows": 2 }`；`cols ∈ [1,4]`，`rows ≥ 1` |
 | `sizes` | array | 否 | 可选尺寸数组，元素为 `{ "cols": 1, "rows": 1 }`；缺失时只允许 `defaultSize`，且 `defaultSize` 必须包含在其中 |
+| `actions` | array | 否 | 右键自定义动作（1.8 新增），元素为 `{ "id": "...", "label": "...", "label[<locale>]" }`；`id` 与 `label` 必填且非空（非法项直接丢弃，未声明时保持空列表）。宿主按声明顺序把动作渲染在右键菜单尺寸项之后、配置/移除之前，点击时回调小组件根对象的 `actionTriggered(actionId)`（根对象未实现该函数则安全忽略） |
 | `settings` | array | 否 | 配置项声明，供宿主生成右键“配置…”面板；元素字段见下文 |
 | `builtin` | bool | 内置专用 | 内置小组件标记（第三方包的 manifest 中应省略或为 false） |
 
@@ -47,7 +48,7 @@
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `key` | string | 配置键，不能为空 |
-| `type` | string | `boolean` / `enum` / `color` / `font` / `string` / `integer` / `timezoneList` / `player` / `launcherList` |
+| `type` | string | `boolean` / `enum` / `color` / `font` / `string` / `integer` / `timezoneList` / `player` / `launcherList` / `image` |
 | `label` / `label[locale]` | string | 显示名称及本地化名称 |
 | `default` | 任意 | 默认值 |
 | `options` | array | `enum`/`color` 的候选项，元素含 `value`、`label`、`label[locale]`；`font` 的候选由宿主从 `Qt.fontFamilies()` 生成；`timezoneList` 的候选由宿主从 `Timezones` 生成；`player` 的候选由宿主从 `MediaPlayers.players` 生成 |
@@ -79,7 +80,13 @@
 由宿主动态枚举；当前无播放器时下拉为空且禁用。配置面板应在 `playerMode` 为
 `locked` 时才显示该行。
 
-内置组件示例：clock 允许 `1×1 / 2×2 / 4×2 / 4×4` 并声明 `clockMode` 配置；lyrics 声明 `lyricsFont` 与 `lyricsColor`；applauncher（应用快捷启动器）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格）并声明 `launchers`（launcherList，默认空，新实例由组件自行预置浏览器/终端/文本编辑器/邮箱四个默认程序）、`immersiveMode`、`showLabels`/`labelColor`/`unitBackgroundColor`/`backgroundColor`/`transparentBackground` 等配置；worldtime（世界时间）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格：指针模式为单行四块方形表盘，数字模式为单行四列、隐去标题、格内时间与地区名上下排列）。
+`image` 类型的值（1.8 新增）是**相对 `dataDir` 的相对路径**（如 `<instanceId>/img-1730000000000.jpg`），
+空串表示未设置，禁绝对路径与 `..` 上跳。用户在设置面板选择文件后，由宿主把文件复制到
+`dataDir/<instanceId>/`（重命名为 `img-<毫秒时间戳>.<后缀>`）并回写相对路径——小组件沙箱不能读外部
+文件，复制必须由宿主完成；清除则由宿主删除该文件。设置面板该行渲染 48px 缩略图与
+"选择图片…/清除"按钮。
+
+内置组件示例：clock 允许 `1×1 / 2×2 / 4×2 / 4×4` 并声明 `clockMode` 配置；lyrics 声明 `lyricsFont` 与 `lyricsColor`；applauncher（应用快捷启动器）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格）并声明 `launchers`（launcherList，默认空，新实例由组件自行预置浏览器/终端/文本编辑器/邮箱四个默认程序）、`immersiveMode`、`showLabels`/`labelColor`/`unitBackgroundColor`/`backgroundColor`/`transparentBackground` 等配置；worldtime（世界时间）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格：指针模式为单行四块方形表盘，数字模式为单行四列、隐去标题、格内时间与地区名上下排列）；photoframe（相框）默认 `2×2`，允许 `2×2 / 4×2 / 4×4`，声明图片来源（Bing 每日/随机/往日、自定义 https 网址、本地图片）与相框样式/颜色/宽度/圆角等配置，并带 `refresh`（刷新）右键动作。
 
 ## 4. 布局模型
 
@@ -114,6 +121,45 @@
 | `readTextFile` | `string readTextFile(string path)` | 读取文本文件，失败返回空串 |
 | `writeTextFile` | `bool writeTextFile(string path, string content)` | 写入文本（自动创建父目录） |
 | `exists` | `bool exists(string path)` | 判断文件是否存在 |
+
+### Network（https 网络访问代理，1.8 新增）
+
+> **网络能力由宿主代理**：小组件不允许自行发起网络请求。宿主统一代理 https 访问：
+> 仅放行 `https`（明文 `http` 一律拒绝），JSON 拉取带 TTL 内存缓存，下载落盘与
+> `FileIO` 完全同沙箱根，防止第三方小组件触达任意本机路径或明文信道。
+
+| 方法 | 签名 | 说明 |
+|---|---|---|
+| `getJson` | `int getJson(string url, int ttlSeconds = 600)` | 拉取 JSON，返回 `requestId`（原子递增）；完成（含缓存命中）后发 `jsonFinished`，`data` 为 JSON 解析后的值；`ttlSeconds ≤ 0` 表示完全绕过缓存 |
+| `download` | `int download(string url, string destPath)` | 二进制下载落盘（自动创建父目录，原子提交），完成后发 `downloadFinished` |
+
+| 信号 | 说明 |
+|---|---|
+| `jsonFinished(int requestId, bool success, var data, string errorCode, int httpStatus)` | `getJson` 完成回调；失败时 `data` 为空、`errorCode` 见下表；`httpStatus` 为 HTTP 状态码（缓存命中按 200 报告） |
+| `downloadFinished(int requestId, bool success, string destPath, string errorCode, int httpStatus)` | `download` 完成回调；`destPath` 回传落盘目标路径 |
+
+错误码（`errorCode`，失败时非空）：
+
+| 错误码 | 含义 |
+|---|---|
+| `invalid-url` | URL 非法或为空 |
+| `scheme-not-https` | 非 `https`（明文信道被拒） |
+| `path-denied` | `destPath` 越出沙箱（仅 `download`） |
+| `timeout` | 传输超时（15 秒） |
+| `network` | 网络层错误；`download` 时的建目录/写盘/提交等本地失败也归入此码 |
+| `http-<code>` | HTTP 状态非 2xx（如 `http-404`），语义优先于网络层错误 |
+| `json-parse` | 响应不是合法 JSON（仅 `getJson`） |
+| `too-large` | 超响应大小上限（见下），主动中止 |
+
+约束与说明：
+
+- **落盘沙箱**：`download` 的 `destPath` 仅允许小组件数据根目录（`~/.local/share/org.deepin.ds.widgettoolbar/widgets/`，
+  与 `FileIO` 同根），请配合 `dataDir` 使用；`getJson` 无落盘。
+- **大小上限**：`getJson` 响应上限 1 MB，`download` 上限 32 MB，超限即中止并报 `too-large`。
+- **缓存**：`getJson` 带 TTL 内存缓存（默认 600 秒，`ttlSeconds` 可调）；之外宿主还挂了
+  64 MB 磁盘缓存（`CacheLocation/http-cache`），对小组件透明。
+- **安全**：请求 User-Agent 为 `deepin-widget-toolbar/1.8`；重定向仅允许同等或更安全协议
+  （https→https，禁降级明文）；传输超时 15 秒。
 
 ### SystemInfo（系统监视数据）
 
@@ -336,21 +382,23 @@
 
 ## 9. 版本兼容策略
 
-- 小组件声明 `apiVersion`；宿主加载时先校验主版本：非 `1` 则拒绝加载并告警（不静默失败）；次版本高于宿主实现（当前 `1.7`）时照常加载，但会打一条明确告警，便于定位"组件功能不全"。宿主版本常量见 `panel/widgettypes.h` 的 `WidgetTypes::kApiMinorVersion`，须与本文档保持一致。
+- 小组件声明 `apiVersion`；宿主加载时先校验主版本：非 `1` 则拒绝加载并告警（不静默失败）；次版本高于宿主实现（当前 `1.8`）时照常加载，但会打一条明确告警，便于定位"组件功能不全"。宿主版本常量见 `panel/widgettypes.h` 的 `WidgetTypes::kApiMinorVersion`，须与本文档保持一致。
 - 宿主新增接口走次版本递增，不破坏既有小组件（1.0 小组件仍可加载）。
-- 当前宿主实现：`apiVersion = "1.7"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型；1.5 新增 `AudioVisualizer` 系统音频频谱代理；1.6 新增 `WidgetHost.activateWindow` 键盘焦点请求；1.7 新增 `DesktopApps` 桌面程序代理与 `launcherList` 设置类型（三级应用选择面板、`_` 前缀内部键，及内置应用快捷启动器与 `4×1` 长条规格）。
+- 当前宿主实现：`apiVersion = "1.8"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型；1.5 新增 `AudioVisualizer` 系统音频频谱代理；1.6 新增 `WidgetHost.activateWindow` 键盘焦点请求；1.7 新增 `DesktopApps` 桌面程序代理与 `launcherList` 设置类型（三级应用选择面板、`_` 前缀内部键，及内置应用快捷启动器与 `4×1` 长条规格）；1.8 新增 `Network` 网络能力代理、`image` 设置类型与 manifest `actions` 右键动作）。
 
 ## 10. 生命周期（当前范围）
 
 已实现：加载（添加 → 注入上下文 → 渲染）、移除实例、卸载（第三方）、数据持久化。
 
 规划中（后续版本）：`onActivate/onDeactivate`（滚入/滚出可视区）、`onResize`、
-`onSuspend/onResume`、`onThemeChanged` 主题令牌下发、网络/DBus 权限模型、事件总线。
+`onSuspend/onResume`、`onThemeChanged` 主题令牌下发、DBus 权限模型、事件总线。
 
 ## 11. 已知限制
 
 - 网格支持长按拖放调整位置；右键菜单可切换 `sizes` 声明的占位尺寸，切换时冲突实例联动避让并持久化。
 - 小组件设置页由 manifest `settings` schema 自动生成，支持列出的基础类型及 `timezoneList`。
-- 网络请求未开放；小组件不允许直接访问系统 D-Bus 与音频服务，只能使用宿主能力代理
-  （`FileIO` / `SystemInfo` / `Lyrics` / `Timezones` / `ClockTime` / `WidgetHost` / `MediaPlayers` / `MediaPlayer` / `AudioVisualizer`）。
+- 明文网络与任意路径访问不可达：网络访问已以受控代理形式开放（`Network`，仅 https、限大小、
+  下载落盘与 `FileIO` 同沙箱），小组件仍不允许直接发起网络请求；也不允许直接访问系统 D-Bus
+  与音频服务，只能使用宿主能力代理
+  （`FileIO` / `Network` / `SystemInfo` / `Lyrics` / `Timezones` / `ClockTime` / `WidgetHost` / `MediaPlayers` / `MediaPlayer` / `AudioVisualizer` / `DesktopApps`）。
 - 小组件间事件总线（`bus.emit/on`）未实现。
