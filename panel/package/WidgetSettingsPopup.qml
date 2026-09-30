@@ -4,6 +4,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import org.deepin.dtk 1.0
@@ -32,6 +33,12 @@ PanelPopup {
     // 启动器单元（applauncher）三级选择面板的编辑目标（launcherList 行）
     property string editingLauncherKey: ""
     property int editingLauncherIndex: -1
+    // 图片选择对话框的编辑目标（image 行）
+    property string editingImageKey: ""
+    // 本实例的数据目录（image 行缩略图/相对路径的基准，与宿主注入小组件的
+    // dataDir 同一来源：widgetDataDir(instanceWidgetId)，同 WidgetHostItem）
+    readonly property string dataDir: Panel.widgetManager.widgetDataDir(
+        Panel.widgetManager.instanceWidgetId(control.instanceId))
     // 设置面板会话代号：打开/重建时 +1，launcherList 行据此做拖拽状态复位与
     // 尺寸容量重同步（函数式容量绑定不会自己跟踪 instanceCols/Rows 的变化）
     property int launcherEditSession: 0
@@ -47,6 +54,7 @@ PanelPopup {
         if (!popupVisible) {
             colorDialog.close()
             launcherPicker.close()
+            imageDialog.close()
         }
     }
 
@@ -377,6 +385,48 @@ PanelPopup {
         control.commit(key, list)
     }
 
+    // ===== 实例图片（image 行）=====
+
+    // 缩略图 file:// URL 构造：整段编码后再还原 "/"，含空格/# 等特殊
+    // 字符的文件名也能正确加载
+    function imageUrl(relativePath) {
+        var path = control.dataDir + "/" + relativePath
+        return "file://" + encodeURIComponent(path).replace(/%2F/g, "/")
+    }
+
+    // 打开图片选择对话框（编辑目标 key 由 editingImageKey 记录）
+    function openImagePicker(key) {
+        control.editingImageKey = key
+        imageDialog.open()
+    }
+
+    // 对话框确认：宿主复制进 <dataDir>/<instanceId>/ → 清理旧图 → 落盘
+    // 新相对路径（经 commit，与其它行同一保存路径）。复制失败（来源
+    // 不存在/后缀不支持等）时保持原值不动
+    function commitPickedImage(fileUrl) {
+        var key = control.editingImageKey
+        control.editingImageKey = ""
+        if (key.length === 0)
+            return
+        var previous = control.values[key] !== undefined
+            && control.values[key] !== null ? String(control.values[key]) : ""
+        var relative = WidgetHost.importInstanceImage(control.instanceId, String(fileUrl))
+        if (relative.length === 0)
+            return
+        if (previous.length > 0 && previous !== relative)
+            WidgetHost.removeInstanceImage(control.instanceId, previous)
+        control.commit(key, relative)
+    }
+
+    // 清除图片：删除实例目录内的旧图并落盘空串（未设置）
+    function clearInstanceImage(key) {
+        var previous = control.values[key] !== undefined
+            && control.values[key] !== null ? String(control.values[key]) : ""
+        if (previous.length > 0)
+            WidgetHost.removeInstanceImage(control.instanceId, previous)
+        control.commit(key, "")
+    }
+
     // 自定义颜色取色弹窗（拆分自本面板）：编辑目标由 editing* 状态记录，
     // 确认/取消后清空；commit 与 commitDialColor 走本面板既有路径
     Components.ColorPickerDialog {
@@ -419,6 +469,15 @@ PanelPopup {
             control.editingLauncherKey = ""
             control.editingLauncherIndex = -1
         }
+    }
+
+    // 图片选择对话框（image 行）：过滤宿主支持的图片格式，确认后经
+    // WidgetHost 由宿主把沙箱外的来源文件复制进实例数据目录
+    FileDialog {
+        id: imageDialog
+        title: qsTr("Choose an image")
+        nameFilters: [qsTr("Images") + " (*.png *.jpg *.jpeg *.bmp *.webp)"]
+        onAccepted: control.commitPickedImage(selectedFile)
     }
 
 

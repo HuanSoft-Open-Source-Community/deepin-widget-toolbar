@@ -24,4 +24,11 @@ QVariantList parseSettingsSchema(const QJsonArray &entries);
 QStringList schemaKeys(const QVariantList &schema);
 QVariantMap defaultConfig(const QVariantList &schema);
 
+// manifest settings 已知类型集合（含宿主内置扩展）
+bool isKnownSettingType(const QString &type);
+
+// image 类型值合法性：空串 = 未设置；非空必须是相对 dataDir 的相对路径
+//（不以 "/" 开头、不含 ".."），防止配置把图片指到实例目录之外
+bool isValidImageValue(const QString &value);
+
 } // namespace WidgetSchema

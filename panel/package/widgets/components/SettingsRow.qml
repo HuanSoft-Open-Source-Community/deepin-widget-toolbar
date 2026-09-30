@@ -9,7 +9,7 @@ import org.deepin.dtk 1.0
 import org.deepin.widgettoolbar 1.0
 
 // 小组件配置面板的单行设置项（schema 驱动的 Repeater 委托，从配置面板拆分）：
-// 按 type 分支渲染 boolean/enum/font/player/color/integer/string/launcherList/timezoneList；
+// 按 type 分支渲染 boolean/enum/font/player/color/integer/string/image/launcherList/timezoneList；
 // 所有回写经 host（配置面板）的 commit/openCustomColor/openLauncherPicker 等函数完成。
 RowLayout {
     id: root
@@ -326,6 +326,68 @@ RowLayout {
             } else {
                 host.commit(key, text)
             }
+        }
+    }
+
+    // 实例图片（image）：值是相对 dataDir 的相对路径（空串 = 未设置）。
+    // 缩略图预览 + 选择/清除；文件对话框、复制与删除由 host（配置面板）
+    // 经 WidgetHost 完成——小组件沙箱不能读外部文件，复制必须由宿主做
+    RowLayout {
+        id: imageRow
+        Layout.fillWidth: true
+        visible: type === "image"
+        spacing: 8
+
+        property string rel: host.values[key] !== undefined
+            && host.values[key] !== null ? String(host.values[key]) : ""
+
+        // 缩略图：点击重新选择；空值显示 "+" 占位
+        Rectangle {
+            id: imageThumb
+            Layout.preferredWidth: 48
+            Layout.preferredHeight: 48
+            radius: 6
+            color: "transparent"
+            clip: true
+            border.width: 1
+            border.color: Qt.rgba(0, 0, 0, 0.25)
+
+            Image {
+                anchors.fill: parent
+                anchors.margins: 2
+                visible: imageRow.rel.length > 0
+                source: imageRow.rel.length > 0 ? host.imageUrl(imageRow.rel) : ""
+                fillMode: Image.PreserveAspectCrop
+                smooth: true
+            }
+
+            Text {
+                anchors.centerIn: parent
+                visible: imageRow.rel.length === 0
+                text: "+"
+                font.pixelSize: 16
+                color: palette.windowText
+                opacity: 0.5
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: host.openImagePicker(key)
+            }
+        }
+
+        Button {
+            text: qsTr("Choose image…")
+            icon.name: "document-open"
+            onClicked: host.openImagePicker(key)
+        }
+
+        Button {
+            text: qsTr("Clear")
+            enabled: imageRow.rel.length > 0
+            onClicked: host.clearInstanceImage(key)
         }
     }
 
