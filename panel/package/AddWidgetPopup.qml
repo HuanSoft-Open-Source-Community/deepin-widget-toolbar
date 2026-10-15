@@ -190,7 +190,7 @@ PanelPopup {
                                     if (Panel.widgetManager.widgetRequiresNetwork(widgetId)
                                             && !Panel.networkConsentGranted) {
                                         control.pendingNetworkWidgetId = widgetId
-                                        networkConsentDialog.open()
+                                        networkConsentDialog.show()
                                     } else {
                                         Panel.widgetManager.addWidget(widgetId)
                                     }
@@ -326,41 +326,53 @@ PanelPopup {
             }
         }
 
-        // 网络服务提示弹窗：首次添加声明 requiresNetwork 的组件时弹出。
+        // 网络服务提示确认框：首次添加声明 requiresNetwork 的组件时弹出。
         // 同意 → 写 DConfig（全局一次，重启保留）并立即执行本次添加；
-        // 不同意/Esc/点击外部关闭 = 不添加、不写配置，停留添加面板。
-        Popup {
+        // 不同意/Esc/关闭窗口 = 不添加、不写配置，可随时再次发起并同意。
+        // 使用 DTK DialogWindow 独立窗口：面板（320px）太窄，嵌入式确认框
+        // 的按钮行（DialogButtonBox 按文本自然宽度排布、不收缩）会横向溢出；
+        // 独立窗口 420px 宽、高度自适应内容，从根上消除宽度约束。
+        // 注：DialogWindow 是 Window（非可视 Item），按 PanelPopup 的 default
+        // property 约束（只接受可视 Item）必须声明在 contentCard 内部。
+        DialogWindow {
             id: networkConsentDialog
-            anchors.centerIn: parent
-            width: parent.width - 40
-            modal: true
-            dim: true
-            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-            padding: 16
+            title: qsTr("Network Services Notice")
+            width: 420
+            modality: Qt.WindowModal
 
-            onClosed: control.pendingNetworkWidgetId = ""
+            // 任意关闭路径（Decline/Esc/标题栏叉号）后清理待添加组件，不残留
+            // 误添加。DialogWindow 内部把 close 拦截为 hide()，故状态清理挂在
+            // onVisibleChanged 而非 onClosed。
+            onVisibleChanged: if (!visible)
+                control.pendingNetworkWidgetId = ""
 
-            background: Rectangle {
-                radius: DTK.platformTheme.windowRadius
-                color: palette.window
-                border.width: 1
-                border.color: Qt.rgba(0, 0, 0, 0.15)
-            }
-
-            contentItem: ColumnLayout {
+            ColumnLayout {
+                width: parent.width
                 spacing: 12
+                focus: true
+                Keys.onEscapePressed: networkConsentDialog.close()
 
                 Text {
                     Layout.fillWidth: true
-                    text: qsTr("Network Services Notice")
-                    font: DTK.fontManager.t5
+                    text: qsTr("This type of card accesses third-party network services through the panel's network proxy to fetch online content. All requests go through the proxy only (https only, no direct connection).")
+                    font: DTK.fontManager.t6
                     color: palette.windowText
+                    opacity: 0.8
                     wrapMode: Text.Wrap
                 }
 
                 Text {
                     Layout.fillWidth: true
-                    text: qsTr("This type of card fetches online content from third-party services (such as Bing wallpapers) through the panel's network proxy. After you agree, cards in the panel that use the network can fetch content online.")
+                    text: qsTr("The service is used only to fetch online content. No personal data is uploaded.")
+                    font: DTK.fontManager.t6
+                    color: palette.windowText
+                    opacity: 0.8
+                    wrapMode: Text.Wrap
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("You can decline: cards that need the network will not be added then. Declining does not change any setting, so you can agree later at any time.")
                     font: DTK.fontManager.t6
                     color: palette.windowText
                     opacity: 0.8
@@ -369,18 +381,17 @@ PanelPopup {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 8
-
-                    Item {
-                        Layout.fillWidth: true
-                    }
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 10
 
                     Button {
                         text: qsTr("Decline")
                         onClicked: networkConsentDialog.close()
                     }
 
-                    Button {
+                    Item { Layout.fillWidth: true }
+
+                    RecommandButton {
                         text: qsTr("Agree & Add")
                         onClicked: {
                             // 全局同意一次（DConfig 落盘，重启保留），随后立即添加本次组件

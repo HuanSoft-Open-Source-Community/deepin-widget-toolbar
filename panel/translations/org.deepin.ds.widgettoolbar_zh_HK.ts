@@ -80,19 +80,27 @@
     </message>
     <message>
         <source>Network Services Notice</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>This type of card fetches online content from third-party services (such as Bing wallpapers) through the panel&apos;s network proxy. After you agree, cards in the panel that use the network can fetch content online.</source>
-        <translation type="unfinished"></translation>
+        <translation>使用網絡服務提示</translation>
     </message>
     <message>
         <source>Decline</source>
-        <translation type="unfinished"></translation>
+        <translation>不同意</translation>
     </message>
     <message>
         <source>Agree &amp; Add</source>
-        <translation type="unfinished"></translation>
+        <translation>同意並新增</translation>
+    </message>
+    <message>
+        <source>You can decline: cards that need the network will not be added then. Declining does not change any setting, so you can agree later at any time.</source>
+        <translation>你可以拒絕：拒絕後需要聯網的卡片將不會被新增。拒絕不會改動任何設定，之後隨時可以再同意。</translation>
+    </message>
+    <message>
+        <source>This type of card accesses third-party network services through the panel&apos;s network proxy to fetch online content. All requests go through the proxy only (https only, no direct connection).</source>
+        <translation>此類卡片會透過面板的網絡代理存取第三方網絡服務以在線取得內容。所有請求均經代理轉發（僅 https，不會直連）。</translation>
+    </message>
+    <message>
+        <source>The service is used only to fetch online content. No personal data is uploaded.</source>
+        <translation>此服務僅用於取得在線內容，不會上載任何個人資料。</translation>
     </message>
 </context>
 <context>
@@ -187,11 +195,11 @@
     </message>
     <message>
         <source>Choose image…</source>
-        <translation type="unfinished"></translation>
+        <translation>選擇圖片…</translation>
     </message>
     <message>
         <source>Clear</source>
-        <translation type="unfinished"></translation>
+        <translation>清除</translation>
     </message>
 </context>
 <context>
@@ -206,11 +214,11 @@
     </message>
     <message>
         <source>Choose an image</source>
-        <translation type="unfinished"></translation>
+        <translation>選擇圖片</translation>
     </message>
     <message>
         <source>Images</source>
-        <translation type="unfinished"></translation>
+        <translation>圖片</translation>
     </message>
 </context>
 <context>
@@ -381,27 +389,27 @@
     </message>
     <message>
         <source>Service error</source>
-        <translation type="unfinished"></translation>
+        <translation>服務錯誤</translation>
     </message>
     <message>
         <source>Network timeout</source>
-        <translation type="unfinished"></translation>
+        <translation>網絡逾時</translation>
     </message>
     <message>
         <source>Network unavailable</source>
-        <translation type="unfinished"></translation>
+        <translation>網絡無法使用</translation>
     </message>
     <message>
         <source>Invalid response</source>
-        <translation type="unfinished"></translation>
+        <translation>回應無效</translation>
     </message>
     <message>
         <source>Image unavailable</source>
-        <translation type="unfinished"></translation>
+        <translation>圖片無法取得</translation>
     </message>
     <message>
         <source>Choose an image in settings</source>
-        <translation type="unfinished"></translation>
+        <translation>請在設定中選擇圖片</translation>
     </message>
 </context>
 </TS>
