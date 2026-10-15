@@ -14,6 +14,7 @@
         <file alias="components/dialslogic.js">package/widgets/components/dialslogic.js</file>
         <file alias="components/ControlsBar.qml">package/widgets/components/ControlsBar.qml</file>
         <file alias="components/CoverArt.qml">package/widgets/components/CoverArt.qml</file>
+        <file alias="components/ElideTip.qml">package/widgets/components/ElideTip.qml</file>
         <file alias="components/qmldir">package/widgets/components/qmldir</file>
         <file alias="clock/main.qml">package/widgets/clock/main.qml</file>
         <file alias="clock/manifest.json">package/widgets/clock/manifest.json</file>
@@ -28,6 +29,7 @@
         <file alias="worldtime/dialslogic.js">package/widgets/worldtime/dialslogic.js</file>
         <file alias="worldtime/DialGrid.qml">package/widgets/worldtime/DialGrid.qml</file>
         <file alias="worldtime/DigitalList.qml">package/widgets/worldtime/DigitalList.qml</file>
+        <file alias="worldtime/icons/preferences-system-time.svg">package/widgets/worldtime/icons/preferences-system-time.svg</file>
         <file alias="lyrics/main.qml">package/widgets/lyrics/main.qml</file>
         <file alias="lyrics/manifest.json">package/widgets/lyrics/manifest.json</file>
         <file alias="player/main.qml">package/widgets/player/main.qml</file>
@@ -44,9 +46,12 @@
         <file alias="player/icons/music-dark.svg">package/widgets/player/icons/music-dark.svg</file>
         <file alias="player/icons/na-light.svg">package/widgets/player/icons/na-light.svg</file>
         <file alias="player/icons/na-dark.svg">package/widgets/player/icons/na-dark.svg</file>
+        <file alias="player/icons/multimedia-player.svg">package/widgets/player/icons/multimedia-player.svg</file>
         <file alias="spectrum/main.qml">package/widgets/spectrum/main.qml</file>
         <file alias="spectrum/manifest.json">package/widgets/spectrum/manifest.json</file>
         <file alias="applauncher/main.qml">package/widgets/applauncher/main.qml</file>
         <file alias="applauncher/manifest.json">package/widgets/applauncher/manifest.json</file>
+        <file alias="photoframe/main.qml">package/widgets/photoframe/main.qml</file>
+        <file alias="photoframe/manifest.json">package/widgets/photoframe/manifest.json</file>
     </qresource>
 </RCC>

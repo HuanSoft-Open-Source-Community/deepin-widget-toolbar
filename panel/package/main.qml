@@ -463,6 +463,18 @@ Window {
         widgetContextMenu.popup()
     }
 
+    // 组件 manifest 自定义动作回调：按 instanceId 定位网格委托，取其加载的
+    // 组件根对象；根对象未实现 actionTriggered(actionId) 时安全忽略
+    function triggerWidgetAction(instanceId, actionId) {
+        var idx = root.instanceIds.indexOf(instanceId)
+        if (idx < 0)
+            return
+        var host = gridRepeater.itemAt(idx)
+        var widget = host ? host.widgetItem : null
+        if (widget && typeof widget.actionTriggered === "function")
+            widget.actionTriggered(actionId)
+    }
+
     // C++ QVariantList 可能以"类数组对象"到达 QML（Array.isArray 不成立），
     // 回写前统一容错提取（与 applauncher/SettingsRow 同一规则）
     function asAppList(value) {
@@ -682,6 +694,25 @@ Window {
             bottomMargin: contentPadding
         }
 
+        // 标题栏空白处右键菜单：只接受右键，z:0 让上方 header RowLayout 正常拦截左键
+        // 与 header 是兄弟 Item，独立锚定到同一标题栏区域，避免破坏 gridArea 对 header.bottom 的 anchor
+        MouseArea {
+            id: headerContextArea
+            anchors {
+                top: parent.top
+                left: parent.left
+                right: parent.right
+            }
+            height: 40
+            z: 0
+            acceptedButtons: Qt.RightButton
+            onClicked: function(mouse) {
+                var p = headerContextArea.mapToItem(root.contentItem, mouse.x, mouse.y)
+                root.lastPopupMouseY = p.y
+                contextMenu.popup()
+            }
+        }
+
         // 标题栏：标题 + 右上角置顶按钮（与通知中心标题栏同尺寸规范）
         RowLayout {
             id: header
@@ -691,6 +722,7 @@ Window {
                 right: parent.right
             }
             height: 40
+            z: 1
             spacing: 8
 
             Item {
@@ -705,6 +737,9 @@ Window {
                     font: DTK.fontManager.t4
                     elide: Text.ElideRight
                     color: palette.windowText
+
+                    // 标题截断时悬停显示全文
+                    Components.ElideTip { anchors.fill: parent }
                 }
             }
 
@@ -770,6 +805,7 @@ Window {
                     height: gridFlickable.contentHeight
 
                     Repeater {
+                        id: gridRepeater
                         model: root.instanceIds
                         delegate: Components.WidgetHostItem {
                             instanceId: modelData
@@ -872,6 +908,27 @@ Window {
             }
         }
 
+        // ===== 底部按钮行右键菜单：只接受右键，z:0 让下方 Arrange/Add 按钮正常拦截左键 =====
+        Item {
+            id: bottomContextArea
+            anchors {
+                left: parent.left
+                right: parent.right
+                bottom: parent.bottom
+                top: addButton.top
+            }
+            z: 0
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.RightButton
+                onClicked: function(mouse) {
+                    var p = bottomContextArea.mapToItem(root.contentItem, mouse.x, mouse.y)
+                    root.lastPopupMouseY = p.y
+                    contextMenu.popup()
+                }
+            }
+        }
+
         // ===== 底部左下角"整理"按钮 =====
         Button {
             id: arrangeButton
@@ -882,6 +939,7 @@ Window {
             width: 88
             height: 32
             text: qsTr("Arrange")
+            z: 1
             onClicked: autoArrangeNow()
         }
 
@@ -896,6 +954,7 @@ Window {
             height: 32
             icon.name: "add"
             text: qsTr("Add")
+            z: 1
             onClicked: {
                 // 与右键菜单/托盘入口一致：先按触发位置（按钮中心）重定位弹窗，
                 // 让二级面板趋向鼠标指针所在高度，而非默认贴面板顶部。
@@ -962,6 +1021,18 @@ Window {
         }
     }
 
+    // 组件 manifest 声明的自定义动作项（label 已由宿主按 locale 解析）
+    Component {
+        id: actionMenuEntry
+
+        MenuItem {
+            property string instanceId: ""
+            property string actionId: ""
+
+            onTriggered: root.triggerWidgetAction(instanceId, actionId)
+        }
+    }
+
     Component {
         id: menuSeparatorEntry
 
@@ -1021,6 +1092,21 @@ Window {
 
             if (hasSize)
                 widgetContextMenu.addEntry(menuSeparatorEntry, {})
+
+            // 组件 manifest 声明的自定义动作：按声明顺序渲染在尺寸项之后、
+            // 配置/移除之前；未声明时此处不产生任何菜单项
+            var widgetActions = root.asAppList(Panel.widgetManager.widgetActions(
+                widgetContextMenu.currentWidgetId))
+            for (var a = 0; a < widgetActions.length; ++a) {
+                var action = widgetActions[a]
+                if (!action || !action.id || !action.label)
+                    continue
+                widgetContextMenu.addEntry(actionMenuEntry, {
+                    "instanceId": instanceId,
+                    "actionId": String(action.id),
+                    "text": String(action.label)
+                })
+            }
 
             if (Panel.widgetManager.widgetSettingsSchema(
                     widgetContextMenu.currentWidgetId).length > 0) {

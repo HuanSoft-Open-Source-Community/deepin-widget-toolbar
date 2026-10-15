@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- 唱片圆盘：深灰主形 -->
+  <circle cx="128" cy="128" r="112" fill="#3B3B41"/>
+  <!-- 唱纹内圈 -->
+  <circle cx="128" cy="128" r="84" fill="none" stroke="#55555C" stroke-width="5"/>
+  <!-- 音符头（略倾斜） -->
+  <ellipse cx="98" cy="172" rx="36" ry="27" fill="#F2F2F5" transform="rotate(-20 98 172)"/>
+  <!-- 音符杆 -->
+  <path d="M126 70 h16 v104 h-16 z" fill="#F2F2F5"/>
+  <!-- 音符旗：deepin 蓝点缀 -->
+  <path d="M142 70 C 182 86, 204 122, 196 162 C 194 172, 180 173, 177 163 C 169 133, 156 112, 142 100 Z" fill="#2B6DE0"/>
+</svg>

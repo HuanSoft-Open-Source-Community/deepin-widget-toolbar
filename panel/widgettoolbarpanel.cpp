@@ -14,6 +14,7 @@
 #include "lyricssource.h"
 #include "mediaplayer.h"
 #include "mediaplayerregistry.h"
+#include "network.h"
 #include "systeminfo.h"
 #include "timezones.h"
 #include "widgethost.h"
@@ -70,11 +71,16 @@ bool WidgetToolbarPanel::init()
     m_widgetListModel->refresh();
 
     // 宿主能力代理（开放接口的一部分）：注册 QML 单例，小组件通过
-    // import org.deepin.widgettoolbar 1.0 使用 FileIO / SystemInfo / Lyrics /
-    // Timezones / ClockTime / WidgetHost
+    // import org.deepin.widgettoolbar 1.0 使用 FileIO / Network / SystemInfo /
+    // Lyrics / Timezones / ClockTime / WidgetHost
     auto *fileIO = new FileIO(this);
     fileIO->setAllowedRoot(m_widgetManager->widgetsDataRoot());
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "FileIO", fileIO);
+    // 网络访问代理：仅 https 的 JSON 拉取（TTL 缓存）与受限下载，落盘与
+    // FileIO 同一沙箱根（widgets 数据目录）
+    auto *network = new Network(this);
+    network->setAllowedRoot(m_widgetManager->widgetsDataRoot());
+    qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "Network", network);
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "SystemInfo", new SystemInfo(this));
     // 端闱乐部歌词代理：小组件通过它读取歌词
     qmlRegisterSingletonInstance("org.deepin.widgettoolbar", 1, 0, "Lyrics", new LyricsSource(this));
@@ -107,9 +113,11 @@ bool WidgetToolbarPanel::init()
         m_pinned = m_config->value("pinned", true).toBool();
         m_cardTransparent = m_config->value("cardTransparent", false).toBool();
         m_showCardNames = m_config->value("showCardNames", true).toBool();
+        m_networkConsentGranted = m_config->value("networkConsentGranted", false).toBool();
     } else {
         qWarning() << "DConfig invalid, use defaults (visible=true, pinned=true,"
-                      " cardTransparent=false, showCardNames=true)";
+                      " cardTransparent=false, showCardNames=true,"
+                      " networkConsentGranted=false)";
     }
 
     // 调试模式：缺省关闭，只有开启时 DebugLogger 才向磁盘写日志（见 debuglogger.cpp）。
@@ -381,6 +389,26 @@ void WidgetToolbarPanel::setShowCardNames(bool showCardNames)
     }
     DEBUG_LOG(panel, QStringLiteral("showCardNames -> %1").arg(showCardNames));
     Q_EMIT showCardNamesChanged(showCardNames);
+}
+
+// 网络服务同意标记：与其余面板级开关同范式——先持久化、后发信号。全局一次同意，
+// 由添加面板在网络协议弹窗"同意并添加"时写入，此后联网组件不再询问。
+bool WidgetToolbarPanel::networkConsentGranted() const
+{
+    return m_networkConsentGranted;
+}
+
+void WidgetToolbarPanel::setNetworkConsentGranted(bool granted)
+{
+    if (m_networkConsentGranted == granted) {
+        return;
+    }
+    m_networkConsentGranted = granted;
+    if (m_config && m_config->isValid()) {
+        m_config->setValue("networkConsentGranted", granted);
+    }
+    DEBUG_LOG(panel, QStringLiteral("networkConsentGranted -> %1").arg(granted));
+    Q_EMIT networkConsentGrantedChanged(granted);
 }
 
 void WidgetToolbarPanel::toggle()

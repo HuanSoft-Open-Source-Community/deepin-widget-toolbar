@@ -11,3 +11,4 @@ singleton ColorUtils 1.0 ColorUtils.qml
 AppPickerDialog 1.0 AppPickerDialog.qml
 AppPickerBody 1.0 AppPickerBody.qml
 AppPickerLevel3 1.0 AppPickerLevel3.qml
+ElideTip 1.0 ElideTip.qml

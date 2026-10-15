@@ -78,6 +78,30 @@
         <source>Install failed: invalid or unsafe package</source>
         <translation></translation>
     </message>
+    <message>
+        <source>Network Services Notice</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Decline</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Agree &amp; Add</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>You can decline: cards that need the network will not be added then. Declining does not change any setting, so you can agree later at any time.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>This type of card accesses third-party network services through the panel&apos;s network proxy to fetch online content. All requests go through the proxy only (https only, no direct connection).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The service is used only to fetch online content. No personal data is uploaded.</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>AppPickerBody</name>
@@ -169,6 +193,14 @@
         <source>Add</source>
         <translation></translation>
     </message>
+    <message>
+        <source>Choose image…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>WidgetSettingsPopup</name>
@@ -179,6 +211,14 @@
     <message>
         <source>This widget has no configurable options</source>
         <translation></translation>
+    </message>
+    <message>
+        <source>Choose an image</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Images</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -346,6 +386,30 @@
     <message>
         <source>No song playing</source>
         <translation></translation>
+    </message>
+    <message>
+        <source>Service error</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Network timeout</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Network unavailable</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Invalid response</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Image unavailable</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Choose an image in settings</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>

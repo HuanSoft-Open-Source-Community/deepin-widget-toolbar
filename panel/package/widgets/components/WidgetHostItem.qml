@@ -49,6 +49,9 @@ Item {
     // 坐标映射目标：拖拽 → 网格画布；右键菜单 → 窗口内容区
     property var dragSurface: null
     property var menuSurface: null
+    // 小组件加载的根对象（未加载/加载中为 null）：供主面板右键菜单
+    // 调用组件 manifest 声明的 actionTriggered(actionId) 等宿主接口
+    readonly property alias widgetItem: widgetLoader.item
 
     // ===== 事件信号（坐标为 dragSurface/menuSurface 空间） =====
     signal dragStartRequested(var host, real x, real y)
@@ -138,16 +141,24 @@ Item {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
+
+        // 卡片名截断时悬停显示全文；面板拖拽中关闭，避免拖卡经过名称条时
+        // 误弹气泡（HoverHandler 被动跟踪，不影响右键菜单层）
+        ElideTip {
+            anchors.fill: parent
+            enabled: !root.panelDragging
+        }
     }
 
     // 拖放层：普通点击透传给组件内容，长按进入拖拽。
     // 与 Loader 同样锚定 cardBox：本层局部坐标即小组件坐标，
     // 卡片缩小后 handleHost* 转交的坐标才不会偏移。
+    // 悬停职责已剥离给下面的 hoverForward：本层刻意不开 hoverEnabled，
+    // 只处理按键通道（按下抓取/长按拖拽/位置转发/释放/点击透传）。
     MouseArea {
         id: widgetDragArea
         anchors.fill: cardBox
         z: widgetLoader.z + 1
-        hoverEnabled: true
         acceptedButtons: Qt.LeftButton
         pressAndHoldInterval: 500
         // 普通点击转交组件内容处理（如便签取焦），拖拽由 pressAndHold 接管。
@@ -167,15 +178,11 @@ Item {
             root.dragStartRequested(root, p.x, p.y)
         }
         onPositionChanged: function(mouse) {
+            // 仅拖拽中需要位置转发；无按键悬停移动改由 hoverForward 观察。
             if (root.panelDragging) {
                 var p = widgetDragArea.mapToItem(root.dragSurface, mouse.x, mouse.y)
                 root.dragMoveRequested(root, p.x, p.y)
-                return
             }
-            var hoverWidget = widgetLoader.item
-            if (hoverWidget
-                && typeof hoverWidget.handleHostHover === "function")
-                hoverWidget.handleHostHover(mouse.x, mouse.y)
         }
         onReleased: function(mouse) {
             var releasedWidget = widgetLoader.item
@@ -199,12 +206,6 @@ Item {
             if (root.panelDragging)
                 root.dragEndRequested(root)
         }
-        onExited: function() {
-            var hoverWidget = widgetLoader.item
-            if (hoverWidget
-                && typeof hoverWidget.handleHostHover === "function")
-                hoverWidget.handleHostHover(-1, -1)
-        }
         onClicked: function(mouse) {
             if (suppressClick) {
                 suppressClick = false
@@ -217,6 +218,61 @@ Item {
             var widget = widgetLoader.item
             if (widget && typeof widget.handleHostClick === "function")
                 widget.handleHostClick(mouse.x, mouse.y)
+        }
+    }
+
+    // 悬停转发器（替代旧 widgetDragArea 的 hoverEnabled + onExited 路径）。
+    //
+    // 为什么 HoverHandler 不能挂在 widgetDragArea 上（哪怕挂它内部）：
+    // hoverEnabled:true 的 MouseArea 会成为命中位置唯一的“悬停叶子”，
+    // QQuickDeliveryAgent 命中它（置 hoveredLeafItemFound）后只继续走
+    // 祖先链，不再访问其兄弟子树——卡片内 14 处 ElideTip 的 HoverHandler
+    // 正是被 widgetLoader 的后声明兄弟 widgetDragArea 这样遮蔽的。换成
+    // HoverHandler 挂在覆盖层里也无济于事：非阻塞 HoverHandler 命中后
+    // 同样置 hoveredLeafItemFound（Qt 6.8 源码
+    // QQuickDeliveryAgentPrivate::deliverHoverEventRecursive：
+    // “Don't propagate to siblings, only to ancestors”），兄弟子树
+    // widgetLoader 一样收不到悬停。qmltest 场景 X 实证：HH 挂覆盖层内，
+    // 子树 HH hovered=false；场景 Y 实证：HH 挂共同祖先后二者同时 true。
+    //
+    // 故挂在 widgetLoader 与 widgetDragArea 的共同祖先 root：悬停沿
+    // 祖先链投递，卡片内 ElideTip 与本转发器同时收到（多被动处理器共存）。
+    // HoverHandler 不抓按键，按下/长按/释放/点击仍走 widgetDragArea，
+    // 右键仍走独立的 widgetContextArea，互不影响。
+    HoverHandler {
+        id: hoverForward
+
+        // point.position 为 root 局部坐标；cardBox 位于 root 的 (0,0)，
+        // widgetDragArea 又 anchors.fill cardBox，故卡片内坐标与旧
+        // mouse.x/y 逐像素同源。落在卡片几何外（下方名称条）时按旧
+        // onExited 语义转发 (-1,-1)，两个消费方（applauncher/player）
+        // 自身命中检测也会把越界坐标归为 -1，双保险。
+        onPointChanged: {
+            if (root.panelDragging)
+                return
+            var hoverWidget = widgetLoader.item
+            if (hoverWidget
+                && typeof hoverWidget.handleHostHover === "function") {
+                var pt = hoverForward.point.position
+                if (pt.x < 0 || pt.y < 0
+                    || pt.x >= cardBox.width || pt.y >= cardBox.height)
+                    hoverWidget.handleHostHover(-1, -1)
+                else
+                    hoverWidget.handleHostHover(pt.x, pt.y)
+            }
+        }
+
+        // 指针移出整个宿主槽位（含移出窗口）：复位组件悬停态，对应旧
+        // MouseArea 的 onExited。按键拖拽期间抓取在身、HoverHandler 不会
+        // 翻转（Qt 6.8 源码：press/release 事件不改 HoverHandler 状态），
+        // panelDragging 门控仅作双保险。
+        onHoveredChanged: {
+            if (hovered || root.panelDragging)
+                return
+            var hoverWidget = widgetLoader.item
+            if (hoverWidget
+                && typeof hoverWidget.handleHostHover === "function")
+                hoverWidget.handleHostHover(-1, -1)
         }
     }
 

@@ -10,6 +10,7 @@ import Qt5Compat.GraphicalEffects
 import org.deepin.dtk 1.0
 import org.deepin.dtk.style 1.0 as DStyle
 import org.deepin.ds 1.0
+import "widgets/components" as Components
 
 // 添加小组件弹出面板：
 //  - 基于 PanelPopup（DPanel 辅助窗口）：无 Qt 窗口标题、失焦自动关闭、跟随主窗口定位
@@ -33,6 +34,8 @@ PanelPopup {
     // 安装/卸载操作结果提示（临时显示）
     property string statusText: ""
     property bool statusError: false
+    // 网络协议弹窗记录的待添加组件：同意后立即添加；不同意/Esc/关闭则清空不添加
+    property string pendingNetworkWidgetId: ""
     function showStatus(text, isError) {
         control.statusText = text
         control.statusError = isError
@@ -104,6 +107,7 @@ PanelPopup {
                 }
 
                 ScrollBar.vertical: ScrollBar {
+                    id: builtinVScrollBar
                     policy: ScrollBar.AsNeeded
                     anchors.right: parent.right
                 }
@@ -117,10 +121,13 @@ PanelPopup {
                     required property bool builtin
                     required property bool installed
 
+                    // 叠加式滚动条出现时为其让出宽度，避免遮盖行右缘
+                    //（无循环：滚动条可见性只取决于内容高与视口高）
                     width: builtinList.width
+                        - (builtinVScrollBar.visible ? builtinVScrollBar.width + 4 : 0)
                     height: 44
                     radius: DTK.platformTheme.windowRadius
-                    color: addHover.containsMouse || addBtnArea.containsMouse
+                    color: addHover.containsMouse
                         ? Qt.rgba(0, 0, 0, 0.08) : "transparent"
 
                     RowLayout {
@@ -135,6 +142,8 @@ PanelPopup {
                             source: icon
                             sourceSize.width: 24
                             sourceSize.height: 24
+                            fillMode: Image.PreserveAspectFit
+                            mipmap: true
                         }
 
                         Text {
@@ -143,6 +152,8 @@ PanelPopup {
                             font: DTK.fontManager.t6
                             elide: Text.ElideRight
                             color: palette.windowText
+                            // 组件名截断时悬停显示全文
+                            Components.ElideTip { anchors.fill: parent }
                         }
 
                         Text {
@@ -158,7 +169,7 @@ PanelPopup {
                             Layout.preferredWidth: 56
                             Layout.preferredHeight: 26
                             radius: DTK.platformTheme.windowRadius
-                            color: installed ? "transparent" : (addBtnArea.containsMouse ? Qt.rgba(0, 0, 0, 0.12) : Qt.rgba(0, 0, 0, 0.06))
+                            color: installed ? "transparent" : (addHover.containsMouse ? Qt.rgba(0, 0, 0, 0.12) : Qt.rgba(0, 0, 0, 0.06))
 
                             Text {
                                 anchors.centerIn: parent
@@ -172,7 +183,18 @@ PanelPopup {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 enabled: !installed
-                                onClicked: Panel.widgetManager.addWidget(widgetId)
+                                onClicked: {
+                                    // 网络同意门控：首次添加声明 requiresNetwork 的组件时
+                                    // 先弹协议弹窗（记录待添加组件，不立即添加）；同意后
+                                    // 全局落盘并执行本次添加，未声明/已同意则直接添加
+                                    if (Panel.widgetManager.widgetRequiresNetwork(widgetId)
+                                            && !Panel.networkConsentGranted) {
+                                        control.pendingNetworkWidgetId = widgetId
+                                        networkConsentDialog.show()
+                                    } else {
+                                        Panel.widgetManager.addWidget(widgetId)
+                                    }
+                                }
                             }
                         }
                     }
@@ -210,6 +232,7 @@ PanelPopup {
                 }
 
                 ScrollBar.vertical: ScrollBar {
+                    id: addedVScrollBar
                     policy: ScrollBar.AsNeeded
                     anchors.right: parent.right
                 }
@@ -217,7 +240,10 @@ PanelPopup {
                 delegate: Rectangle {
                     required property string modelData
 
+                    // 叠加式滚动条出现时为其让出宽度，避免遮盖行右缘
+                    //（无循环：滚动条可见性只取决于内容高与视口高）
                     width: addedList.width
+                        - (addedVScrollBar.visible ? addedVScrollBar.width + 4 : 0)
                     height: 40
                     radius: DTK.platformTheme.windowRadius
                     color: "transparent"
@@ -235,6 +261,8 @@ PanelPopup {
                             font: DTK.fontManager.t6
                             elide: Text.ElideRight
                             color: palette.windowText
+                            // 实例名截断时悬停显示全文
+                            Components.ElideTip { anchors.fill: parent }
                         }
 
                         // 第三方小组件：卸载（删除包）；内置不显示
@@ -272,6 +300,8 @@ PanelPopup {
                     : palette.windowText
                 wrapMode: Text.WrapAnywhere
                 elide: Text.ElideRight
+                // 状态文案截断时悬停显示全文
+                Components.ElideTip { anchors.fill: parent }
             }
 
             Button {
@@ -292,6 +322,85 @@ PanelPopup {
                     control.showStatus(qsTr("Widget installed"), false)
                 } else {
                     control.showStatus(qsTr("Install failed: invalid or unsafe package"), true)
+                }
+            }
+        }
+
+        // 网络服务提示确认框：首次添加声明 requiresNetwork 的组件时弹出。
+        // 同意 → 写 DConfig（全局一次，重启保留）并立即执行本次添加；
+        // 不同意/Esc/关闭窗口 = 不添加、不写配置，可随时再次发起并同意。
+        // 使用 DTK DialogWindow 独立窗口：面板（320px）太窄，嵌入式确认框
+        // 的按钮行（DialogButtonBox 按文本自然宽度排布、不收缩）会横向溢出；
+        // 独立窗口 420px 宽、高度自适应内容，从根上消除宽度约束。
+        // 注：DialogWindow 是 Window（非可视 Item），按 PanelPopup 的 default
+        // property 约束（只接受可视 Item）必须声明在 contentCard 内部。
+        DialogWindow {
+            id: networkConsentDialog
+            title: qsTr("Network Services Notice")
+            width: 420
+            modality: Qt.WindowModal
+
+            // 任意关闭路径（Decline/Esc/标题栏叉号）后清理待添加组件，不残留
+            // 误添加。DialogWindow 内部把 close 拦截为 hide()，故状态清理挂在
+            // onVisibleChanged 而非 onClosed。
+            onVisibleChanged: if (!visible)
+                control.pendingNetworkWidgetId = ""
+
+            ColumnLayout {
+                width: parent.width
+                spacing: 12
+                focus: true
+                Keys.onEscapePressed: networkConsentDialog.close()
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("This type of card accesses third-party network services through the panel's network proxy to fetch online content. All requests go through the proxy only (https only, no direct connection).")
+                    font: DTK.fontManager.t6
+                    color: palette.windowText
+                    opacity: 0.8
+                    wrapMode: Text.Wrap
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("The service is used only to fetch online content. No personal data is uploaded.")
+                    font: DTK.fontManager.t6
+                    color: palette.windowText
+                    opacity: 0.8
+                    wrapMode: Text.Wrap
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("You can decline: cards that need the network will not be added then. Declining does not change any setting, so you can agree later at any time.")
+                    font: DTK.fontManager.t6
+                    color: palette.windowText
+                    opacity: 0.8
+                    wrapMode: Text.Wrap
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 10
+
+                    Button {
+                        text: qsTr("Decline")
+                        onClicked: networkConsentDialog.close()
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    RecommandButton {
+                        text: qsTr("Agree & Add")
+                        onClicked: {
+                            // 全局同意一次（DConfig 落盘，重启保留），随后立即添加本次组件
+                            Panel.networkConsentGranted = true
+                            if (control.pendingNetworkWidgetId.length > 0)
+                                Panel.widgetManager.addWidget(control.pendingNetworkWidgetId)
+                            networkConsentDialog.close()
+                        }
+                    }
                 }
             }
         }

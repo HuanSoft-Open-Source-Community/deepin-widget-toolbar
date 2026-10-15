@@ -62,6 +62,15 @@ private:
     // kwin 在窗口首次管理时按 motif 判定 isMaximizable()，无 functions 标志时默认
     // 允许最大化；显式白名单让 kwin 判定不可最大化，从根源上阻止自动最大化。
     void enforceMotifHints();
+    // 置底映射后主动降级到 NormalLayer 底部：kwin 对 unmap 执行 releaseWindow()
+    // 完全解除管理，remap 等同新建窗口（append 到层顶），而 dock+keepBelow 只决定
+    // 归属 NormalLayer、层内不自动降低——故每次置底面板 Show 后经 EWMH
+    // _NET_RESTACK_WINDOW（detail=Below）显式请求降序。仅 xcb 且 pinned=false 生效。
+    void enforceBelowStacking();
+    // 映射完成后安排三次有界降级尝试（即时 + 150ms/500ms 复查）：
+    // 覆盖 setFlags 重建窗口与 kwin 处理 MapRequest、重建受管记录的时序；
+    // 置顶时不调度（调用方与执行侧双重检查 !m_pinned）。
+    void scheduleBelowStacking();
 
     QQuickWindow *m_window = nullptr;
     bool m_pinned = true;
@@ -72,6 +81,8 @@ private:
     xcb_atom_t m_normalAtom = 0;
     // 缓存的 X11 原子：_MOTIF_WM_HINTS（enforceMotifHints 使用）
     xcb_atom_t m_motifHintsAtom = 0;
+    // 缓存的 X11 原子：_NET_RESTACK_WINDOW（enforceBelowStacking 使用）
+    xcb_atom_t m_restackAtom = 0;
     // X11 下按当前边距短轮询校准窗口几何，覆盖 hide/show 重建、screen 迟到等
     // 事件错位场景（约 5s 后自动停止）；Wayland 不启动。
     QTimer m_geometryTimer;

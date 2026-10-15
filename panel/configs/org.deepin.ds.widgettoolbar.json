@@ -46,6 +46,17 @@
             "permissions": "readwrite",
             "visibility": "private"
         },
+        "networkConsentGranted": {
+            "value": false,
+            "serial": 0,
+            "flags": [],
+            "name": "Network consent granted",
+            "name[zh_CN]": "已同意网络服务提示",
+            "description": "Whether the user agreed to the network services notice shown before adding widgets that require network access",
+            "description[zh_CN]": "用户是否已同意添加联网类小组件前展示的网络服务提示；同意后联网卡片可直接添加",
+            "permissions": "readwrite",
+            "visibility": "private"
+        },
         "debugMode": {
             "value": false,
             "serial": 0,

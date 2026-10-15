@@ -75,4 +75,25 @@ QVariantMap defaultConfig(const QVariantList &schema)
     return config;
 }
 
+bool isKnownSettingType(const QString &type)
+{
+    static const QStringList kTypes = {
+        QStringLiteral("boolean"), QStringLiteral("enum"),
+        QStringLiteral("color"), QStringLiteral("font"),
+        QStringLiteral("string"), QStringLiteral("integer"),
+        QStringLiteral("timezoneList"), QStringLiteral("player"),
+        QStringLiteral("launcherList"), QStringLiteral("image"),
+        QStringLiteral("slider")
+    };
+    return kTypes.contains(type);
+}
+
+bool isValidImageValue(const QString &value)
+{
+    if (value.isEmpty())
+        return true;
+    // 相对 dataDir 的相对路径：禁绝对路径与 ".." 上跳
+    return !value.startsWith(QLatin1Char('/')) && !value.contains(QLatin1String(".."));
+}
+
 } // namespace WidgetSchema

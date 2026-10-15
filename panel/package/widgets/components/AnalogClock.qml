@@ -233,5 +233,8 @@ Item {
         font.pixelSize: Math.max(7, Math.min(13, parent.width * 0.035))
         color: root.highlighted ? root.accentColor : root.textColor
         elide: Text.ElideRight
+
+        // 表盘下方地区名截断时悬停显示全文
+        ElideTip { anchors.fill: parent }
     }
 }

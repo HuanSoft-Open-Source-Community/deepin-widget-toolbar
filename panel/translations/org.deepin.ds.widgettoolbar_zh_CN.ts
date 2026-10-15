@@ -78,6 +78,30 @@
         <source>Install failed: invalid or unsafe package</source>
         <translation>安装失败：无效或不安全的安装包</translation>
     </message>
+    <message>
+        <source>Network Services Notice</source>
+        <translation>使用网络服务提示</translation>
+    </message>
+    <message>
+        <source>Decline</source>
+        <translation>不同意</translation>
+    </message>
+    <message>
+        <source>Agree &amp; Add</source>
+        <translation>同意并添加</translation>
+    </message>
+    <message>
+        <source>You can decline: cards that need the network will not be added then. Declining does not change any setting, so you can agree later at any time.</source>
+        <translation>你可以拒绝：拒绝后需联网的卡片将不会被添加。拒绝不会改动任何设置，之后随时可以再同意。</translation>
+    </message>
+    <message>
+        <source>This type of card accesses third-party network services through the panel&apos;s network proxy to fetch online content. All requests go through the proxy only (https only, no direct connection).</source>
+        <translation>此类卡片通过面板的网络代理访问第三方网络服务以在线获取内容。所有请求均经代理转发（仅 https，不会直连）。</translation>
+    </message>
+    <message>
+        <source>The service is used only to fetch online content. No personal data is uploaded.</source>
+        <translation>该服务仅用于获取在线内容，不会上传任何个人数据。</translation>
+    </message>
 </context>
 <context>
     <name>AppPickerBody</name>
@@ -169,6 +193,14 @@
         <source>Add</source>
         <translation>添加</translation>
     </message>
+    <message>
+        <source>Choose image…</source>
+        <translation>选择图片…</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>清除</translation>
+    </message>
 </context>
 <context>
     <name>WidgetSettingsPopup</name>
@@ -179,6 +211,14 @@
     <message>
         <source>This widget has no configurable options</source>
         <translation>该小组件没有可配置选项</translation>
+    </message>
+    <message>
+        <source>Choose an image</source>
+        <translation>选择图片</translation>
+    </message>
+    <message>
+        <source>Images</source>
+        <translation>图片</translation>
     </message>
 </context>
 <context>
@@ -346,6 +386,30 @@
     <message>
         <source>No song playing</source>
         <translation>无歌曲</translation>
+    </message>
+    <message>
+        <source>Service error</source>
+        <translation>服务错误</translation>
+    </message>
+    <message>
+        <source>Network timeout</source>
+        <translation>网络超时</translation>
+    </message>
+    <message>
+        <source>Network unavailable</source>
+        <translation>网络不可用</translation>
+    </message>
+    <message>
+        <source>Invalid response</source>
+        <translation>响应无效</translation>
+    </message>
+    <message>
+        <source>Image unavailable</source>
+        <translation>图片不可用</translation>
+    </message>
+    <message>
+        <source>Choose an image in settings</source>
+        <translation>点击设置选择图片</translation>
     </message>
 </context>
 </TS>

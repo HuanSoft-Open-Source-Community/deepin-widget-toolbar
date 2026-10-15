@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- 表盘外圈：深灰主形 -->
+  <circle cx="128" cy="128" r="112" fill="#3B3B41"/>
+  <!-- 表盘面 -->
+  <circle cx="128" cy="128" r="90" fill="#F2F2F5"/>
+  <!-- 12/3/6/9 刻度 -->
+  <circle cx="128" cy="54" r="9" fill="#3B3B41"/>
+  <circle cx="202" cy="128" r="9" fill="#3B3B41"/>
+  <circle cx="128" cy="202" r="9" fill="#3B3B41"/>
+  <circle cx="54" cy="128" r="9" fill="#3B3B41"/>
+  <!-- 秒针：deepin 蓝点缀 -->
+  <path d="M128 128 L89 195" stroke="#2B6DE0" stroke-width="10" stroke-linecap="round"/>
+  <!-- 时针（指向 10 点） -->
+  <path d="M128 128 L85 103" stroke="#3B3B41" stroke-width="20" stroke-linecap="round"/>
+  <!-- 分针（指向 2 点） -->
+  <path d="M128 128 L190 92" stroke="#3B3B41" stroke-width="20" stroke-linecap="round"/>
+  <!-- 中心轴 -->
+  <circle cx="128" cy="128" r="13" fill="#2B6DE0"/>
+</svg>

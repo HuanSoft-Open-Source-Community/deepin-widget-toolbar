@@ -31,6 +31,14 @@ public:
     // 小组件请求宿主打开"选择程序"三级面板（应用快捷启动器用）：
     // index 为待编辑的启动器槽位（-1 = 追加新单元），宿主确认后直接回写实例配置
     Q_INVOKABLE void requestOpenAppPicker(const QString &instanceId, int index);
+    // 导入实例图片（image 设置类型用）：校验来源文件存在且后缀为
+    // png/jpg/jpeg/bmp/webp 后，由宿主复制到 <dataDir>/<instanceId>/img-<时间戳>.<后缀>
+    //（小组件沙箱不能读外部文件，文件对话框来源路径在沙箱外，必须由宿主复制）。
+    // 成功返回相对 dataDir 的路径（如 "<instanceId>/img-1727.jpg"），失败返回空串
+    Q_INVOKABLE QString importInstanceImage(const QString &instanceId, const QString &sourceFilePath);
+    // 删除实例图片：仅允许删除 <dataDir>/<instanceId>/ 内的文件（规范化 +
+    // 符号链接解析双重校验防路径逃逸）；文件存在且删除成功返回 true
+    Q_INVOKABLE bool removeInstanceImage(const QString &instanceId, const QString &relativePath);
 
 Q_SIGNALS:
     // 打开选择面板请求（宿主 QML 监听并负责弹窗定位）

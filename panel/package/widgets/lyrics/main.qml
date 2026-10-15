@@ -77,6 +77,8 @@ Components.WidgetCard {
             font: DTK.fontManager.t6
             color: root.titleTextColor
             elide: Text.ElideRight
+            // 标题截断时悬停显示全文
+            Components.ElideTip { anchors.fill: parent }
         }
 
         Rectangle {
@@ -123,6 +125,8 @@ Components.WidgetCard {
             maximumLineCount: 2
             Behavior on color { ColorAnimation { duration: 200 } }
             Behavior on opacity { NumberAnimation { duration: 200 } }
+            // 歌词截断时悬停显示全文
+            Components.ElideTip { anchors.fill: parent }
         }
 
         Text {
@@ -143,6 +147,8 @@ Components.WidgetCard {
             maximumLineCount: 2
             Behavior on color { ColorAnimation { duration: 200 } }
             Behavior on opacity { NumberAnimation { duration: 200 } }
+            // 歌词截断时悬停显示全文
+            Components.ElideTip { anchors.fill: parent }
         }
     }
 

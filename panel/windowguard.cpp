@@ -293,6 +293,76 @@ void WindowGuard::enforceMotifHints()
     xcb_flush(conn);
 }
 
+// 置底面板映射后主动降级（见头文件注释）：kwin 对面板 unmap 执行 releaseWindow
+// 完全解除管理，恢复 map 即新建窗口 append 到 NormalLayer 顶部，而 dock+keepBelow
+// 只决定层归属、层内不自动降低。这里由面板向 root 发 _NET_RESTACK_WINDOW client
+// message（detail=Below）请求降级，面板落到 NormalLayer 底部、低于焦点窗。
+// 注意 source 必须为 FromTool：kwin Workspace::lowerWindowRequest（layers.cpp）
+// 对 FromApplication 且带 _NET_WM_USER_TIME 的窗口只走 lowerWindowWithinApplication，
+// 仅降到同应用最低窗口之下——dde-shell 单进程托管的 dock/桌面与面板同
+// WM_CLIENT_LEADER（X11Window::belongToSameApplication），dock 位于 DockLayer
+// （在普通窗之上），面板会被插在 dock 之下、仍高于焦点窗；FromTool 才走
+// lowerWindow 无条件降到栈底。dde-shell 属桌面 shell 组件，FromTool 语义正当。
+// 仅 xcb 平台且 pinned=false 时生效，Wayland 下为无操作。
+void WindowGuard::enforceBelowStacking()
+{
+    if (!m_window || !m_window->handle()
+        || QGuiApplication::platformName() != "xcb" || m_pinned) {
+        return;
+    }
+    auto *x11App = qGuiApp->nativeInterface<QNativeInterface::QX11Application>();
+    if (!x11App || !x11App->connection()) {
+        return;
+    }
+    xcb_connection_t *conn = x11App->connection();
+
+    // 惰性缓存 _NET_RESTACK_WINDOW 原子（首次使用时 intern）
+    if (m_restackAtom == 0) {
+        const char *name = "_NET_RESTACK_WINDOW";
+        xcb_intern_atom_reply_t *reply = xcb_intern_atom_reply(conn,
+            xcb_intern_atom(conn, 0, std::strlen(name), name), nullptr);
+        if (reply) {
+            m_restackAtom = reply->atom;
+            free(reply);
+        }
+    }
+    if (m_restackAtom == 0) {
+        return;
+    }
+
+    const xcb_window_t root = xcb_setup_roots_iterator(xcb_get_setup(conn)).data->root;
+    // 线格式与 kwindowsystem NETRootInfo::restackRequest（netwm.cpp）一致：
+    // data32 = [source, above_sibling, detail, timestamp, 0]。
+    xcb_client_message_event_t ev;
+    std::memset(&ev, 0, sizeof(ev));
+    ev.response_type = XCB_CLIENT_MESSAGE;
+    ev.format = 32;
+    ev.window = m_window->winId();
+    ev.type = m_restackAtom;
+    ev.data.data32[0] = 2; // NET::FromTool：见函数注释，FromApplication 会被 kwin 降格为应用内降序
+    ev.data.data32[1] = 0; // above sibling：无，配合 Below 即降到层底
+    ev.data.data32[2] = XCB_STACK_MODE_BELOW;
+    ev.data.data32[3] = XCB_CURRENT_TIME;
+    xcb_send_event(conn, 0, root,
+                   XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY,
+                   reinterpret_cast<const char *>(&ev));
+    xcb_flush(conn);
+}
+
+// 置底面板映射完成后安排降级（见头文件注释）：即时一次 + 150ms/500ms 两次复查。
+// 调用方须已确认 !m_pinned（Show/SurfaceCreated 分支），置顶时完全不调度。
+void WindowGuard::scheduleBelowStacking()
+{
+    QTimer::singleShot(0, this, &WindowGuard::enforceBelowStacking);
+    for (int delay : {150, 500}) {
+        QTimer::singleShot(delay, this, [this]() {
+            if (!m_pinned && m_window && m_window->isVisible()) {
+                enforceBelowStacking();
+            }
+        });
+    }
+}
+
 bool WindowGuard::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched == m_window) {
@@ -309,6 +379,11 @@ bool WindowGuard::eventFilter(QObject *watched, QEvent *event)
             m_geometryTicks = 0;
             m_geometryTimer.start();
             QTimer::singleShot(0, this, &WindowGuard::enforceFrameless);
+            // 置底面板：映射完成后请求降序（排队于 enforceFrameless 之后）；
+            // 置顶时完全不调度。
+            if (!m_pinned) {
+                scheduleBelowStacking();
+            }
             break;
         case QEvent::Expose:
             QTimer::singleShot(0, this, &WindowGuard::enforceFrameless);
@@ -322,6 +397,11 @@ bool WindowGuard::eventFilter(QObject *watched, QEvent *event)
                 // _q_xcb_wm_window_type + 本类/applyLayerFlags 的 flags 组合），
                 // 这里的执行只是事件后的恢复与双保险。
                 enforceFrameless();
+                // 屏幕变更等场景重建原生窗口后重新映射，kwin 同样 append 到层顶；
+                // 置底面板在此也请求降级（与 Show 分支保持一致）。
+                if (!m_pinned) {
+                    scheduleBelowStacking();
+                }
             }
             break;
         }
