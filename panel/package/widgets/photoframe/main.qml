@@ -5,6 +5,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.deepin.dtk 1.0
+import org.deepin.ds 1.0
 import org.deepin.widgettoolbar 1.0
 import Qt5Compat.GraphicalEffects
 import "../components" as Components
@@ -15,16 +16,20 @@ import "../components" as Components
 // 数据层（经宿主 Network/FileIO 代理，全部落在实例工作目录内）：
 //  - 工作目录 = dataDir/<instanceId>/；current.jpg 当前相片，
 //    meta.json 记 {"mode","imageUrl","fetchedDate","dayOffset","blur"}；
-//  - 五种来源：bingDaily（blur∈[1,50] 走模糊端点，否则图片流直达）、
-//    bingHistory（/v1?d=N 或模糊端点）；两 Bing 模式主源下载失败均回退
-//    官方 HPImageArchive JSON（bingDaily idx=0、bingHistory idx=回看天数）；
-//    bingRandom（/v1/rand，同样两阶段自适应：先 JSON 试探挖直链，
-//    json-parse 失败则视端点为图片流整段下载）、url（仅 https）、
-//    local（无网络，取 image 设置值）；
+//  - 五种来源：bingDaily、bingHistory（回看天数 1-7 随机）、bingRandom——
+//    三个 Bing 模式的端点以图片流为主，整段 download 一次到位
+//    （先 JSON 试探会撞宿主 1MB 响应上限，且同图下载两遍）；
+//    但端点偶发返回 JSON 直链而非图片流，故下载完成后按内容分流——
+//    探针解码确认是图片才写 meta/进 ready，JSON 挖直链二跳一次，
+//    其余按"无效响应"报错（meta 只记可显示的图片，坏内容不进缓存）；
+//    主源（api.bingimg.cn）下载失败回退官方 HPImageArchive JSON
+//    （bingDaily idx=0、bingHistory idx=随机回看天、bingRandom 随机 idx∈[0,7]）；
+//    url（仅 https）、local（无网络，取 image 设置值）；
 //  - 缓存命中规则见 cacheHit()：meta 与当前配置一致且 current.jpg 存在
 //    即直接显示；右键"刷新"是唯一强制重新取图通道；
 //  - 请求去重：pendingJsonId/pendingDownloadId 只认最新 requestId，
-//    旧回调一律丢弃，防止陈旧响应污染新状态。
+//    旧回调一律丢弃；探针用 probeGeneration/activeProbeGen 代际校验，
+//    陈旧探针结果同样丢弃，防止频繁刷新时卡在 loading。
 Item {
     id: root
 
@@ -49,28 +54,19 @@ Item {
         }
         return "bingDaily"
     }
-    readonly property int historyDaysAgo: {
-        var v = widgetConfig ? Number(widgetConfig.historyDaysAgo) : NaN
-        if (!isFinite(v))
-            v = 1
-        return Math.max(1, Math.min(7, Math.round(v)))
-    }
-    readonly property int bingBlur: {
-        var v = widgetConfig ? Number(widgetConfig.bingBlur) : NaN
-        if (!isFinite(v))
-            v = 0
-        return Math.max(0, Math.min(50, Math.round(v)))
-    }
-    // 1..50 才走模糊端点，其余（含越界钳回 0）视作不模糊
-    readonly property int effectiveBlur: (root.bingBlur >= 1 && root.bingBlur <= 50)
-        ? root.bingBlur : 0
     readonly property string customUrl: widgetConfig
         && typeof widgetConfig.customUrl === "string" ? widgetConfig.customUrl.trim() : ""
     readonly property string localImage: widgetConfig
         && typeof widgetConfig.localImage === "string" ? widgetConfig.localImage : ""
     readonly property string frameStyle: {
         var v = widgetConfig ? widgetConfig.frameStyle : null
-        return (v === "none" || v === "solid" || v === "dashed") ? v : "solid"
+        var styles = ["none", "solid", "dashed", "dotted", "dashDot",
+                      "double", "dashLong", "dotDense"]
+        for (var i = 0; i < styles.length; i++) {
+            if (v === styles[i])
+                return v
+        }
+        return "solid"
     }
     readonly property color frameColor: Components.ColorUtils.resolveColor(
         widgetConfig ? widgetConfig.frameColor : null, "#FFFFFFFF")
@@ -80,21 +76,56 @@ Item {
             v = 4
         return Math.max(0, Math.min(24, Math.round(v)))
     }
-    readonly property int frameRadius: {
-        var v = widgetConfig ? Number(widgetConfig.frameRadius) : NaN
-        if (!isFinite(v))
-            v = 8
-        return Math.max(0, Math.min(32, Math.round(v)))
-    }
 
     // ===== 相框几何 =====
     readonly property bool frameVisible: root.frameStyle !== "none"
-    // 无边框 → 边框宽 0；实线/虚线 → 相片按边框宽度整体内缩
+    // 无边框 → 边框宽 0；其余线型 → 相片按边框宽度整体内缩
     readonly property real photoMargin: root.frameVisible ? root.frameWidth : 0
-    // 外框圆角钳到卡片半宽/半高；相片圆角 = 外框圆角 − 边宽（贴边框内缘）
+    // 圆角取自系统窗口圆角（与系统体验统一），钳到卡片半宽/半高；
+    // 相片圆角 = 外框圆角 − 边宽（贴边框内缘）
     readonly property real frameRadiusEff: Math.max(0, Math.min(
-        root.frameRadius, root.width / 2, root.height / 2))
+        DTK.platformTheme.windowRadius, root.width / 2, root.height / 2))
     readonly property real photoRadius: Math.max(0, root.frameRadiusEff - root.photoMargin)
+
+    // 各线型 → 描边图案（dash 长度随边宽自适应，小宽度下仍可分辨）
+    function dashPattern(style, w) {
+        var u = Math.max(1, w)
+        if (style === "dotted")
+            return { "dash": [0.1, u * 1.8], "cap": "round" }
+        if (style === "dotDense")
+            return { "dash": [0.1, u * 1.0], "cap": "round" }
+        if (style === "dashDot")
+            return { "dash": [u * 2.5, u * 1.2, 0.1, u * 1.2], "cap": "round" }
+        if (style === "dashLong")
+            return { "dash": [u * 3.5, u * 1.2], "cap": "butt" }
+        // dashed（默认虚线）
+        return { "dash": [u * 1.5, u], "cap": "butt" }
+    }
+
+    // 圆角矩形描边路径：优先 ctx.roundRect()，不可用时退化为仅含 arc() 的
+    // 标准路径（moveTo 到弧起点后连续 arc，四角不穿插 lineTo，避免重复连线错切）
+    function roundRectPath(ctx, x, y, w, h, r) {
+        var rr = Math.max(0, Math.min(r, w / 2, h / 2))
+        ctx.beginPath()
+        if (typeof ctx.roundRect === "function") {
+            ctx.roundRect(x, y, w, h, rr)
+            return
+        }
+        if (rr < 0.5) {
+            ctx.moveTo(x, y)
+            ctx.lineTo(x + w, y)
+            ctx.lineTo(x + w, y + h)
+            ctx.lineTo(x, y + h)
+            ctx.closePath()
+            return
+        }
+        ctx.moveTo(x + rr, y)
+        ctx.arc(x + w - rr, y + rr, rr, -Math.PI / 2, 0)
+        ctx.arc(x + w - rr, y + h - rr, rr, 0, Math.PI / 2)
+        ctx.arc(x + rr, y + h - rr, rr, Math.PI / 2, Math.PI)
+        ctx.arc(x + rr, y + rr, rr, Math.PI, Math.PI * 1.5)
+        ctx.closePath()
+    }
 
     // ===== 数据层 =====
     readonly property string workDir: dataDir.length > 0 && instanceId.length > 0
@@ -110,15 +141,32 @@ Item {
     property int pendingJsonId: -1
     property int pendingDownloadId: -1
     // 在途请求的元信息：回调成功后据此写 meta.json
-    property string jsonStage: ""            // "adaptive" | "officialFallback"
+    property string jsonStage: ""            // "" | "officialFallback"
     property string pendingMode: ""
     property string pendingImageUrl: ""
     property string pendingFetchedDate: ""
     property int pendingDayOffset: 0
+    // bingHistory 近三次回看天数，用于避免连续取到相同的"往日"图；
+    // 仅内存态，widget 重建即清空
+    property var recentDayOffsets: []
     property int pendingBlur: 0
-    property string pendingEndpoint: ""
-    // bingDaily 主源失败 → 官方 JSON 回退（仅回退一次）
+    // bingDaily/bingHistory 主源失败 → 官方 JSON 回退（仅回退一次）
     property bool bingFallback: false
+    // 每轮取图的防线（evaluate() 开头重置）：JSON 直链二跳最多一次、
+    // 坏图自愈最多一次，防止失败后反复重试成环
+    property bool sniffHopped: false
+    property bool healedOnce: false
+    // 隐藏探针解码校验进行中：photo 本体解码失败处理据此区分探针流程，
+    // 并与 pendingJsonId/pendingDownloadId 同理丢弃陈旧校验结果
+    property bool probing: false
+    // 探针代际：每次 startProbe 递增，探针 onStatusChanged 仅处理当代际结果；
+    // evaluate/startDownload 递增代际使在途探针结果作废（替代单纯 probing=false），
+    // 杜绝频繁刷新时陈旧探针误触发 sniffDirectLink 或写 meta 导致卡在 loading
+    property int probeGeneration: 0
+    // 当前活跃探针的代际锁：startProbe 锁定为 probeGeneration，
+    // onStatusChanged 仅在 activeProbeGen === probeGeneration 时处理；
+    // source="" 阶段临时置 -1 以丢弃清空触发的状态变更
+    property int activeProbeGen: -1
     // UI 状态机：loading / ready / error / noImage（本地模式未选图）
     property string phase: "loading"
     property string errorCode: ""
@@ -131,6 +179,16 @@ Item {
 
     function today() {
         return Qt.formatDate(new Date(), "yyyy-MM-dd")
+    }
+
+    // 调试日志：仅在 Panel.debugMode 开启时输出到 stderr（与 applauncher 同法）；
+    // 用于追踪取图状态机，排查连续刷新卡 loading / 超时问题。
+    // 用 typeof 守卫确保即使 Panel 上下文不可用也不抛异常中断主流程
+    function dbg(msg) {
+        try {
+            if (typeof Panel !== "undefined" && Panel.debugMode)
+                console.warn("[photoframe]", msg)
+        } catch (e) {}
     }
 
     function readMeta() {
@@ -167,6 +225,7 @@ Item {
     }
 
     function showError(code) {
+        root.dbg("showError code=" + code + " (was phase=" + root.phase + ")")
         root.resetPending()
         root.photoPath = ""
         root.phase = "error"
@@ -182,11 +241,8 @@ Item {
         if (mode === "bingDaily")
             return root.meta.mode === "bingDaily"
                 && root.meta.fetchedDate === root.today()
-                && Number(root.meta.blur) === root.effectiveBlur
         if (mode === "bingHistory")
             return root.meta.mode === "bingHistory"
-                && Number(root.meta.dayOffset) === root.historyDaysAgo
-                && Number(root.meta.blur) === root.effectiveBlur
         if (mode === "bingRandom")
             return root.meta.mode === "bingRandom"
         if (mode === "url")
@@ -199,6 +255,16 @@ Item {
         // instanceId/dataDir 注入未完成时等待 onWorkDirChanged 重入
         if (root.workDir.length === 0)
             return
+        root.dbg("evaluate force=" + force + " mode=" + root.sourceMode
+                 + " phase=" + root.phase
+                 + " pendingDl=" + root.pendingDownloadId
+                 + " pendingJson=" + root.pendingJsonId)
+        // 新一轮取图重置防线：二跳/自愈每轮各至多一次；同时作废在途探针，
+        // 防止陈旧校验结果污染新状态（与 pendingId 去重同理）
+        root.sniffHopped = false
+        root.healedOnce = false
+        root.probing = false
+        root.probeGeneration++   // 作废在途探针，旧 onStatusChanged 结果被丢弃
         root.meta = root.readMeta()
         var mode = root.sourceMode
 
@@ -236,49 +302,46 @@ Item {
             return
         }
         if (mode === "bingDaily") {
-            // blur∈[1,50] 走模糊端点（两阶段自适应，d=0 即今日），
-            // 否则图片流直达
+            // 模糊端点已移除，统一走图片流端点；下载失败回退官方 HPImageArchive
             root.bingFallback = false
-            if (root.effectiveBlur > 0) {
-                root.startAdaptive(
-                    "https://api.bingimg.cn/v1/blur?d=0&w=1920&h=1080&r="
-                        + root.effectiveBlur,
-                    "bingDaily", 0, root.effectiveBlur)
-            } else {
-                root.startDownload("https://api.bingimg.cn/api/v1/image/bing-daily",
-                                   "bingDaily",
-                                   "https://api.bingimg.cn/api/v1/image/bing-daily",
-                                   root.today(), 0, 0)
-            }
+            root.startDownload("https://api.bingimg.cn/api/v1/image/bing-daily",
+                               "bingDaily",
+                               "https://api.bingimg.cn/api/v1/image/bing-daily",
+                               root.today(), 0, 0)
             return
         }
         if (mode === "bingHistory") {
-            var d = root.historyDaysAgo
-            var endpoint = root.effectiveBlur > 0
-                ? "https://api.bingimg.cn/v1/blur?d=" + d + "&w=1920&h=1080&r=" + root.effectiveBlur
-                : "https://api.bingimg.cn/v1?d=" + d
-            root.startAdaptive(endpoint, "bingHistory", d, root.effectiveBlur)
+            // 回看天数在 1-7 之间随机，且近三次取值不重复：
+            // 从 1-7 中剔除 recentDayOffsets 已有的值，在剩余池中随机抽取
+            var recent = root.recentDayOffsets
+            var pool = []
+            for (var i = 1; i <= 7; i++) {
+                if (recent.indexOf(i) < 0)
+                    pool.push(i)
+            }
+            var d = pool[Math.floor(Math.random() * pool.length)]
+            // 推入新值，保持最多近三次
+            var next = recent.slice()
+            next.push(d)
+            while (next.length > 3)
+                next.shift()
+            root.recentDayOffsets = next
+            root.bingFallback = false
+            root.startDownload("https://api.bingimg.cn/v1?d=" + d,
+                               "bingHistory",
+                               "https://api.bingimg.cn/v1?d=" + d,
+                               root.today(), d, 0)
             return
         }
         if (mode === "bingRandom") {
-            // bingBlur 忽略
-            root.startAdaptive("https://api.bingimg.cn/v1/rand?w=1920&h=1080",
-                               "bingRandom", 0, 0)
+            // 端点本身即图片流，整段 download 直达；失败回退官方 HPImageArchive
+            // （随机 idx 0-7），由 onDownloadFinished 触发
+            root.bingFallback = false
+            root.startDownload("https://api.bingimg.cn/v1/rand?w=1920&h=1080",
+                               "bingRandom",
+                               "https://api.bingimg.cn/v1/rand?w=1920&h=1080",
+                               root.today(), 0, 0)
         }
-    }
-
-    // 两阶段自适应：先 JSON 试探（ttl=0 绕过宿主缓存，保随机/刷新语义），
-    // 成功且 data 含 url 类字段 → 下载直链；json-parse 失败 → 端点本身是
-    // 图片流，整段 download；其余错误 → 错误占位。
-    function startAdaptive(endpoint, mode, dayOffset, blur) {
-        root.bingFallback = false
-        root.jsonStage = "adaptive"
-        root.pendingMode = mode
-        root.pendingEndpoint = endpoint
-        root.pendingDayOffset = dayOffset
-        root.pendingBlur = blur
-        root.phase = "loading"
-        root.pendingJsonId = Network.getJson(endpoint, 0)
     }
 
     function startDownload(url, mode, imageUrl, fetchedDate, dayOffset, blur) {
@@ -286,7 +349,23 @@ Item {
             root.showError("invalid-url")
             return
         }
+        root.dbg("startDownload mode=" + mode
+                 + " cancelDl=" + root.pendingDownloadId
+                 + " cancelJson=" + root.pendingJsonId
+                 + " url=" + url.slice(0, 60))
+        // 新一轮下载作废在途探针（含 JSON 分流二跳），防陈旧校验写坏 meta；
+        // 同时作废在途 JSON 回退请求（pendingJsonId=-1），避免刷新时陈旧 JSON
+        // 回调匹配旧 id 后用空 jsonStage 下载相对路径直链导致无效 URL 错误；
+        // 取消上一个在途下载（pendingDownloadId）释放 NAM 连接槽，防连续刷新
+        // 时陈旧请求堆积导致最新请求排队等待
+        if (root.pendingDownloadId >= 0)
+            Network.cancel(root.pendingDownloadId)
+        if (root.pendingJsonId >= 0)
+            Network.cancel(root.pendingJsonId)
+        root.probing = false
+        root.probeGeneration++   // 作废在途探针
         root.jsonStage = ""
+        root.pendingJsonId = -1
         root.pendingMode = mode
         root.pendingImageUrl = imageUrl
         root.pendingFetchedDate = fetchedDate
@@ -296,37 +375,107 @@ Item {
         root.pendingDownloadId = Network.download(url, root.currentPath)
     }
 
-    // 从 JSON data 挖图片直链：官方回退取 images[0].url；
-    // 自适应依次试 url / image / img / data.url（字符串且非空）
+    // 从官方回退 JSON data 挖图片直链：取 images[0].url
     function extractImageUrl(data) {
         if (!data)
             return ""
-        if (root.jsonStage === "officialFallback") {
-            var images = data.images
-            if (images && images.length > 0 && images[0]
-                    && typeof images[0].url === "string")
-                return images[0].url
-            return ""
-        }
-        if (typeof data.url === "string" && data.url.length > 0)
-            return data.url
-        if (typeof data.image === "string" && data.image.length > 0)
-            return data.image
-        if (typeof data.img === "string" && data.img.length > 0)
-            return data.img
-        if (data.data && typeof data.data.url === "string" && data.data.url.length > 0)
-            return data.data.url
+        var images = data.images
+        if (images && images.length > 0 && images[0]
+                && typeof images[0].url === "string")
+            return images[0].url
         return ""
     }
 
+    // 从下载内容的 JSON 里挖图片直链（端点常以 JSON 直链代替图片流）：
+    // 依次兼容 images[0].url（HPImageArchive 格式，相对路径拼 cn.bing.com）、
+    // url/image/img/data.url（须为字符串）；明文 http 升 https——
+    // 宿主 Network 仅接受 https，与 onJsonFinished 的官方回退同法
+    function extractSniffImageUrl(obj) {
+        if (!obj || typeof obj !== "object")
+            return ""
+        var u = root.extractImageUrl(obj)
+        if (u.length === 0) {
+            var cands = [obj.url, obj.image, obj.img,
+                         (obj.data && typeof obj.data === "object") ? obj.data.url : ""]
+            for (var i = 0; i < cands.length; i++) {
+                if (typeof cands[i] === "string" && cands[i].length > 0) {
+                    u = cands[i]
+                    break
+                }
+            }
+        }
+        if (u.length === 0)
+            return ""
+        if (u.indexOf("http://") === 0)
+            u = "https://" + u.slice(7)
+        else if (u.indexOf("http") !== 0)
+            u = "https://cn.bing.com" + u
+        return u
+    }
+
+    // 探针判定下载内容不是图片：按 JSON 读回文本挖直链二跳下载一次
+    //（sniffHopped 保证每轮至多二跳防循环；pendingImageUrl 保持原请求键
+    // 不改成直链——url 模式缓存键 meta.imageUrl 必须等于 customUrl）；
+    // 挖不到直链或二跳已用 → "无效响应"错误占位，不写 meta 不污染缓存
+    function sniffDirectLink() {
+        var link = ""
+        try {
+            var raw = root.currentPath.length > 0
+                ? FileIO.readTextFile(root.currentPath) : ""
+            if (raw.length > 0)
+                link = root.extractSniffImageUrl(JSON.parse(raw))
+        } catch (e) {
+            link = ""
+        }
+        if (link.length > 0 && !root.sniffHopped) {
+            root.sniffHopped = true
+            root.startDownload(link, root.pendingMode, root.pendingImageUrl,
+                               root.pendingFetchedDate, root.pendingDayOffset,
+                               root.pendingBlur)
+            return
+        }
+        root.showError("json-parse")
+    }
+
     // 展示 current.jpg；forceReload 用于刚下载落盘后强制 Image 重载
-    //（同路径覆盖时 QML Image 不会因内容变化自动重读）
+    //（同路径覆盖时 QML Image 不会因内容变化自动重读）；
+    // forceReload=true 时先置空再用 Qt.callLater 延迟赋值，确保 photo 的
+    // source 绑定观察到 "" → 文件路径的完整变化（避免属性变更合并导致
+    // 中间值 "" 丢失，photo 卡在 Image.Loading 不重载）
     function showCurrent(forceReload) {
         if (root.currentPath.length === 0)
             return
-        if (forceReload)
+        root.dbg("showCurrent force=" + forceReload
+                 + " photoStatus=" + photo.status)
+        if (forceReload) {
             root.photoPath = ""
-        root.photoPath = root.currentPath
+            Qt.callLater(function () { root.photoPath = root.currentPath })
+        } else {
+            root.photoPath = root.currentPath
+        }
+    }
+
+    // 下载成功 ≠ 有效图片：先经隐藏探针廉价解码确认 current.jpg 是真图片，
+    // 确认通过才写 meta/进 ready，坏内容永不进 meta（防坏缓存持久驻留）
+    function startProbe() {
+        if (root.currentPath.length === 0) {
+            root.showError("json-parse")
+            return
+        }
+        root.dbg("startProbe gen=" + root.probeGeneration)
+        root.probing = true
+        // 先把代际锁置为 -1，让 source="" 触发的状态变更被代际校验丢弃；
+        // 再递增 probeGeneration 并锁定 activeProbeGen，确保只有本次探针的
+        // onStatusChanged 能通过代际校验（evaluate/startDownload 递增
+        // probeGeneration 使旧探针结果作废）
+        root.activeProbeGen = -1
+        probe.source = ""
+        root.probeGeneration++
+        root.activeProbeGen = root.probeGeneration
+        // 同路径覆盖后 Image 不自动重读：先清空再赋值强制重载（showCurrent 同法）；
+        // file:// 编码构造与 photoUrl 同法，带特殊字符的路径也能加载
+        probe.source = "file://" + encodeURIComponent(root.currentPath)
+            .replace(/%2F/g, "/")
     }
 
     // 唯一强制刷新通道：忽略缓存按当前模式重新取图
@@ -349,18 +498,17 @@ Item {
         target: Network
 
         function onJsonFinished(requestId, success, data, errorCode, httpStatus) {
+            root.dbg("onJsonFinished req=" + requestId
+                     + " pending=" + root.pendingJsonId
+                     + " success=" + success
+                     + " err=" + errorCode
+                     + " http=" + httpStatus)
             if (requestId !== root.pendingJsonId)
                 return
             root.pendingJsonId = -1
             if (!success) {
-                // 自适应端点返回的不是 JSON：视为图片流，整段直接下载
-                if (root.jsonStage === "adaptive" && errorCode === "json-parse") {
-                    root.startDownload(root.pendingEndpoint, root.pendingMode,
-                                       root.pendingEndpoint, root.today(),
-                                       root.pendingDayOffset, root.pendingBlur)
-                } else {
-                    root.showError(errorCode)
-                }
+                // 官方回退 JSON 失败：直接错误占位（仅回退一次，不再重试）
+                root.showError(errorCode)
                 return
             }
             var imageUrl = root.extractImageUrl(data)
@@ -375,7 +523,7 @@ Item {
                 imageUrl = "https://cn.bing.com" + imageUrl
             if (imageUrl.indexOf("http://") === 0)
                 imageUrl = "https://" + imageUrl.slice(7)
-            // 官方回退沿用触发回退时的 pendingMode（bingDaily/bingHistory），
+            // 官方回退沿用触发回退时的 pendingMode（bingDaily/bingHistory/bingRandom），
             // meta 的 mode/dayOffset/blur 均按原始请求记录，缓存键才一致
             root.startDownload(imageUrl, root.pendingMode, imageUrl,
                                root.today(), root.pendingDayOffset,
@@ -383,29 +531,38 @@ Item {
         }
 
         function onDownloadFinished(requestId, success, destPath, errorCode, httpStatus) {
+            root.dbg("onDownloadFinished req=" + requestId
+                     + " pending=" + root.pendingDownloadId
+                     + " success=" + success
+                     + " err=" + errorCode
+                     + " http=" + httpStatus)
             if (requestId !== root.pendingDownloadId)
                 return
             root.pendingDownloadId = -1
             if (success) {
-                root.writeMeta(root.pendingMode, root.pendingImageUrl,
-                               root.pendingFetchedDate, root.pendingDayOffset,
-                               root.pendingBlur)
-                root.meta = root.readMeta()
-                root.errorCode = ""
-                root.phase = "ready"
-                root.showCurrent(true)
+                // 下载成功先"待确认"：保持 loading 与旧图，经探针解码确认
+                // 是图片后才写 meta/进 ready（端点常返回 JSON 直链而非图片流，
+                // 直写 meta 会把坏图当缓存命中持久驻留）
+                root.startProbe()
                 return
             }
             // Bing 主源下载失败：回退官方 JSON（仅回退一次）——
-            // bingDaily 取今日 idx=0；bingHistory 取回看日 idx=historyDaysAgo
+            // bingDaily 取今日 idx=0；bingHistory 取回看日 idx=pendingDayOffset；
+            // bingRandom 随机 idx∈[0,7]
             if (!root.bingFallback
                     && (root.pendingMode === "bingDaily"
-                        || root.pendingMode === "bingHistory")) {
+                        || root.pendingMode === "bingHistory"
+                        || root.pendingMode === "bingRandom")) {
                 root.bingFallback = true
                 root.jsonStage = "officialFallback"
                 root.phase = "loading"
-                var idx = root.pendingMode === "bingHistory"
-                    ? root.historyDaysAgo : 0
+                var idx
+                if (root.pendingMode === "bingDaily")
+                    idx = 0
+                else if (root.pendingMode === "bingHistory")
+                    idx = root.pendingDayOffset
+                else
+                    idx = Math.floor(Math.random() * 8)
                 root.pendingJsonId = Network.getJson(
                     "https://cn.bing.com/HPImageArchive.aspx?format=js&idx="
                         + idx + "&n=1",
@@ -451,8 +608,30 @@ Item {
         smooth: true
         // 落盘文件自管缓存（重载由 showCurrent(true) 驱动）
         cache: false
-        source: root.phase === "ready" ? root.photoUrl : ""
-        visible: root.phase === "ready" && root.photoUrl.length > 0
+        // 强制刷新的 loading 阶段旧图继续显示：新图落盘后 showCurrent(true)
+        // 替换，下载失败才进错误占位（showError 会清空 photoPath）
+        source: (root.phase === "ready" || root.phase === "loading")
+            ? root.photoUrl : ""
+        visible: (root.phase === "ready" || root.phase === "loading")
+            && root.photoUrl.length > 0
+        // 本体解码失败（缓存命中/本地路径坏图；探针流程由 probe 负责校验，
+        // phase 停留 loading 不会误入）：网络模式强制重取一次自愈，再失败
+        // 错误占位；本地模式不强制重取、不改 phase，保留"图片不可用"占位
+        onStatusChanged: {
+            root.dbg("photo status=" + status
+                     + " phase=" + root.phase
+                     + " probing=" + root.probing)
+            if (status !== Image.Error || root.probing || root.phase !== "ready")
+                return
+            if (root.sourceMode === "local")
+                return
+            if (!root.healedOnce) {
+                root.healedOnce = true
+                root.evaluate(true)
+                return
+            }
+            root.showError("json-parse")
+        }
         layer.enabled: root.photoRadius > 0 && visible
         layer.smooth: true
         layer.effect: OpacityMask {
@@ -465,34 +644,78 @@ Item {
         }
     }
 
+    // 隐藏解码探针：current.jpg 落盘后先经它廉价解码（sourceSize 32×32、
+    // 同步加载）确认是真图片，解码确认通过才写 meta/进 ready；
+    // cache:false 防同路径旧解码结果被 QML 图片缓存顶替而误判
+    Image {
+        id: probe
+        visible: false
+        asynchronous: false
+        cache: false
+        sourceSize.width: 32
+        sourceSize.height: 32
+
+        onStatusChanged: {
+            // 代际校验：只有当前活跃探针（activeProbeGen === probeGeneration）
+            // 的结果才处理；evaluate/startDownload 递增 probeGeneration 使陈旧
+            // 探针结果（含 source="" 触发的 Null/Error）一律丢弃，杜绝频繁
+            // 刷新时陈旧探针误触发 sniffDirectLink 或写 meta 导致卡在 loading
+            if (root.activeProbeGen !== root.probeGeneration) {
+                root.dbg("probe stale status=" + status
+                         + " activeGen=" + root.activeProbeGen
+                         + " gen=" + root.probeGeneration)
+                return
+            }
+            if (!root.probing)
+                return
+            root.dbg("probe status=" + status + " gen=" + root.probeGeneration)
+            if (status === Image.Ready) {
+                root.probing = false
+                // 解码确认通过：此刻才写 meta，坏内容永不进缓存
+                root.writeMeta(root.pendingMode, root.pendingImageUrl,
+                               root.pendingFetchedDate, root.pendingDayOffset,
+                               root.pendingBlur)
+                root.meta = root.readMeta()
+                root.errorCode = ""
+                root.phase = "ready"
+                root.showCurrent(true)
+            } else if (status === Image.Error) {
+                root.probing = false
+                // 不是图片：走 JSON 分流挖直链二跳，挖不到按"无效响应"报错
+                root.sniffDirectLink()
+            }
+        }
+    }
+
     // 实线相框：Rectangle 边框画在自身 bounds 内，相片内缩 frameWidth 后
-    // 恰好贴边框内缘；无边框时不绘制
+    // 恰好贴边框内缘；仅 solid 绘制（其余线型交给 Canvas，避免实线盖住虚线）
     Rectangle {
         anchors.fill: parent
-        visible: root.frameVisible
+        visible: root.frameStyle === "solid"
         color: "transparent"
         border.color: root.frameColor
         border.width: root.frameWidth
         radius: root.frameRadiusEff
     }
 
-    // 虚线相框：Rectangle 不支持虚线，Canvas 自绘圆角虚线描边；
-    // 路径整体内缩 frameWidth/2，让描边恰好占满边框厚度不越界
+    // 虚线/点线/点划线/双线相框：Rectangle 不支持 lineDash，Canvas 自绘圆角
+    // 描边；路径整体内缩 frameWidth/2，让描边恰好占满边框厚度不越界
     Canvas {
         id: dashFrame
         anchors.fill: parent
-        visible: root.frameStyle === "dashed"
+        visible: root.frameVisible && root.frameStyle !== "solid"
         z: 1
 
         onVisibleChanged: requestPaint()
         onWidthChanged: requestPaint()
         onHeightChanged: requestPaint()
-        // 边框属性变化均触发重绘
+        // 边框属性变化均触发重绘（圆角跟随系统窗口圆角）
         Connections {
             target: root
             function onFrameColorChanged() { dashFrame.requestPaint() }
             function onFrameWidthChanged() { dashFrame.requestPaint() }
-            function onFrameRadiusChanged() { dashFrame.requestPaint() }
+            function onFrameStyleChanged() { dashFrame.requestPaint() }
+            function onFrameRadiusEffChanged() { dashFrame.requestPaint() }
         }
 
         onPaint: {
@@ -500,30 +723,36 @@ Item {
             if (!ctx)
                 return
             ctx.reset()
-            if (!root.frameVisible || root.frameWidth <= 0
-                    || width <= 0 || height <= 0)
+            // reset() 不重置 lineDash：每帧显式清空，避免上一帧图案残留
+            ctx.setLineDash([])
+            if (!root.frameVisible || root.frameStyle === "solid"
+                    || root.frameWidth <= 0 || width <= 0 || height <= 0)
                 return
-            var inset = root.frameWidth / 2
-            var left = inset
-            var top = inset
-            var right = width - inset
-            var bottom = height - inset
-            var r = Math.max(0, root.frameRadiusEff - inset)
             ctx.strokeStyle = root.frameColor
+            ctx.lineJoin = "round"
+
+            // 双线：两条同心细线，各占边框厚度 1/3，分别贴内外缘
+            if (root.frameStyle === "double") {
+                var lw = Math.max(1, root.frameWidth / 3)
+                var offs = [root.frameWidth / 6, root.frameWidth * 5 / 6]
+                ctx.lineWidth = lw
+                ctx.lineCap = "butt"
+                for (var i = 0; i < offs.length; i++) {
+                    var o = offs[i]
+                    root.roundRectPath(ctx, o, o, width - 2 * o, height - 2 * o,
+                                       root.frameRadiusEff - o)
+                    ctx.stroke()
+                }
+                return
+            }
+
+            var pat = root.dashPattern(root.frameStyle, root.frameWidth)
+            var inset = root.frameWidth / 2
             ctx.lineWidth = root.frameWidth
-            ctx.setLineDash([Math.max(4, root.frameWidth * 1.5),
-                             Math.max(3, root.frameWidth)])
-            ctx.beginPath()
-            ctx.moveTo(left + r, top)
-            ctx.lineTo(right - r, top)
-            ctx.arc(right - r, top + r, r, -Math.PI / 2, 0)
-            ctx.lineTo(right, bottom - r)
-            ctx.arc(right - r, bottom - r, r, 0, Math.PI / 2)
-            ctx.lineTo(left + r, bottom)
-            ctx.arc(left + r, bottom - r, r, Math.PI / 2, Math.PI)
-            ctx.lineTo(left, top + r)
-            ctx.arc(left + r, top + r, r, Math.PI, Math.PI * 1.5)
-            ctx.closePath()
+            ctx.lineCap = pat.cap
+            ctx.setLineDash(pat.dash)
+            root.roundRectPath(ctx, inset, inset, width - 2 * inset,
+                               height - 2 * inset, root.frameRadiusEff - inset)
             ctx.stroke()
         }
     }
@@ -545,6 +774,23 @@ Item {
         running: visible
         visible: root.phase === "loading"
             || (root.phase === "ready" && photo.status === Image.Loading)
+    }
+
+    // loading 安全超时：取图流程异常（请求队列阻塞/回调丢失）时兜底退出转圈，
+    // 进入错误占位；phase 离开 loading 时 Timer 自动停止
+    Timer {
+        id: loadingSafetyTimer
+        interval: 12000
+        repeat: false
+        running: root.phase === "loading"
+        onTriggered: {
+            root.dbg("loadingSafetyTimer TIMEOUT phase=" + root.phase
+                     + " pendingDl=" + root.pendingDownloadId
+                     + " pendingJson=" + root.pendingJsonId
+                     + " probing=" + root.probing)
+            if (root.phase === "loading")
+                root.showError("timeout")
+        }
     }
 
     // 错误 / 未选图占位：图标 + 本地化文案
@@ -577,6 +823,9 @@ Item {
             color: DTK.themeType === ApplicationHelper.DarkType
                 ? "#e8e8e8" : "#1a1a1a"
             font.pixelSize: root.placeholderTextPixelSize
+
+            // 占位/错误文案截断时悬停显示全文
+            Components.ElideTip { anchors.fill: parent }
         }
 
         Text {

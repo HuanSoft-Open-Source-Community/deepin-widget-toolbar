@@ -5,7 +5,7 @@
     "description": "A photo frame widget with Bing daily images and custom sources",
     "description[zh_CN]": "相框小组件，支持 Bing 每日一图与自定义图片源",
     "version": "1.0.0",
-    "apiVersion": "1.8",
+    "apiVersion": "1.10",
     "author": "deepin-widget-toolbar",
     "icon": "insert-image",
     "runtime": "qml",
@@ -40,20 +40,6 @@
             ]
         },
         {
-            "key": "historyDaysAgo",
-            "type": "integer",
-            "label": "Days ago (1-7)",
-            "label[zh_CN]": "回看天数（1-7）",
-            "default": 1
-        },
-        {
-            "key": "bingBlur",
-            "type": "integer",
-            "label": "Bing blur strength (0-50)",
-            "label[zh_CN]": "Bing 模糊强度（0-50）",
-            "default": 0
-        },
-        {
             "key": "customUrl",
             "type": "string",
             "label": "Image URL (https)",
@@ -76,7 +62,12 @@
             "options": [
                 { "value": "none", "label": "None", "label[zh_CN]": "无边框" },
                 { "value": "solid", "label": "Solid", "label[zh_CN]": "实线" },
-                { "value": "dashed", "label": "Dashed", "label[zh_CN]": "虚线" }
+                { "value": "dashed", "label": "Dashed", "label[zh_CN]": "虚线" },
+                { "value": "dotted", "label": "Dotted", "label[zh_CN]": "点线" },
+                { "value": "dashDot", "label": "Dash-dot", "label[zh_CN]": "点划线" },
+                { "value": "double", "label": "Double", "label[zh_CN]": "双线" },
+                { "value": "dashLong", "label": "Long dash", "label[zh_CN]": "长虚线" },
+                { "value": "dotDense", "label": "Dense dots", "label[zh_CN]": "密集点线" }
             ]
         },
         {
@@ -91,17 +82,12 @@
         },
         {
             "key": "frameWidth",
-            "type": "integer",
+            "type": "slider",
             "label": "Frame width",
             "label[zh_CN]": "边框宽度",
-            "default": 4
-        },
-        {
-            "key": "frameRadius",
-            "type": "integer",
-            "label": "Frame radius",
-            "label[zh_CN]": "边框圆角",
-            "default": 8
+            "default": 4,
+            "min": 0,
+            "max": 24
         }
     ],
     "builtin": true
