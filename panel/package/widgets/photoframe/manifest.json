@@ -5,7 +5,7 @@
     "description": "A photo frame widget with Bing daily images and custom sources",
     "description[zh_CN]": "相框小组件，支持 Bing 每日一图与自定义图片源",
     "version": "1.0.0",
-    "apiVersion": "1.10",
+    "apiVersion": "1.11",
     "author": "deepin-widget-toolbar",
     "icon": "insert-image",
     "runtime": "qml",
@@ -68,7 +68,8 @@
                 { "value": "double", "label": "Double", "label[zh_CN]": "双线" },
                 { "value": "dashLong", "label": "Long dash", "label[zh_CN]": "长虚线" },
                 { "value": "dotDense", "label": "Dense dots", "label[zh_CN]": "密集点线" }
-            ]
+            ],
+            "lockWhen": { "key": "frameWidth", "is": 0, "as": "none" }
         },
         {
             "key": "frameColor",
@@ -88,6 +89,32 @@
             "default": 4,
             "min": 0,
             "max": 24
+        },
+        {
+            "key": "dashGap",
+            "type": "slider",
+            "label": "Dash gap",
+            "label[zh_CN]": "间距",
+            "default": 4,
+            "min": 0,
+            "max": 24
+        },
+        {
+            "key": "dashLen",
+            "type": "slider",
+            "label": "Dot & dash length",
+            "label[zh_CN]": "点划长度",
+            "default": 0,
+            "min": 0,
+            "max": 24
+        },
+        {
+            "key": "_lk_frameStyle",
+            "type": "string"
+        },
+        {
+            "key": "_lk_frameWidth",
+            "type": "integer"
         }
     ],
     "builtin": true

@@ -76,6 +76,18 @@ Item {
             v = 4
         return Math.max(0, Math.min(24, Math.round(v)))
     }
+    readonly property int dashGap: {
+        var v = widgetConfig ? Number(widgetConfig.dashGap) : NaN
+        if (!isFinite(v))
+            v = 4
+        return Math.max(0, Math.min(24, Math.round(v)))
+    }
+    readonly property int dashLen: {
+        var v = widgetConfig ? Number(widgetConfig.dashLen) : NaN
+        if (!isFinite(v))
+            v = 0
+        return Math.max(0, Math.min(24, Math.round(v)))
+    }
 
     // ===== 相框几何 =====
     readonly property bool frameVisible: root.frameStyle !== "none"
@@ -87,19 +99,32 @@ Item {
         DTK.platformTheme.windowRadius, root.width / 2, root.height / 2))
     readonly property real photoRadius: Math.max(0, root.frameRadiusEff - root.photoMargin)
 
-    // 各线型 → 描边图案（dash 长度随边宽自适应，小宽度下仍可分辨）
-    function dashPattern(style, w) {
+    // 各线型 → 描边图案（双滑块模型：间距 dashGap 与点划长度 dashLen，均 0..24）。
+    //   - dashGap：基准缝宽（视觉间隙像素）。各线型叠加固有偏移保持相对疏密可辨：
+    //     dashed +0 / dashLong +0.8 / dotted −0.8 / dashDot −3.2 / dotDense −4，
+    //     结果触底截断为 0（归零粘连成近实线属用户自选）；
+    //   - dashLen：单段笔画的附加加长量，点段与线段共用——叠加在宽度线性基线
+    //     （1.5u/2.5u/3.5u、点 0.1）之上，不破坏"段随宽度加粗加长"的本性，
+    //     调大后点由正圆变胶囊；
+    //   - round 帽（dotted/dotDense/dashDot）线帽在每段两端各外延 u/2，会吃掉
+    //     间隔，gap 参数 = 缝宽 + u 补偿，使 dashGap 直接读作视觉缝宽；
+    //     butt 帽（dashed/dashLong）不外延，gap 参数 = 缝宽。
+    // 默认值（gap=4、len=0）与纯自动模型版在任意宽度下逐像素一致（硬锚点）。
+    function dashPattern(style, w, gap, len) {
         var u = Math.max(1, w)
+        var dl = len > 0 ? len : 0
+        var dot = 0.1 + dl
         if (style === "dotted")
-            return { "dash": [0.1, u * 1.8], "cap": "round" }
+            return { "dash": [dot, u + Math.max(0, gap - 0.8)], "cap": "round" }
         if (style === "dotDense")
-            return { "dash": [0.1, u * 1.0], "cap": "round" }
+            return { "dash": [dot, u + Math.max(0, gap - 4)], "cap": "round" }
         if (style === "dashDot")
-            return { "dash": [u * 2.5, u * 1.2, 0.1, u * 1.2], "cap": "round" }
+            return { "dash": [u * 2.5 + dl, u + Math.max(0, gap - 3.2),
+                              dot, u + Math.max(0, gap - 3.2)], "cap": "round" }
         if (style === "dashLong")
-            return { "dash": [u * 3.5, u * 1.2], "cap": "butt" }
+            return { "dash": [u * 3.5 + dl, Math.max(0, gap + 0.8)], "cap": "butt" }
         // dashed（默认虚线）
-        return { "dash": [u * 1.5, u], "cap": "butt" }
+        return { "dash": [u * 1.5 + dl, Math.max(0, gap)], "cap": "butt" }
     }
 
     // 圆角矩形描边路径：优先 ctx.roundRect()，不可用时退化为仅含 arc() 的
@@ -716,6 +741,8 @@ Item {
             function onFrameWidthChanged() { dashFrame.requestPaint() }
             function onFrameStyleChanged() { dashFrame.requestPaint() }
             function onFrameRadiusEffChanged() { dashFrame.requestPaint() }
+            function onDashGapChanged() { dashFrame.requestPaint() }
+            function onDashLenChanged() { dashFrame.requestPaint() }
         }
 
         onPaint: {
@@ -746,7 +773,7 @@ Item {
                 return
             }
 
-            var pat = root.dashPattern(root.frameStyle, root.frameWidth)
+            var pat = root.dashPattern(root.frameStyle, root.frameWidth, root.dashGap, root.dashLen)
             var inset = root.frameWidth / 2
             ctx.lineWidth = root.frameWidth
             ctx.lineCap = pat.cap

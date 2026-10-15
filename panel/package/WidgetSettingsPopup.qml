@@ -12,6 +12,7 @@ import org.deepin.ds 1.0
 import org.deepin.widgettoolbar 1.0
 import "widgets/components" as Components
 import "widgets/components/dialslogic.js" as DialsLogic
+import "widgets/components/locklogic.js" as LockLogic
 
 // 单个小组件实例的配置面板：复用 PanelPopup/PopupHeader，
 // 根据 WidgetManager 返回的 settings schema 动态生成控件并即时保存。
@@ -177,16 +178,41 @@ PanelPopup {
     function commit(key, value) {
         // 重新赋值整个 values 对象，保证依赖 control.values 的绑定（如
         // timezoneList 的行模型）在保存后重新求值
+        var prev = control.values
         var next = {}
-        for (var k in control.values)
-            next[k] = control.values[k]
+        for (var k in prev)
+            next[k] = prev[k]
         next[key] = value
+        // lockWhen 声明式联动引擎（宿主 API 1.11）：纯 schema 声明驱动、
+        // 不感知任何键名/组件名；无声明时 applyLocks 是零操作（不产生新键、
+        // 不改值，保存路径与既往完全一致）。非法声明由引擎静默跳过，
+        // 面板包装层负责校验与去重告警（见 warnLockDecl）。
+        for (var i = 0; i < control.schema.length; ++i) {
+            if (control.schema[i].lockWhen !== undefined) {
+                var bad = LockLogic.validateLock(control.schema, control.schema[i].key)
+                if (bad !== "")
+                    control.warnLockDecl(String(control.schema[i].key), bad)
+            }
+        }
+        LockLogic.applyLocks(control.schema, prev, next, key)
         control.values = next
         Panel.widgetManager.saveInstanceConfig(control.instanceId, next)
         if ((control.widgetId === "player" && key === "playerMode")
             || (control.widgetId === "applauncher" && key === "immersiveMode")
             || key === "transparentBackground")
             control.rebuildVisibleSchema()
+    }
+
+    // lockWhen 校验告警去重缓存：按面板实例每目标键只告警一次——
+    // 滑块每次拖动都会 commit，非法声明若逐次告警会刷屏
+    property var lockWarned: ({})
+
+    function warnLockDecl(targetKey, reason) {
+        if (control.lockWarned[targetKey] === undefined) {
+            control.lockWarned[targetKey] = true
+            console.warn("WidgetSettings: invalid lockWhen declaration on",
+                         control.widgetId, "key", targetKey, "-", reason)
+        }
     }
 
     // 表盘列表编辑：纯计算在 dialslogic.js，这里只做包装与落盘

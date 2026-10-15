@@ -351,6 +351,11 @@ RowLayout {
         Slider {
             Layout.fillWidth: true
             Layout.minimumWidth: 0
+            // 防"顶置"：SliderHandle 是 DciIcon，其隐式高（实测 44）大于样式
+            // 把手高（24）会撑高控件盒；而 DTK Slider 横向把手恒按 y=topPadding
+            // 贴盒顶无居中补偿 → 滑槽+把手整体偏上 (44-24)/2=10px。把隐式高压回
+            // 实际把手高，控件盒=把手盒，行内垂直居中后滑槽中心与 SpinBox 对齐。
+            implicitHeight: handle ? handle.height : 24
             from: modelData.min !== undefined ? Number(modelData.min) : 0
             to: modelData.max !== undefined ? Number(modelData.max) : 100
             stepSize: modelData.step !== undefined ? Number(modelData.step) : 1
