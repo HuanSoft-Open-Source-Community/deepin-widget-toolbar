@@ -74,6 +74,15 @@ QWidget *WidgetToolbarTrayPlugin::itemPopupApplet(const QString &itemKey)
     return nullptr;
 }
 
+const QString WidgetToolbarTrayPlugin::itemCommand(const QString &itemKey)
+{
+    Q_UNUSED(itemKey)
+    // 由任务栏执行（QProcess，按空格切分参数）：整格（含 itemPadding 留白）
+    // 左键点击都走这里，避免只有 16×16 图标区可点。与内置 notification 插件同机制。
+    return QStringLiteral("dbus-send --session --type=method_call --dest=%1 %2 %3.toggle")
+        .arg(kPanelService, kPanelPath, kPanelInterface);
+}
+
 Dock::PluginFlags WidgetToolbarTrayPlugin::flags() const
 {
     // 声明 Attribute_CanSetting 使插件出现在控制中心
