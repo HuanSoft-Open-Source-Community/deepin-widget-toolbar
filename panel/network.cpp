@@ -4,6 +4,8 @@
 
 #include "network.h"
 
+#include "debuglogger.h"
+
 #include <QDebug>
 #include <QDir>
 #include <QFileInfo>
@@ -70,14 +72,22 @@ void Network::setAllowHttpForTest(bool allow)
 int Network::getJson(const QString &urlString, int ttlSeconds)
 {
     const int id = m_nextRequestId.fetch_add(1) + 1;
+    DEBUG_LOG(network, QStringLiteral("getJson #%1 ttl=%2 url=%3")
+                  .arg(id).arg(ttlSeconds).arg(urlString));
 
     QUrl url(urlString);
     switch (checkUrl(url)) {
     case UrlCheck::Invalid:
-        Q_EMIT jsonFinished(id, false, QVariant(), QStringLiteral("invalid-url"), 0);
+        QMetaObject::invokeMethod(this, [this, id]() {
+            Q_EMIT jsonFinished(id, false, QVariant(),
+                                QStringLiteral("invalid-url"), 0);
+        }, Qt::QueuedConnection);
         return id;
     case UrlCheck::NotAllowedScheme:
-        Q_EMIT jsonFinished(id, false, QVariant(), QStringLiteral("scheme-not-https"), 0);
+        QMetaObject::invokeMethod(this, [this, id]() {
+            Q_EMIT jsonFinished(id, false, QVariant(),
+                                QStringLiteral("scheme-not-https"), 0);
+        }, Qt::QueuedConnection);
         return id;
     case UrlCheck::Ok:
         break;
@@ -94,7 +104,14 @@ int Network::getJson(const QString &urlString, int ttlSeconds)
         const auto it = m_jsonCache.constFind(p.cacheKey);
         if (it != m_jsonCache.constEnd()) {
             if (it->expiry > QDateTime::currentDateTime()) {
-                Q_EMIT jsonFinished(id, true, it->data, QString(), 200);
+                DEBUG_LOG(network, QStringLiteral("getJson #%1 cache hit").arg(id));
+                // 缓存命中必须异步回传：QML 侧 pendingJsonId = getJson(...) 的
+                // 赋值尚未完成，同步 emit 会被 onJsonFinished 当作陈旧回调丢弃，
+                // 导致回退图片下载永远不启动、卡在 loading
+                const QVariant data = it->data;
+                QMetaObject::invokeMethod(this, [this, id, data]() {
+                    Q_EMIT jsonFinished(id, true, data, QString(), 200);
+                }, Qt::QueuedConnection);
                 return id;
             }
             m_jsonCache.erase(it);
@@ -108,14 +125,22 @@ int Network::getJson(const QString &urlString, int ttlSeconds)
 int Network::download(const QString &urlString, const QString &destPath)
 {
     const int id = m_nextRequestId.fetch_add(1) + 1;
+    DEBUG_LOG(network, QStringLiteral("download #%1 url=%2 dest=%3")
+                  .arg(id).arg(urlString).arg(destPath));
 
     QUrl url(urlString);
     switch (checkUrl(url)) {
     case UrlCheck::Invalid:
-        Q_EMIT downloadFinished(id, false, destPath, QStringLiteral("invalid-url"), 0);
+        QMetaObject::invokeMethod(this, [this, id, destPath]() {
+            Q_EMIT downloadFinished(id, false, destPath,
+                                    QStringLiteral("invalid-url"), 0);
+        }, Qt::QueuedConnection);
         return id;
     case UrlCheck::NotAllowedScheme:
-        Q_EMIT downloadFinished(id, false, destPath, QStringLiteral("scheme-not-https"), 0);
+        QMetaObject::invokeMethod(this, [this, id, destPath]() {
+            Q_EMIT downloadFinished(id, false, destPath,
+                                    QStringLiteral("scheme-not-https"), 0);
+        }, Qt::QueuedConnection);
         return id;
     case UrlCheck::Ok:
         break;
@@ -124,7 +149,10 @@ int Network::download(const QString &urlString, const QString &destPath)
     // 沙箱：与 FileIO 同根，拒绝即回调，不发请求
     if (!isPathAllowed(destPath)) {
         qWarning() << "Network: download destination denied by sandbox:" << destPath;
-        Q_EMIT downloadFinished(id, false, destPath, QStringLiteral("path-denied"), 0);
+        QMetaObject::invokeMethod(this, [this, id, destPath]() {
+            Q_EMIT downloadFinished(id, false, destPath,
+                                    QStringLiteral("path-denied"), 0);
+        }, Qt::QueuedConnection);
         return id;
     }
 
@@ -134,6 +162,26 @@ int Network::download(const QString &urlString, const QString &destPath)
     p.destPath = destPath;
     issueRequest(url, p);
     return id;
+}
+
+void Network::cancel(int requestId)
+{
+    if (requestId <= 0)
+        return;
+    // 按 requestId 反查 reply：m_pending 以 reply 为键，需遍历匹配 id
+    for (auto it = m_pending.begin(); it != m_pending.end(); ++it) {
+        if (it.value().id == requestId) {
+            DEBUG_LOG(network, QStringLiteral("cancel #%1 found, aborting (pending=%2)")
+                          .arg(requestId).arg(m_pending.size()));
+            it.value().canceled = true;
+            QNetworkReply *reply = it.key();
+            // 队列化 abort：避免同步 finished 重入时改写 m_pending 使迭代器失效
+            QMetaObject::invokeMethod(reply, &QNetworkReply::abort, Qt::QueuedConnection);
+            return;
+        }
+    }
+    DEBUG_LOG(network, QStringLiteral("cancel #%1 not found in pending (pending=%2)")
+                  .arg(requestId).arg(m_pending.size()));
 }
 
 Network::UrlCheck Network::checkUrl(const QUrl &url) const
@@ -272,14 +320,17 @@ void Network::finishJson(QNetworkReply *reply)
 
     const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     const auto fail = [this, &p, status](const QString &code) {
+        DEBUG_LOG(network, QStringLiteral("finishJson #%1 FAIL code=%2 status=%3")
+                      .arg(p.id).arg(code).arg(status));
         Q_EMIT jsonFinished(p.id, false, QVariant(), code, status);
     };
 
     if (p.tooLarge)
         return fail(QStringLiteral("too-large"));
-    // OperationCanceledError 在当前设计里只能由 setTransferTimeout 触发
-    // （too-large 的主动 abort 已被上面的标记截获）→ "timeout"；
-    // "aborted" 稳定码保留给将来的显式取消通道（如 cancel(requestId)）
+    // 显式 cancel() 中止：reply->error() 同为 OperationCanceledError，
+    // 但 canceled 标记区分于传输超时，返回 "aborted" 供 QML 侧静默丢弃
+    if (p.canceled)
+        return fail(QStringLiteral("aborted"));
     if (reply->error() == QNetworkReply::OperationCanceledError)
         return fail(QStringLiteral("timeout"));
     // HTTP 状态非 2xx 优先于网络层错误：Qt 会把 404 等映射成
@@ -303,6 +354,8 @@ void Network::finishJson(QNetworkReply *reply)
     if (p.ttlSeconds > 0)
         m_jsonCache.insert(p.cacheKey,
                            { data, QDateTime::currentDateTime().addSecs(p.ttlSeconds) });
+    DEBUG_LOG(network, QStringLiteral("finishJson #%1 success status=%2 bytes=%3")
+                  .arg(p.id).arg(status).arg(p.body.size()));
     Q_EMIT jsonFinished(p.id, true, data, QString(), status);
 }
 
@@ -316,6 +369,8 @@ void Network::finishDownload(QNetworkReply *reply)
     const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     QSaveFile *file = p.file;
     const auto fail = [&](const QString &code) {
+        DEBUG_LOG(network, QStringLiteral("finishDownload #%1 FAIL code=%2 status=%3")
+                      .arg(p.id).arg(code).arg(status));
         if (file) {
             file->cancelWriting();
             delete file;
@@ -327,9 +382,10 @@ void Network::finishDownload(QNetworkReply *reply)
         return fail(QStringLiteral("network"));
     if (p.tooLarge)
         return fail(QStringLiteral("too-large"));
-    // OperationCanceledError 在当前设计里只能由 setTransferTimeout 触发
-    // （too-large 的主动 abort 已被上面的标记截获）→ "timeout"；
-    // "aborted" 稳定码保留给将来的显式取消通道（如 cancel(requestId)）
+    // 显式 cancel() 中止：reply->error() 同为 OperationCanceledError，
+    // 但 canceled 标记区分于传输超时，返回 "aborted" 供 QML 侧静默丢弃
+    if (p.canceled)
+        return fail(QStringLiteral("aborted"));
     if (reply->error() == QNetworkReply::OperationCanceledError)
         return fail(QStringLiteral("timeout"));
     // HTTP 状态非 2xx 优先于网络层错误：Qt 会把 404 等映射成
@@ -356,5 +412,7 @@ void Network::finishDownload(QNetworkReply *reply)
         return fail(QStringLiteral("network"));
     }
     delete file;
+    DEBUG_LOG(network, QStringLiteral("finishDownload #%1 success status=%2 bytes=%3")
+                  .arg(p.id).arg(status).arg(p.received));
     Q_EMIT downloadFinished(p.id, true, p.destPath, QString(), status);
 }
