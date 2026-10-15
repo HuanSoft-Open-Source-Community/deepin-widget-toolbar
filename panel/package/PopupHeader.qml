@@ -35,8 +35,12 @@ RowLayout {
         Layout.preferredHeight: 28
         radius: width / 2
         color: closeBtnArea.pressed
-            ? Qt.rgba(0, 0, 0, 0.15)
-            : closeBtnArea.containsMouse ? Qt.rgba(0, 0, 0, 0.1) : "transparent"
+            ? (DTK.themeType === ApplicationHelper.DarkType
+                ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(0, 0, 0, 0.15))
+            : closeBtnArea.containsMouse
+                ? (DTK.themeType === ApplicationHelper.DarkType
+                    ? Qt.rgba(1, 1, 1, 0.1) : Qt.rgba(0, 0, 0, 0.1))
+                : "transparent"
 
         Text {
             anchors.centerIn: parent

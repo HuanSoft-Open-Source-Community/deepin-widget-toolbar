@@ -40,24 +40,25 @@ Components.WidgetCard {
         ? widgetConfig.highlightToday : true
     property int gridSpacing: 1
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
-    backgroundColor: Components.ColorUtils.opaqueColor(
-        widgetConfig && widgetConfig.backgroundColor, "#ffffff")
-    textColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.textColor, "#222222")
-    property color titleBackgroundColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.titleBackgroundColor, "#e64545")
-    property color titleTextColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.titleTextColor, "#ffffff")
-    property color weekdayBackgroundColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.weekdayBackgroundColor, "#ffc0cb")
-    property color weekdayTextColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.weekdayTextColor, "#8a3a3a")
+    // 默认预设随明/暗主题切换（用户自定义颜色仍优先生效）
+    backgroundColor: Components.ColorUtils.themedOpaqueColor(
+        widgetConfig && widgetConfig.backgroundColor, "#ffffff", "#1f1f1f")
+    textColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.textColor, "#222222", "#e8e8e8")
+    property color titleBackgroundColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.titleBackgroundColor, "#e64545", "#8c2f2f")
+    property color titleTextColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.titleTextColor, "#ffffff", "#f2f2f2")
+    property color weekdayBackgroundColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.weekdayBackgroundColor, "#ffc0cb", "#3a2a2e")
+    property color weekdayTextColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.weekdayTextColor, "#8a3a3a", "#e2a7af")
     highlightColor: Components.ColorUtils.resolveColor(
         widgetConfig && widgetConfig.highlightColor, "#e64545")
     highlightedTextColor: Components.ColorUtils.resolveColor(
         widgetConfig && widgetConfig.highlightedTextColor, "#ffffff")
-    property color gridColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.gridColor, "#cccccc")
+    property color gridColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.gridColor, "#cccccc", "#3a3a3a")
     // 用实数除法让 7 列 + 6px 间距精确填满内容区，
     // 避免 Math.floor 取整后右侧露出网格底色竖线。
     property real cellWidth: Math.max(12,

@@ -128,7 +128,9 @@ PanelPopup {
                     height: 44
                     radius: DTK.platformTheme.windowRadius
                     color: addHover.containsMouse
-                        ? Qt.rgba(0, 0, 0, 0.08) : "transparent"
+                        ? (DTK.themeType === ApplicationHelper.DarkType
+                            ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.08))
+                        : "transparent"
 
                     RowLayout {
                         anchors.fill: parent
@@ -169,7 +171,15 @@ PanelPopup {
                             Layout.preferredWidth: 56
                             Layout.preferredHeight: 26
                             radius: DTK.platformTheme.windowRadius
-                            color: installed ? "transparent" : (addHover.containsMouse ? Qt.rgba(0, 0, 0, 0.12) : Qt.rgba(0, 0, 0, 0.06))
+                            color: installed
+                                ? "transparent"
+                                : (DTK.themeType === ApplicationHelper.DarkType
+                                    ? (addHover.containsMouse
+                                        ? Qt.rgba(1, 1, 1, 0.18)
+                                        : Qt.rgba(1, 1, 1, 0.10))
+                                    : (addHover.containsMouse
+                                        ? Qt.rgba(0, 0, 0, 0.12)
+                                        : Qt.rgba(0, 0, 0, 0.06)))
 
                             Text {
                                 anchors.centerIn: parent

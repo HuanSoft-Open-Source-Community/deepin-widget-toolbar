@@ -113,7 +113,7 @@ PanelPopup {
                 anchors.leftMargin: hueSlider.handle.width / 2
                 anchors.rightMargin: hueSlider.handle.width / 2
                 border.width: 2
-                border.color: Qt.rgba(0, 0, 0, 0.25)
+                border.color: ColorUtils.hairline
                 radius: 10
                 color: "transparent"
 
@@ -153,7 +153,7 @@ PanelPopup {
                 anchors.leftMargin: alphaSlider.handle.width / 2
                 anchors.rightMargin: alphaSlider.handle.width / 2
                 border.width: 2
-                border.color: Qt.rgba(0, 0, 0, 0.25)
+                border.color: ColorUtils.hairline
                 radius: 10
                 color: "transparent"
 
@@ -210,7 +210,7 @@ PanelPopup {
                 implicitWidth: 32
                 implicitHeight: 32
                 border.width: 2
-                border.color: Qt.rgba(0, 0, 0, 0.25)
+                border.color: ColorUtils.hairline
                 color: "transparent"
 
                 Image {

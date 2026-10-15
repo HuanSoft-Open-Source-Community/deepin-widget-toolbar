@@ -50,8 +50,8 @@ Components.WidgetCard {
     property bool showLabels: root.cfg.showLabels !== undefined
         ? root.cfg.showLabels : true
     transparentBackground: root.cfg.transparentBackground === true
-    backgroundColor: Components.ColorUtils.opaqueColor(
-        root.cfg.backgroundColor, "#660066")
+    backgroundColor: Components.ColorUtils.themedOpaqueColor(
+        root.cfg.backgroundColor, "#660066", "#2b0f2b")
     property color labelColor: Components.ColorUtils.resolveColor(
         root.cfg.labelColor, "#ffffff")
     property color unitColor: Components.ColorUtils.resolveColor(

@@ -19,14 +19,15 @@ Components.WidgetCard {
     property string lyricColor: widgetConfig && widgetConfig.lyricsColor
         ? widgetConfig.lyricsColor : "auto"
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
-    backgroundColor: Components.ColorUtils.opaqueColor(
-        widgetConfig && widgetConfig.backgroundColor, "#ffffc0cb")
-    property color titleTextColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.titleTextColor, "#7a1f33")
-    property color statusTextColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.statusTextColor, "#7a3b4a")
-    property string inactiveTextColor: widgetConfig && widgetConfig.inactiveTextColor
-        ? String(widgetConfig.inactiveTextColor) : "#8a4a55"
+    // 默认预设随明/暗主题切换（用户自定义颜色仍优先生效）
+    backgroundColor: Components.ColorUtils.themedOpaqueColor(
+        widgetConfig && widgetConfig.backgroundColor, "#ffffc0cb", "#ff4a2b31")
+    property color titleTextColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.titleTextColor, "#7a1f33", "#f0c8d0")
+    property color statusTextColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.statusTextColor, "#7a3b4a", "#e6b9c2")
+    property string inactiveTextColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.inactiveTextColor, "#8a4a55", "#cfa6ad")
     property int contentHeight: Math.max(1, height - margin * 2)
     property int activePixelSize: Math.max(13, Math.min(42,
         Math.round(contentHeight * 0.105)))
@@ -46,7 +47,9 @@ Components.WidgetCard {
     function textColor(active) {
         if (root.lyricColor !== "auto")
             return root.lyricColor
-        // 淡粉底固定为浅色，auto 模式必须用深色文字保证可读性
+        // auto 模式：亮色淡粉底用深色文字，暗色粉底用浅色文字，保证可读性
+        if (Components.ColorUtils.dark)
+            return active ? "#f0a8be" : "#d9bcc6"
         return active ? "#b0305a" : "#5a2233"
     }
 

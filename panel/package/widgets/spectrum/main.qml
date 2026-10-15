@@ -20,8 +20,8 @@ Components.WidgetCard {
     widgetConfig: ({})
     instanceId: ""
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
-    backgroundColor: Components.ColorUtils.opaqueColor(
-        widgetConfig && widgetConfig.backgroundColor, "#C8E6C9")
+    backgroundColor: Components.ColorUtils.themedOpaqueColor(
+        widgetConfig && widgetConfig.backgroundColor, "#C8E6C9", "#24352a")
     property color barColor: Components.ColorUtils.resolveColor(
         widgetConfig && widgetConfig.barColor, root.highlightColor)
     property int amplitude: {

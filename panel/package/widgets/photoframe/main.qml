@@ -68,8 +68,9 @@ Item {
         }
         return "solid"
     }
-    readonly property color frameColor: Components.ColorUtils.resolveColor(
-        widgetConfig ? widgetConfig.frameColor : null, "#FFFFFFFF")
+    // 默认预设随明/暗主题切换（用户自定义颜色仍优先生效）
+    readonly property color frameColor: Components.ColorUtils.themedColor(
+        widgetConfig ? widgetConfig.frameColor : null, "#FFFFFFFF", "#FF2B2B2B")
     readonly property int frameWidth: {
         var v = widgetConfig ? Number(widgetConfig.frameWidth) : NaN
         if (!isFinite(v))

@@ -968,6 +968,8 @@ Window {
     // ===== 右键菜单（面板空白处） =====
     Menu {
         id: contextMenu
+        // 显式注入 DTK 主题调色板：菜单文字/底色不依赖窗口继承，暗色下同样适配
+        palette: DTK.palette
 
         MenuItem {
             text: qsTr("Add widget")
@@ -1042,6 +1044,8 @@ Window {
     // ===== 单个小组件的右键菜单（每次打开按可见项重建，高度随内容收缩） =====
     Menu {
         id: widgetContextMenu
+        // 显式注入 DTK 主题调色板：菜单文字/底色不依赖窗口继承，暗色下同样适配
+        palette: DTK.palette
 
         property string currentInstanceId: ""
         property string currentWidgetId: ""
