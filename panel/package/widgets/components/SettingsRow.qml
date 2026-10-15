@@ -208,7 +208,7 @@ RowLayout {
                         : (DTK.themeType === ApplicationHelper.DarkType
                             ? "#4d8cff" : "#0081ff")
                     border.width: 1
-                    border.color: Qt.rgba(0, 0, 0, 0.25)
+                    border.color: ColorUtils.hairline
                     transformOrigin: Item.Center
                     scale: swatchMouse.pressed ? 0.88 : 1.0
 
@@ -246,7 +246,7 @@ RowLayout {
                 radius: 12
                 color: "transparent"
                 border.width: 1
-                border.color: Qt.rgba(0, 0, 0, 0.25)
+                border.color: ColorUtils.hairline
                 transformOrigin: Item.Center
                 scale: customColorMouse.pressed ? 0.88 : 1.0
 
@@ -399,7 +399,7 @@ RowLayout {
             color: "transparent"
             clip: true
             border.width: 1
-            border.color: Qt.rgba(0, 0, 0, 0.25)
+            border.color: ColorUtils.hairline
 
             Image {
                 anchors.fill: parent
@@ -1035,7 +1035,7 @@ RowLayout {
                             radius: 7
                             color: host.dialColorValue(key, index, modelData.field)
                             border.width: 1
-                            border.color: Qt.rgba(0, 0, 0, 0.25)
+                            border.color: ColorUtils.hairline
 
                             MouseArea {
                                 anchors.fill: parent

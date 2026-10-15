@@ -25,10 +25,10 @@ Components.WidgetCard {
     property bool showControls: widgetConfig && widgetConfig.showControls !== undefined
         ? widgetConfig.showControls : true
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
-    backgroundColor: Components.ColorUtils.opaqueColor(
-        widgetConfig && widgetConfig.backgroundColor, "#00bcd4")
-    textColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.textColor, "#1a1a1a")
+    backgroundColor: Components.ColorUtils.themedOpaqueColor(
+        widgetConfig && widgetConfig.backgroundColor, "#00bcd4", "#10535c")
+    textColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.textColor, "#1a1a1a", "#e8e8e8")
 
     MediaPlayer {
         id: player

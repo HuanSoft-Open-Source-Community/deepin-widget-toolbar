@@ -34,18 +34,22 @@ Components.WidgetCard {
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
     // 卡片底色跟随内容背景色，让内容自定义色延伸到整个便签卡片
     backgroundColor: root.contentBackgroundColor
-    textColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.textColor, "#3d2b00")
-    property color titleBackgroundColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.titleBackgroundColor, "#c8a500")
-    property color titleTextColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.titleTextColor, "#1a1a00")
-    property color contentBackgroundColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.contentBackgroundColor, "#fff8d6")
-    property color lineColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.lineColor, "#cccccc")
+    // 默认预设随明/暗主题切换（用户自定义颜色仍优先生效）
+    textColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.textColor, "#3d2b00", "#ede3be")
+    property color titleBackgroundColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.titleBackgroundColor, "#c8a500", "#6d5c05")
+    property color titleTextColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.titleTextColor, "#1a1a00", "#f4eecb")
+    property color contentBackgroundColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.contentBackgroundColor, "#fff8d6", "#2a2618")
+    property color lineColor: Components.ColorUtils.themedColor(
+        widgetConfig && widgetConfig.lineColor, "#cccccc", "#4a4636")
     // 待办模式开关（实例设置，缺省关闭）
     property bool todoMode: widgetConfig && widgetConfig.todoMode === true
+    // 自动换行开关（实例设置，缺省开启）：开启时文字在卡片宽度内换行；
+    // 关闭时按原样横向排布，超出部分由横向滚动查看（见 noteFlick.contentWidth）
+    property bool autoWrap: !(widgetConfig && widgetConfig.autoWrap === false)
     // 各行完成标记（按行索引与文本行对齐；长度恒与 lineCount 同步）
     property var doneFlags: []
     // 程序化赋值文本期间置 true，抑制 onTextChanged 的标记同步
@@ -94,6 +98,9 @@ Components.WidgetCard {
     property var lineStarts: []
     property var lineTops: []
     property var lineHeights: []
+    // 每个逻辑行占用的视觉行数（自动换行关闭时恒为 1）：圆点只画在逻辑行首，
+    // 洗色/删除线/行底线按它向该逻辑行的每个视觉行展开（见 rebuildLineTops）
+    property var lineRowCounts: []
 
     function rebuildLineStarts() {
         var lines = noteArea.text.replace(/\r\n/g, "\n").split("\n")
@@ -109,19 +116,37 @@ Components.WidgetCard {
     function rebuildLineTops() {
         var tops = []
         var heights = []
+        var rows = []
         for (var i = 0; i < root.lineStarts.length; i++) {
             var r = noteArea.positionToRectangle(root.lineStarts[i])
             tops.push(r.y)
             heights.push(r.height)
         }
-        root.lineTops = tops
-        root.lineHeights = heights
-        // 极端行分隔符（U+2028 等）下 split 行数可能少于 lineCount：
-        // 按末行几何补齐，避免委托绑定 y/height 取到 undefined
-        while (tops.length < noteArea.lineCount && tops.length > 0) {
-            tops.push(tops[tops.length - 1] + heights[heights.length - 1])
-            heights.push(heights[heights.length - 1])
+        // 视觉行数：用相邻逻辑行顶距反推（= 行距 / 本行首行高），O(逻辑行数)、
+        // 不逐字符扫描；末行改用行尾字符所在视觉行反推。未换行（含自动换行关闭）恒为 1。
+        // 圆点只落在每个逻辑行首行，续行不再出点。
+        for (var j = 0; j < tops.length; j++) {
+            var count = 1
+            var h = heights[j]
+            if (h > 0) {
+                if (j + 1 < tops.length) {
+                    count = Math.max(1, Math.round((tops[j + 1] - tops[j]) / h))
+                } else {
+                    var start = root.lineStarts[j]
+                    var len = noteArea.length - start
+                    if (len > 0) {
+                        var lastTop = noteArea.positionToRectangle(start + len - 1).y
+                        count = Math.max(1, Math.round((lastTop - tops[j]) / h) + 1)
+                    }
+                }
+            }
+            rows.push(count)
         }
+        // 先写行数与行高、最后写 lineTops（Repeater 的 model 即 lineTops.length）：
+        // 委托创建时三个数组已一致，不会取到 undefined 几何
+        root.lineRowCounts = rows
+        root.lineHeights = heights
+        root.lineTops = tops
         if (lineCanvas)
             lineCanvas.requestPaint()
         if (strikeCanvas)
@@ -130,6 +155,7 @@ Components.WidgetCard {
         root.measuredWidth = noteArea.width
         root.measuredLeftPadding = noteArea.leftPadding
         root.measuredLines = root.lineStarts.length
+        root.measuredAutoWrap = root.autoWrap
     }
 
     // 行几何重测的去抖入口：只有「会影响行 y/高」的输入变化才重测——noteArea 宽度、
@@ -140,12 +166,16 @@ Components.WidgetCard {
     property real measuredWidth: -1
     property real measuredLeftPadding: -1
     property int measuredLines: -1
+    property bool measuredAutoWrap: true
     function rebuildLineTopsIfGeometryChanged() {
         if (!noteArea)
             return
-        if (Math.abs(noteArea.width - measuredWidth) < 0.5
+        // 自动换行关闭时每个逻辑行恒为一个视觉行，行几何与控件宽度无关，
+        // 宽度键直接置为命中，避免横向内容增长时反复重测
+        if ((!root.autoWrap || Math.abs(noteArea.width - measuredWidth) < 0.5)
                 && Math.abs(noteArea.leftPadding - measuredLeftPadding) < 0.5
-                && root.lineStarts.length === measuredLines)
+                && root.lineStarts.length === measuredLines
+                && root.autoWrap === measuredAutoWrap)
             return
         rebuildLineTops()
     }
@@ -170,6 +200,13 @@ Components.WidgetCard {
     onLineHeightChanged: {
         if (lineCanvas) lineCanvas.requestPaint()
         if (strikeCanvas) strikeCanvas.requestPaint()
+    }
+    onAutoWrapChanged: {
+        // 关→开：横向位置对新布局无意义，复位到最左
+        if (noteFlick)
+            noteFlick.contentX = 0
+        // 换行模式改变整块行几何（视觉行数随之变化）：延迟到布局更新后重测
+        Qt.callLater(root.rebuildLineTops)
     }
     onTodoModeChanged: {
         // 切模式时文本不变、标记保留；对齐一次防越界
@@ -196,13 +233,14 @@ Components.WidgetCard {
             && root.doneFlags[index] === true
     }
 
-    // 把标记数组对齐到当前行数：截断多余、尾部补 false（新增行缺省空心）。
+    // 把标记数组对齐到当前**逻辑行**数（自动换行只增加视觉行，不改变标记口径）：
+    // 截断多余、尾部补 false（新增行缺省空心）。
     // 已有标记按行索引保留。行数未变时不重建数组，避免每次击键触发
     // doneFlagsChanged 引发删除线画布整幅重绘。
     function syncFlags() {
         if (root.syncingFlags)
             return
-        var n = noteArea.lineCount
+        var n = root.lineStarts.length
         if (root.doneFlags.length === n)
             return
         var flags = root.doneFlags.slice(0, n)
@@ -238,7 +276,7 @@ Components.WidgetCard {
         if (p.x < 0 || p.x >= noteArea.leftPadding - 2)
             return false
         var idx = root.lineIndexAt(p.y)
-        if (idx < 0 || idx >= noteArea.lineCount)
+        if (idx < 0 || idx >= root.lineStarts.length)
             return false
         var flags = root.doneFlags.slice()
         while (flags.length <= idx)
@@ -277,6 +315,17 @@ Components.WidgetCard {
                 Math.max(0, noteFlick.contentHeight - noteFlick.height),
                 lineTop + root.lineHeight - noteFlick.height + margin)
         }
+        // 横向：自动换行关闭（内容超宽）时光标越界也平移 contentX
+        if (noteFlick.contentWidth > noteFlick.width + 1) {
+            bounceAnimX.stop()
+            var maxX = Math.max(0, noteFlick.contentWidth - noteFlick.width)
+            if (r.x < noteFlick.contentX + margin) {
+                noteFlick.contentX = Math.max(0, r.x - margin)
+            } else if (r.x + r.width > noteFlick.contentX + noteFlick.width - margin) {
+                noteFlick.contentX = Math.min(maxX,
+                    r.x + r.width - noteFlick.width + margin)
+            }
+        }
     }
 
     Timer {
@@ -296,6 +345,15 @@ Components.WidgetCard {
             }
             root.focusNoteAt(root.lastClickPos.x, root.lastClickPos.y)
         }
+    }
+
+    // 自动换行模式下的行几何去抖：同行编辑（未增减逻辑行）也可能改变视觉行数
+    // （把某行输入到换行、删到不再换行），逻辑行数未变时不立即重测，短延时合并连续击键
+    Timer {
+        id: wrapGeometryTimer
+        interval: 120
+        repeat: false
+        onTriggered: root.rebuildLineTops()
     }
 
     // ===== XML 持久化 =====
@@ -392,18 +450,23 @@ Components.WidgetCard {
 
             // 无限滚动：TextArea 全高铺开内容，可视窗口由 Flickable 决定，
             // contentHeight 随行数动态增长；滚轮/触摸板滚动，光标移动自动跟随。
+            // 自动换行关闭时文本横向排布，contentWidth 随最长行增长 → 左右也能滚。
             // （宿主拖放层为长按拖拽持有按下，触屏单指拖滚不生效，属桌面场景取舍。）
             Flickable {
                 id: noteFlick
                 anchors.fill: parent
                 clip: true
-                contentWidth: width
+                contentWidth: root.autoWrap ? width : Math.max(width, noteArea.width)
                 contentHeight: Math.max(height, noteArea.height)
 
                 // 滚动即点亮指示条：滚轮、回弹动画、光标自动滚入三条路径都经
-                // contentY 赋值，天然全部驱动（attached ScrollBar 依赖的 moving
-                // 恒为 false、hover 又被宿主拖放层持有，故弃用改自绘指示条）
+                // contentY/contentX 赋值，天然全部驱动（attached ScrollBar 依赖的
+                // moving 恒为 false、hover 又被宿主拖放层持有，故弃用改自绘指示条）
                 onContentYChanged: {
+                    root.scrollActive = true
+                    scrollActivity.restart()
+                }
+                onContentXChanged: {
                     root.scrollActive = true
                     scrollActivity.restart()
                 }
@@ -416,29 +479,45 @@ Components.WidgetCard {
                     target: null
                     onWheel: (ev) => {
                         ev.accepted = true
+                        var step = root.lineHeight * 3
                         var dy = ev.pixelDelta.y !== 0
                             ? -ev.pixelDelta.y
-                            : -ev.angleDelta.y / 120 * root.lineHeight * 3
-                        if (dy === 0)
+                            : -ev.angleDelta.y / 120 * step
+                        var dx = ev.pixelDelta.x !== 0
+                            ? -ev.pixelDelta.x
+                            : -ev.angleDelta.x / 120 * step
+                        if (dx === 0 && dy === 0)
                             return
-                        var maxC = Math.max(0, noteFlick.contentHeight - noteFlick.height)
-                        // 内容不足以滚动时：仅消费事件（防穿透），不做越界动画
-                        if (noteFlick.contentHeight <= noteFlick.height + 1) {
-                            noteFlick.cancelFlick()
-                            return
-                        }
-                        var clamped = Math.max(0, Math.min(maxC, noteFlick.contentY + dy))
                         // 越界余量钳制在约 2 行，避免连续滚动把内容拉飞
                         var maxOver = root.lineHeight * 2
-                        var target = Math.max(-maxOver, Math.min(maxC + maxOver,
-                            noteFlick.contentY + dy))
-                        bounceAnim.stop()
                         noteFlick.cancelFlick()
-                        noteFlick.contentY = target
-                        if (target !== clamped) {
-                            // 越界 → 回弹到最近边界（OutCubic 模拟橡皮筋回位）
-                            bounceAnim.to = clamped
-                            bounceAnim.restart()
+                        var maxC = Math.max(0, noteFlick.contentHeight - noteFlick.height)
+                        // 纵向：内容不足以滚动时该轴不动（仍消费事件防穿透）
+                        if (dy !== 0 && maxC > 0) {
+                            var clampedY = Math.max(0, Math.min(maxC, noteFlick.contentY + dy))
+                            bounceAnim.stop()
+                            noteFlick.contentY = Math.max(-maxOver,
+                                Math.min(maxC + maxOver, noteFlick.contentY + dy))
+                            if (noteFlick.contentY !== clampedY) {
+                                // 越界 → 回弹到最近边界（OutCubic 模拟橡皮筋回位）
+                                bounceAnim.to = clampedY
+                                bounceAnim.restart()
+                            }
+                        }
+                        // 横向：仅自动换行关闭、横向内容确实超宽时才滚动
+                        if (dx !== 0) {
+                            var maxR = Math.max(0, noteFlick.contentWidth - noteFlick.width)
+                            if (maxR > 0) {
+                                var clampedX = Math.max(0,
+                                    Math.min(maxR, noteFlick.contentX + dx))
+                                bounceAnimX.stop()
+                                noteFlick.contentX = Math.max(-maxOver,
+                                    Math.min(maxR + maxOver, noteFlick.contentX + dx))
+                                if (noteFlick.contentX !== clampedX) {
+                                    bounceAnimX.to = clampedX
+                                    bounceAnimX.restart()
+                                }
+                            }
                         }
                     }
                 }
@@ -449,12 +528,25 @@ Components.WidgetCard {
                     duration: 280
                     easing.type: Easing.OutCubic
                 }
+                NumberAnimation {
+                    id: bounceAnimX
+                    target: noteFlick
+                    property: "contentX"
+                    duration: 280
+                    easing.type: Easing.OutCubic
+                }
 
                 TextArea {
                     id: noteArea
-                    width: noteFlick.width
+                    // 自动换行：文字在可视宽度内换行，不产生横向溢出；
+                    // 关闭换行：控件宽度按内容宽度（含左右 padding）撑开，由横向滚动查看
+                    width: root.autoWrap ? noteFlick.width
+                        : Math.max(noteFlick.width,
+                                   noteArea.contentWidth + noteArea.leftPadding
+                                       + noteArea.rightPadding)
                     // 全高：内容不足时撑满可视区（底线画满整卡），超出时随内容增长
                     height: Math.max(noteFlick.height, implicitHeight)
+                    wrapMode: root.autoWrap ? TextEdit.Wrap : TextEdit.NoWrap
                     font.pixelSize: root.notePixelSize
                     color: root.effectiveTransparent ? root.themeTextColor : root.textColor
                     placeholderText: qsTr("Write something…")
@@ -496,21 +588,27 @@ Components.WidgetCard {
                             // 待办模式从圆点列右侧起笔，避免线穿过圆点下方；
                             // 经典模式保持原有 x=2 起点不变
                             var x0 = root.todoMode ? Math.max(2, noteArea.leftPadding) : 2
-                            // 已有行：精确画在实测行底（对齐事实源）
+                            // 已有行：精确画在实测行底（对齐事实源）；自动换行下每个
+                            // 逻辑行按其视觉行数逐行画底，包住整个换行块
                             for (var i = 0; i < root.lineTops.length; i++) {
-                                var ly = root.lineTops[i] + root.lineHeights[i] - 1
-                                if (ly >= height - noteArea.bottomPadding)
-                                    break
-                                ctx.beginPath()
-                                ctx.moveTo(x0, ly)
-                                ctx.lineTo(width - 4, ly)
-                                ctx.stroke()
+                                var rows = Math.max(1, root.lineRowCounts[i])
+                                for (var k = 1; k <= rows; k++) {
+                                    var ly = root.lineTops[i] + root.lineHeights[i] * k - 1
+                                    if (ly >= height - noteArea.bottomPadding)
+                                        return
+                                    ctx.beginPath()
+                                    ctx.moveTo(x0, ly)
+                                    ctx.lineTo(width - 4, ly)
+                                    ctx.stroke()
+                                }
                             }
-                            // 行数不足整卡：从最后一个实测行起按其实测行高补满，
+                            // 行数不足整卡：从最后一个实测行的下一行起按其实测行高补满，
                             // 空白区格线仍延续便签纸观感，且偏移不从头累积
                             if (root.lineTops.length > 0) {
-                                var step = root.lineHeights[root.lineHeights.length - 1]
-                                var y = root.lineTops[root.lineTops.length - 1] + step * 2 - 1
+                                var lastIdx = root.lineTops.length - 1
+                                var step = root.lineHeights[lastIdx]
+                                var y = root.lineTops[lastIdx] + step
+                                    * (Math.max(1, root.lineRowCounts[lastIdx]) + 1) - 1
                                 while (y < height - noteArea.bottomPadding) {
                                     ctx.beginPath()
                                     ctx.moveTo(x0, y)
@@ -557,11 +655,16 @@ Components.WidgetCard {
                             for (var i = 0; i < root.lineTops.length; i++) {
                                 if (!root.isDone(i))
                                     continue
-                                var y = root.lineTops[i] + root.lineHeights[i] * 0.5
-                                ctx.beginPath()
-                                ctx.moveTo(noteArea.leftPadding, y)
-                                ctx.lineTo(width - 4, y)
-                                ctx.stroke()
+                                // 自动换行下按视觉行逐行画删除线，整块换行行都被划到
+                                var rows = Math.max(1, root.lineRowCounts[i])
+                                for (var k = 0; k < rows; k++) {
+                                    var y = root.lineTops[i]
+                                        + root.lineHeights[i] * (k + 0.5)
+                                    ctx.beginPath()
+                                    ctx.moveTo(noteArea.leftPadding, y)
+                                    ctx.lineTo(width - 4, y)
+                                    ctx.stroke()
+                                }
                             }
                         }
                     }
@@ -569,8 +672,9 @@ Components.WidgetCard {
                     // 完成行"洗浅"矩形：半透明内容底色叠于文字上（z 高于 TextArea），
                     // 深字浅底两种配色下都呈现"变浅"观感。透明模式不叠（见 washColor：
                     // 雾底之上任何色块都会糊成突兀高亮带），完成态仍有实心点与删除线。
+                    // 逐个逻辑行一块，高度覆盖该行全部视觉行
                     Repeater {
-                        model: root.todoMode ? noteArea.lineCount : 0
+                        model: root.todoMode ? root.lineTops.length : 0
                         delegate: Rectangle {
                             required property int index
                             z: 2
@@ -578,15 +682,18 @@ Components.WidgetCard {
                             y: root.lineTops[index]
                             width: noteArea.width
                             height: root.lineHeights[index]
+                                * Math.max(1, root.lineRowCounts[index])
                             color: root.washColor
                             visible: root.isDone(index) && !root.effectiveTransparent
                         }
                     }
 
                     // 行首圆点列：空心（边框圆环）/实心（填充圆盘），随内容滚动；
-                    // 垂直居中于实测行几何，与文字逐行严格对齐
+                    // 垂直居中于实测行几何，与文字逐行严格对齐。
+                    // model 取逻辑行数（lineTops.length）：自动换行产生的续行不是行首，
+                    // 不再画点
                     Repeater {
-                        model: root.todoMode ? noteArea.lineCount : 0
+                        model: root.todoMode ? root.lineTops.length : 0
                         delegate: Item {
                             id: dotItem
                             required property int index
@@ -655,11 +762,15 @@ Components.WidgetCard {
                     }
 
                     onTextChanged: {
-                        root.syncFlags()
+                        // 先按新文本重建逻辑行起点，再让标记数组对齐逻辑行数
                         root.rebuildLineStarts()
-                        // 行数变化才重测行几何：同行编辑不改变任何行的 y/行高
+                        root.syncFlags()
+                        // 逻辑行数变化立即重测；行数不变时换行模式下行几何仍可能变
+                        //（同一行输入到换行/删到不换行），去抖重测
                         if (root.lineStarts.length !== root.lineTops.length)
                             root.rebuildLineTops()
+                        else if (root.autoWrap)
+                            wrapGeometryTimer.restart()
                     }
                     Component.onCompleted: {
                         root.rebuildLineStarts()
@@ -736,6 +847,49 @@ Components.WidgetCard {
                     id: scrollActivity
                     interval: 900
                     onTriggered: root.scrollActive = false
+                }
+            }
+
+            // ===== 横向滚动指示条：自动换行关闭且内容超宽时的底部细条 =====
+            // 与纵向指示条同一套"滚动点亮、闲置淡出"机制（共用 scrollActive 与
+            // scrollActivity）；颜色与圆点同源，纯视觉、无输入处理。
+            Item {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 3
+                height: 4
+                visible: !root.autoWrap
+                    && noteFlick.contentWidth > noteFlick.width + 1
+                opacity: root.scrollActive ? 1 : 0
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: root.scrollActive ? 250 : 600
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                // 拇指：长度按可视占比（最小 24px），位置随 contentX 线性映射
+                Rectangle {
+                    height: parent.height
+                    radius: height / 2
+                    color: root.dotColor
+                    opacity: 0.35
+                    width: Math.max(24,
+                        noteFlick.width * noteFlick.visibleArea.widthRatio)
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                    x: {
+                        if (noteFlick.contentWidth <= noteFlick.width)
+                            return 0
+                        var span = noteFlick.contentWidth - noteFlick.width
+                        var t = Math.max(0, Math.min(span, noteFlick.contentX)) / span
+                        return t * (parent.width - width)
+                    }
                 }
             }
         }

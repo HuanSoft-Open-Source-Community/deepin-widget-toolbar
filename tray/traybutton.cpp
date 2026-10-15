@@ -8,8 +8,6 @@
 
 #include <QDBusConnection>
 #include <QDBusInterface>
-#include <QDBusServiceWatcher>
-#include <QMouseEvent>
 #include <QPainter>
 
 DGUI_USE_NAMESPACE
@@ -42,16 +40,6 @@ void TrayButton::updateIcon()
 
 void TrayButton::initDbus()
 {
-    // 监听面板服务上线/下线，更新按钮可用状态
-    m_watcher = new QDBusServiceWatcher(kDBusService, QDBusConnection::sessionBus(),
-                                        QDBusServiceWatcher::WatchForRegistration
-                                            | QDBusServiceWatcher::WatchForUnregistration,
-                                        this);
-    connect(m_watcher, &QDBusServiceWatcher::serviceRegistered,
-            this, &TrayButton::onServiceAvailable);
-    connect(m_watcher, &QDBusServiceWatcher::serviceUnregistered,
-            this, &TrayButton::onServiceUnavailable);
-
     // 订阅面板显隐变化信号，同步按钮高亮
     QDBusConnection::sessionBus().connect(kDBusService, kDBusPath, kDBusInterface,
                                           QStringLiteral("visibleChanged"),
@@ -59,10 +47,8 @@ void TrayButton::initDbus()
 
     // 查询面板当前显隐状态
     QDBusInterface iface(kDBusService, kDBusPath, kDBusInterface);
-    if (iface.isValid()) {
+    if (iface.isValid())
         onPanelVisibleChanged(iface.property("visible").toBool());
-        m_serviceAvailable = true;
-    }
 }
 
 void TrayButton::paintEvent(QPaintEvent *event)
@@ -71,10 +57,10 @@ void TrayButton::paintEvent(QPaintEvent *event)
     QPainter p(this);
     p.setRenderHint(QPainter::SmoothPixmapTransform);
 
-    // 背景：hover 轻高亮，面板可见时强调色高亮
-    if (m_hover || m_panelVisible) {
+    // 背景：面板可见时强调色高亮（悬停高亮由任务栏自身的 item 背景提供）
+    if (m_panelVisible) {
         QColor bg = palette().highlight().color();
-        bg.setAlphaF(m_panelVisible ? 0.30 : 0.12);
+        bg.setAlphaF(0.30);
         p.setPen(Qt::NoPen);
         p.setBrush(bg);
         p.drawRoundedRect(rect(), 6, 6);
@@ -92,68 +78,11 @@ void TrayButton::paintEvent(QPaintEvent *event)
     p.drawPixmap(rect(), pm);
 }
 
-void TrayButton::mousePressEvent(QMouseEvent *event)
-{
-    if (event->button() == Qt::LeftButton) {
-        togglePanel();
-        event->accept();
-        return;
-    }
-    QWidget::mousePressEvent(event);
-}
-
-void TrayButton::enterEvent(QEnterEvent *event)
-{
-    m_hover = true;
-    update();
-    QWidget::enterEvent(event);
-}
-
-void TrayButton::leaveEvent(QEvent *event)
-{
-    m_hover = false;
-    update();
-    QWidget::leaveEvent(event);
-}
-
 void TrayButton::onPanelVisibleChanged(bool visible)
 {
     if (m_panelVisible == visible) {
         return;
     }
     m_panelVisible = visible;
-    update();
-}
-
-void TrayButton::onServiceAvailable(const QString &service)
-{
-    Q_UNUSED(service)
-    m_serviceAvailable = true;
-    update();
-}
-
-void TrayButton::onServiceUnavailable(const QString &service)
-{
-    Q_UNUSED(service)
-    m_serviceAvailable = false;
-    update();
-}
-
-void TrayButton::togglePanel()
-{
-    if (!m_serviceAvailable) {
-        qWarning() << "widget-toolbar panel D-Bus service is not available";
-        return;
-    }
-    QDBusInterface iface(kDBusService, kDBusPath, kDBusInterface);
-    if (!iface.isValid()) {
-        qWarning() << "widget-toolbar D-Bus interface invalid";
-        return;
-    }
-    iface.call(QStringLiteral("toggle"));
-}
-
-void TrayButton::updateAvailability()
-{
     update();
 }

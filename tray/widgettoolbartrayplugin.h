@@ -27,6 +27,8 @@ public:
     QWidget *itemWidget(const QString &itemKey) override;
     QWidget *itemTipsWidget(const QString &itemKey) override;
     QWidget *itemPopupApplet(const QString &itemKey) override;
+    // 左键点击命令：由任务栏在托盘整格内任意位置触发，切换面板显隐
+    const QString itemCommand(const QString &itemKey) override;
     Dock::PluginFlags flags() const override;
     // 控制中心"个性化 → 桌面和任务栏 → 插件区域"显示图标
     QIcon icon(Dock::IconType dockPart, Dock::ThemeType themeType) const override;

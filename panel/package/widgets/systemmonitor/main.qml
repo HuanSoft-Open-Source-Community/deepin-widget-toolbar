@@ -33,8 +33,8 @@ Components.WidgetCard {
     property int refreshInterval: widgetConfig && widgetConfig.refreshInterval
         ? Math.max(1000, Number(widgetConfig.refreshInterval)) : 5000
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
-    backgroundColor: Components.ColorUtils.opaqueColor(
-        widgetConfig && widgetConfig.backgroundColor, "#ff8b5cf6")
+    backgroundColor: Components.ColorUtils.themedOpaqueColor(
+        widgetConfig && widgetConfig.backgroundColor, "#ff8b5cf6", "#ff3a2f56")
     // 透明模式（实例透明开关或面板级卡片透明模式）下文字切主题自适应色，
     // 与 clock/calendar/todo/worldtime 保持一致；内容色（轨道/进度条）保留配置值。
     textColor: root.effectiveTransparent
