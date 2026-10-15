@@ -82,7 +82,8 @@ bool isKnownSettingType(const QString &type)
         QStringLiteral("color"), QStringLiteral("font"),
         QStringLiteral("string"), QStringLiteral("integer"),
         QStringLiteral("timezoneList"), QStringLiteral("player"),
-        QStringLiteral("launcherList"), QStringLiteral("image")
+        QStringLiteral("launcherList"), QStringLiteral("image"),
+        QStringLiteral("slider")
     };
     return kTypes.contains(type);
 }

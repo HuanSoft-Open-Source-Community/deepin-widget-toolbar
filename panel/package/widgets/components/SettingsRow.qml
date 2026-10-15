@@ -329,6 +329,41 @@ RowLayout {
         }
     }
 
+    // slider 行（schema min/max/step，API 1.10 新增）：DTK 滑块 + 数值框双向联动。
+    // 防循环设计：Slider/SpinBox 的 value 都直接绑定 host.values[key]；
+    // 只在 onMoved/onValueModified（用户手势信号，绑定重评估不触发）里 commit，
+    // host.commit 重建 values 后绑定重评估为同值，不再触发手势信号 → 无循环。
+    RowLayout {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        visible: type === "slider"
+        spacing: 8
+
+        Slider {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            from: modelData.min !== undefined ? Number(modelData.min) : 0
+            to: modelData.max !== undefined ? Number(modelData.max) : 100
+            stepSize: modelData.step !== undefined ? Number(modelData.step) : 1
+            value: {
+                var v = Number(host.values[key])
+                return (host.values[key] !== undefined && isFinite(v)) ? v : from
+            }
+            onMoved: host.commit(key, value)
+        }
+
+        SpinBox {
+            from: modelData.min !== undefined ? Number(modelData.min) : 0
+            to: modelData.max !== undefined ? Number(modelData.max) : 100
+            value: {
+                var v = Number(host.values[key])
+                return (host.values[key] !== undefined && isFinite(v)) ? v : from
+            }
+            onValueModified: host.commit(key, value)
+            Layout.preferredWidth: 100
+        }
+    }
+
     // 实例图片（image）：值是相对 dataDir 的相对路径（空串 = 未设置）。
     // 缩略图预览 + 选择/清除；文件对话框、复制与删除由 host（配置面板）
     // 经 WidgetHost 完成——小组件沙箱不能读外部文件，复制必须由宿主做
