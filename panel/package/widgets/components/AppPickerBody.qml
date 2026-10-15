@@ -108,6 +108,8 @@ Item {
             font: DTK.fontManager.t6
             color: palette.windowText
             elide: Text.ElideRight
+            // 标题截断时悬停显示全文
+            ElideTip { anchors.fill: parent }
         }
 
         TextField {
@@ -155,10 +157,20 @@ Item {
                 width: appList.width
                 height: 44
 
+                // 行悬停视觉（底色高亮 + 手型光标）由被动 HoverHandler 承担。
+                // 旧实现给行 MouseArea 开 hoverEnabled：它会成为命中位置唯一
+                // 的“悬停叶子”，遮蔽应用名 Text 内 ElideTip 的 HoverHandler。
+                // HH 与 Text 内 ElideTip 是祖先链关系，可同时收到悬停；
+                // 点击选中仍走下面的 MouseArea（按键通道不受影响）。
+                HoverHandler {
+                    id: rowHover
+                    cursorShape: Qt.PointingHandCursor
+                }
+
                 Rectangle {
                     anchors.fill: parent
                     radius: DTK.platformTheme.windowRadius
-                    color: appRowMouse.containsMouse && !excluded
+                    color: rowHover.hovered && !excluded
                         ? (DTK.themeType === ApplicationHelper.DarkType
                             ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.06))
                         : "transparent"
@@ -202,6 +214,9 @@ Item {
                         elide: Text.ElideRight
                         color: palette.windowText
                         opacity: excluded ? 0.45 : 1.0
+
+                        // 应用名截断时悬停显示全文
+                        ElideTip { anchors.fill: parent }
                     }
 
                     Text {
@@ -224,10 +239,10 @@ Item {
                 }
 
                 MouseArea {
-                    id: appRowMouse
                     anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
+                    // 不开 hoverEnabled：行悬停视觉由 rowHover 承担，
+                    // 避免遮蔽应用名 Text 内的 ElideTip
+                    acceptedButtons: Qt.LeftButton
                     onClicked: body.toggleApp(appId)
                 }
             }
@@ -256,6 +271,8 @@ Item {
                 color: palette.windowText
                 opacity: 0.6
                 elide: Text.ElideRight
+                // 计数提示截断时悬停显示全文
+                ElideTip { anchors.fill: parent }
             }
 
             Item { Layout.fillWidth: true }

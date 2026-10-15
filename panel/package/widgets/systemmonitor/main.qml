@@ -182,6 +182,8 @@ Components.WidgetCard {
             color: root.labelTextColor
             opacity: 0.7
             elide: Text.ElideRight
+            // 指标名截断时悬停显示全文
+            Components.ElideTip { anchors.fill: parent }
         }
 
         Text {
@@ -238,6 +240,8 @@ Components.WidgetCard {
             font: root.hostRows >= 4 ? DTK.fontManager.t5 : DTK.fontManager.t6
             color: root.titleTextColor
             elide: Text.ElideRight
+            // 标题截断时悬停显示全文
+            Components.ElideTip { anchors.fill: parent }
         }
 
         Grid {

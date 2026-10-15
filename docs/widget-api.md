@@ -1,7 +1,7 @@
-# 小组件接口规范（v1.9）
+# 小组件接口规范（v1.10）
 
 > 本文档定义 deepin-widget-toolbar 面板（宿主）与小组件之间的开放接口契约。
-> 当前宿主接口版本：1.9；兼容 1.0~1.9 小组件（声明更高次版本的组件仍会加载，但宿主会告警）。
+> 当前宿主接口版本：1.10；兼容 1.0~1.10 小组件（声明更高次版本的组件仍会加载，但宿主会告警）。
 
 ## 1. 架构
 
@@ -31,9 +31,9 @@
 | `name` | string | 是 | 显示名称（默认语言） |
 | `name[zh_CN]` | string | 否 | 指定语言的显示名称（`name[<locale>]` 通用） |
 | `description` | string | 否 | 一句话描述 |
-| `icon` | string | 否 | 主题图标名（如 `appointment-new`），面板列表中显示 |
+| `icon` | string | 否 | 主题图标名（如 `appointment-new`），面板列表中显示。解析顺序：当前图标主题 → hicolor 兜底（均按 XDG 目录结构查找）→ 小组件自带 `icons/<图标名>.svg`（内置组件在 qrc `:/widgets/<id>/icons/`，第三方组件在其安装目录）→ 宿主通用占位图标 |
 | `version` | string | 是 | 组件自身版本，语义化版本号，如 `1.0.0`；宿主目前仅用于诊断（调试日志里记 `id@version`），不参与加载判定 |
-| `apiVersion` | string | 是 | 所需接口版本，当前为 `1.9`。宿主实现 `1.0`~`1.9`：主版本必须为 `1`（否则拒绝加载并告警），次版本高于宿主时**照常加载**但会打告警（缺的只是宿主尚未提供的能力，组件应自行降级） |
+| `apiVersion` | string | 是 | 所需接口版本，当前为 `1.10`。宿主实现 `1.0`~`1.10`：主版本必须为 `1`（否则拒绝加载并告警），次版本高于宿主时**照常加载**但会打告警（缺的只是宿主尚未提供的能力，组件应自行降级） |
 | `author` | string | 否 | 作者 |
 | `runtime` | string | 否 | 渲染运行时，当前仅支持 `qml`（默认值） |
 | `entry` | string | 是 | 入口文件（相对小组件目录），如 `main.qml` |
@@ -49,10 +49,11 @@
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `key` | string | 配置键，不能为空 |
-| `type` | string | `boolean` / `enum` / `color` / `font` / `string` / `integer` / `timezoneList` / `player` / `launcherList` / `image` |
+| `type` | string | `boolean` / `enum` / `color` / `font` / `string` / `integer` / `timezoneList` / `player` / `launcherList` / `image` / `slider` |
 | `label` / `label[locale]` | string | 显示名称及本地化名称 |
 | `default` | 任意 | 默认值 |
 | `options` | array | `enum`/`color` 的候选项，元素含 `value`、`label`、`label[locale]`；`font` 的候选由宿主从 `Qt.fontFamilies()` 生成；`timezoneList` 的候选由宿主从 `Timezones` 生成；`player` 的候选由宿主从 `MediaPlayers.players` 生成 |
+| `min` / `max` / `step` | number | `slider`（1.10 新增）的取值范围与步长；缺省时宿主按 `min=0`、`max=100`、`step=1` 处理 |
 
 配置键以 `_` 开头者为**内部键**（如应用快捷启动器的首启预置标记）：宿主设置面板自动跳过这类行，小组件可经 `WidgetHost.saveConfig` 或设置弹窗回写；其余规则与普通键一致。
 
@@ -85,9 +86,16 @@
 空串表示未设置，禁绝对路径与 `..` 上跳。用户在设置面板选择文件后，由宿主把文件复制到
 `dataDir/<instanceId>/`（重命名为 `img-<毫秒时间戳>.<后缀>`）并回写相对路径——小组件沙箱不能读外部
 文件，复制必须由宿主完成；清除则由宿主删除该文件。设置面板该行渲染 48px 缩略图与
-"选择图片…/清除"按钮。
+"选择图片…/清除"按钮。选图成功后，宿主还会做一次防呆联动：在本组件 schema 中若存在
+`options` 含 `"local"` 值的 `enum` 设置项（如相框的 `sourceMode`），且当前值不是 `"local"`，
+则先把它提交为 `"local"` 再回写图片路径——保证用户选择本地图片后组件立即进入本地模式，
+不会仍按网络模式取图而报错；复制失败时两项配置均保持不变。
 
-内置组件示例：clock 允许 `1×1 / 2×2 / 4×2 / 4×4` 并声明 `clockMode` 配置；lyrics 声明 `lyricsFont` 与 `lyricsColor`；applauncher（应用快捷启动器）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格）并声明 `launchers`（launcherList，默认空，新实例由组件自行预置浏览器/终端/文本编辑器/邮箱四个默认程序）、`immersiveMode`、`showLabels`/`labelColor`/`unitBackgroundColor`/`backgroundColor`/`transparentBackground` 等配置；worldtime（世界时间）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格：指针模式为单行四块方形表盘，数字模式为单行四列、隐去标题、格内时间与地区名上下排列）；photoframe（相框）默认 `2×2`，允许 `2×2 / 4×2 / 4×4`，声明图片来源（Bing 每日/随机/往日、自定义 https 网址、本地图片）与相框样式/颜色/宽度/圆角等配置，并带 `refresh`（刷新）右键动作。
+`slider` 类型的值（1.10 新增）是数值，取值范围与步长由 `min`/`max`/`step` 声明。
+宿主设置面板将该行渲染为 DTK 滑块（Slider）与数值框（SpinBox）双向联动：拖动滑块或
+修改数值框都会回写同一配置键。
+
+内置组件示例：clock 允许 `1×1 / 2×2 / 4×2 / 4×4` 并声明 `clockMode` 配置；lyrics 声明 `lyricsFont` 与 `lyricsColor`；applauncher（应用快捷启动器）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格）并声明 `launchers`（launcherList，默认空，新实例由组件自行预置浏览器/终端/文本编辑器/邮箱四个默认程序）、`immersiveMode`、`showLabels`/`labelColor`/`unitBackgroundColor`/`backgroundColor`/`transparentBackground` 等配置；worldtime（世界时间）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格：指针模式为单行四块方形表盘，数字模式为单行四列、隐去标题、格内时间与地区名上下排列）；photoframe（相框）默认 `2×2`，允许 `2×2 / 4×2 / 4×4`，声明图片来源（Bing 每日/随机/往日、自定义 https 网址、本地图片）与相框样式/颜色/宽度等配置，并带 `refresh`（刷新）右键动作。
 
 ## 4. 布局模型
 
@@ -133,6 +141,7 @@
 |---|---|---|
 | `getJson` | `int getJson(string url, int ttlSeconds = 600)` | 拉取 JSON，返回 `requestId`（原子递增）；完成（含缓存命中）后发 `jsonFinished`，`data` 为 JSON 解析后的值；`ttlSeconds ≤ 0` 表示完全绕过缓存 |
 | `download` | `int download(string url, string destPath)` | 二进制下载落盘（自动创建父目录，原子提交），完成后发 `downloadFinished` |
+| `cancel` | `void cancel(int requestId)` | 显式取消在途请求（按 `requestId` 查找并中止）；被取消请求的完成回调返回 `aborted` 错误码；未知 `requestId` 安全忽略 |
 
 | 信号 | 说明 |
 |---|---|
@@ -147,6 +156,7 @@
 | `scheme-not-https` | 非 `https`（明文信道被拒） |
 | `path-denied` | `destPath` 越出沙箱（仅 `download`） |
 | `timeout` | 传输超时（15 秒） |
+| `aborted` | 被 `cancel()` 显式中止（与 `timeout` 区分，便于调用方静默丢弃） |
 | `network` | 网络层错误；`download` 时的建目录/写盘/提交等本地失败也归入此码 |
 | `http-<code>` | HTTP 状态非 2xx（如 `http-404`），语义优先于网络层错误 |
 | `json-parse` | 响应不是合法 JSON（仅 `getJson`） |
@@ -384,9 +394,9 @@
 
 ## 9. 版本兼容策略
 
-- 小组件声明 `apiVersion`；宿主加载时先校验主版本：非 `1` 则拒绝加载并告警（不静默失败）；次版本高于宿主实现（当前 `1.9`）时照常加载，但会打一条明确告警，便于定位"组件功能不全"。宿主版本常量见 `panel/widgettypes.h` 的 `WidgetTypes::kApiMinorVersion`，须与本文档保持一致。
+- 小组件声明 `apiVersion`；宿主加载时先校验主版本：非 `1` 则拒绝加载并告警（不静默失败）；次版本高于宿主实现（当前 `1.10`）时照常加载，但会打一条明确告警，便于定位"组件功能不全"。宿主版本常量见 `panel/widgettypes.h` 的 `WidgetTypes::kApiMinorVersion`，须与本文档保持一致。
 - 宿主新增接口走次版本递增，不破坏既有小组件（1.0 小组件仍可加载）。
-- 当前宿主实现：`apiVersion = "1.9"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型；1.5 新增 `AudioVisualizer` 系统音频频谱代理；1.6 新增 `WidgetHost.activateWindow` 键盘焦点请求；1.7 新增 `DesktopApps` 桌面程序代理与 `launcherList` 设置类型（三级应用选择面板、`_` 前缀内部键，及内置应用快捷启动器与 `4×1` 长条规格）；1.8 新增 `Network` 网络能力代理、`image` 设置类型与 manifest `actions` 右键动作；1.9 新增 manifest `requiresNetwork` 声明与添加面板首次网络服务同意门控）。
+- 当前宿主实现：`apiVersion = "1.10"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型；1.5 新增 `AudioVisualizer` 系统音频频谱代理；1.6 新增 `WidgetHost.activateWindow` 键盘焦点请求；1.7 新增 `DesktopApps` 桌面程序代理与 `launcherList` 设置类型（三级应用选择面板、`_` 前缀内部键，及内置应用快捷启动器与 `4×1` 长条规格）；1.8 新增 `Network` 网络能力代理、`image` 设置类型与 manifest `actions` 右键动作；1.9 新增 manifest `requiresNetwork` 声明与添加面板首次网络服务同意门控；1.10 新增 settings `slider` 类型（`min`/`max`/`step`，设置行渲染为滑块+数值框））。
 
 ## 10. 生命周期（当前范围）
 
@@ -403,5 +413,5 @@
   下载落盘与 `FileIO` 同沙箱），小组件仍不允许直接发起网络请求；也不允许直接访问系统 D-Bus
   与音频服务，只能使用宿主能力代理
   （`FileIO` / `Network` / `SystemInfo` / `Lyrics` / `Timezones` / `ClockTime` / `WidgetHost` / `MediaPlayers` / `MediaPlayer` / `AudioVisualizer` / `DesktopApps`）。
-- 联网组件的添加受同意门控（1.9）：未同意"使用网络服务提示"前不能添加声明 `requiresNetwork` 的组件——不同意/Esc/点击外部关闭均不添加、不写配置；同意一次（DConfig `networkConsentGranted`，全局生效、重启保留）后不再询问。门控仅作用于新增实例流程，不影响已添加实例的运行。
+- 联网组件的添加受同意门控（1.9）：未同意"使用网络服务提示"前不能添加声明 `requiresNetwork` 的组件——不同意/Esc/关闭弹窗均不添加、不写配置；同意一次（DConfig `networkConsentGranted`，全局生效、重启保留）后不再询问。门控仅作用于新增实例流程，不影响已添加实例的运行。
 - 小组件间事件总线（`bus.emit/on`）未实现。

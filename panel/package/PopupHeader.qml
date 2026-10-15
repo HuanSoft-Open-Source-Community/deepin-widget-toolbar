@@ -5,6 +5,7 @@
 import QtQuick
 import QtQuick.Layouts
 import org.deepin.dtk 1.0
+import "widgets/components" as Components
 
 // 添加/设置/关于/组件配置面板共用的标题栏：标题 + 圆形关闭按钮。
 RowLayout {
@@ -23,6 +24,9 @@ RowLayout {
         font: DTK.fontManager.t4
         elide: Text.ElideRight
         color: palette.windowText
+
+        // 标题截断时悬停显示全文
+        Components.ElideTip { anchors.fill: parent }
     }
 
     Rectangle {

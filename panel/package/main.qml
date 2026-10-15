@@ -737,6 +737,9 @@ Window {
                     font: DTK.fontManager.t4
                     elide: Text.ElideRight
                     color: palette.windowText
+
+                    // 标题截断时悬停显示全文
+                    Components.ElideTip { anchors.fill: parent }
                 }
             }
 

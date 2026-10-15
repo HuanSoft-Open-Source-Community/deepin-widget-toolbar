@@ -225,6 +225,8 @@ Components.WidgetCard {
                 maximumLineCount: 1
                 wrapMode: Text.Wrap
                 lineHeight: 1.15
+                // 曲名截断时悬停显示全文
+                Components.ElideTip { anchors.fill: parent }
             }
 
             Text {
@@ -235,6 +237,8 @@ Components.WidgetCard {
                 opacity: 0.65
                 elide: Text.ElideRight
                 maximumLineCount: 1
+                // 艺术家截断时悬停显示全文
+                Components.ElideTip { anchors.fill: parent }
             }
 
             // 弹性空隙：把控件推到卡片底部（信息靠上、控件靠下的经典布局）
@@ -298,6 +302,8 @@ Components.WidgetCard {
             maximumLineCount: 2
             wrapMode: Text.Wrap
             lineHeight: 1.15
+            // 曲名截断时悬停显示全文
+            Components.ElideTip { anchors.fill: parent }
         }
 
         Text {
@@ -310,6 +316,8 @@ Components.WidgetCard {
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight
             maximumLineCount: 1
+            // 艺术家截断时悬停显示全文
+            Components.ElideTip { anchors.fill: parent }
         }
 
         Components.ControlsBar {

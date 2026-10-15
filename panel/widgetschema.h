@@ -24,7 +24,7 @@ QVariantList parseSettingsSchema(const QJsonArray &entries);
 QStringList schemaKeys(const QVariantList &schema);
 QVariantMap defaultConfig(const QVariantList &schema);
 
-// manifest settings 已知类型集合（含宿主内置扩展）
+// manifest settings 已知类型集合（含宿主内置扩展，1.10 新增 slider）
 bool isKnownSettingType(const QString &type);
 
 // image 类型值合法性：空串 = 未设置；非空必须是相对 dataDir 的相对路径

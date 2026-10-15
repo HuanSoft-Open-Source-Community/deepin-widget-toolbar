@@ -41,6 +41,9 @@ public:
     Q_INVOKABLE int getJson(const QString &url, int ttlSeconds = 600);
     // 二进制下载落盘（自动创建父目录，QSaveFile 原子提交）：完成后发 downloadFinished
     Q_INVOKABLE int download(const QString &url, const QString &destPath);
+    // 显式取消在途请求（按 requestId 查找 reply 并 abort）；
+    // 取消的请求完成回调返回 "aborted" 错误码，未知 id 安全忽略
+    Q_INVOKABLE void cancel(int requestId);
 
 Q_SIGNALS:
     void jsonFinished(int requestId, bool success, const QVariant &data,
@@ -67,6 +70,7 @@ private:
         qint64 received = 0;  // Download：已落盘字节
         bool tooLarge = false;       // 超响应上限主动中止过
         bool localError = false;     // 建目录/打开/写入本地 IO 失败
+        bool canceled = false;       // 显式 cancel() 中止：finished 时返回 "aborted"
     };
 
     enum class UrlCheck { Ok, Invalid, NotAllowedScheme };

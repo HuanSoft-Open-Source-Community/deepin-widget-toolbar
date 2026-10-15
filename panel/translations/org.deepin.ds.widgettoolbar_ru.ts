@@ -83,15 +83,23 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>This type of card fetches online content from third-party services (such as Bing wallpapers) through the panel&apos;s network proxy. After you agree, cards in the panel that use the network can fetch content online.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Decline</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Agree &amp; Add</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>You can decline: cards that need the network will not be added then. Declining does not change any setting, so you can agree later at any time.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>This type of card accesses third-party network services through the panel&apos;s network proxy to fetch online content. All requests go through the proxy only (https only, no direct connection).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The service is used only to fetch online content. No personal data is uploaded.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
