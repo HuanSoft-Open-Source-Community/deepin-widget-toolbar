@@ -10,6 +10,7 @@ import Qt5Compat.GraphicalEffects
 import org.deepin.dtk 1.0
 import org.deepin.dtk.style 1.0 as DStyle
 import org.deepin.ds 1.0
+import "widgets/components" as Components
 
 // 添加小组件弹出面板：
 //  - 基于 PanelPopup（DPanel 辅助窗口）：无 Qt 窗口标题、失焦自动关闭、跟随主窗口定位
@@ -106,6 +107,7 @@ PanelPopup {
                 }
 
                 ScrollBar.vertical: ScrollBar {
+                    id: builtinVScrollBar
                     policy: ScrollBar.AsNeeded
                     anchors.right: parent.right
                 }
@@ -119,10 +121,13 @@ PanelPopup {
                     required property bool builtin
                     required property bool installed
 
+                    // 叠加式滚动条出现时为其让出宽度，避免遮盖行右缘
+                    //（无循环：滚动条可见性只取决于内容高与视口高）
                     width: builtinList.width
+                        - (builtinVScrollBar.visible ? builtinVScrollBar.width + 4 : 0)
                     height: 44
                     radius: DTK.platformTheme.windowRadius
-                    color: addHover.containsMouse || addBtnArea.containsMouse
+                    color: addHover.containsMouse
                         ? Qt.rgba(0, 0, 0, 0.08) : "transparent"
 
                     RowLayout {
@@ -137,6 +142,8 @@ PanelPopup {
                             source: icon
                             sourceSize.width: 24
                             sourceSize.height: 24
+                            fillMode: Image.PreserveAspectFit
+                            mipmap: true
                         }
 
                         Text {
@@ -145,6 +152,8 @@ PanelPopup {
                             font: DTK.fontManager.t6
                             elide: Text.ElideRight
                             color: palette.windowText
+                            // 组件名截断时悬停显示全文
+                            Components.ElideTip { anchors.fill: parent }
                         }
 
                         Text {
@@ -160,7 +169,7 @@ PanelPopup {
                             Layout.preferredWidth: 56
                             Layout.preferredHeight: 26
                             radius: DTK.platformTheme.windowRadius
-                            color: installed ? "transparent" : (addBtnArea.containsMouse ? Qt.rgba(0, 0, 0, 0.12) : Qt.rgba(0, 0, 0, 0.06))
+                            color: installed ? "transparent" : (addHover.containsMouse ? Qt.rgba(0, 0, 0, 0.12) : Qt.rgba(0, 0, 0, 0.06))
 
                             Text {
                                 anchors.centerIn: parent
@@ -223,6 +232,7 @@ PanelPopup {
                 }
 
                 ScrollBar.vertical: ScrollBar {
+                    id: addedVScrollBar
                     policy: ScrollBar.AsNeeded
                     anchors.right: parent.right
                 }
@@ -230,7 +240,10 @@ PanelPopup {
                 delegate: Rectangle {
                     required property string modelData
 
+                    // 叠加式滚动条出现时为其让出宽度，避免遮盖行右缘
+                    //（无循环：滚动条可见性只取决于内容高与视口高）
                     width: addedList.width
+                        - (addedVScrollBar.visible ? addedVScrollBar.width + 4 : 0)
                     height: 40
                     radius: DTK.platformTheme.windowRadius
                     color: "transparent"
@@ -248,6 +261,8 @@ PanelPopup {
                             font: DTK.fontManager.t6
                             elide: Text.ElideRight
                             color: palette.windowText
+                            // 实例名截断时悬停显示全文
+                            Components.ElideTip { anchors.fill: parent }
                         }
 
                         // 第三方小组件：卸载（删除包）；内置不显示
@@ -285,6 +300,8 @@ PanelPopup {
                     : palette.windowText
                 wrapMode: Text.WrapAnywhere
                 elide: Text.ElideRight
+                // 状态文案截断时悬停显示全文
+                Components.ElideTip { anchors.fill: parent }
             }
 
             Button {

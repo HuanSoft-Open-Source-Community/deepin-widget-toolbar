@@ -349,6 +349,9 @@ Components.WidgetCard {
                 color: root.effectiveTransparent
                     ? root.themeTextColor : root.labelColor
                 opacity: 0.9
+
+                // 启动器名截断时悬停显示全文
+                Components.ElideTip { anchors.fill: parent }
             }
 
             // 添加单元"+"：矢量十字绘制（两段圆头矩形），随尺寸原生渲染、

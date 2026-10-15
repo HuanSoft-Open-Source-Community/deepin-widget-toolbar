@@ -29,11 +29,18 @@ RowLayout {
 
     Text {
         Layout.preferredWidth: 88
+        // 布局对未显式声明的 minimumWidth 取 implicitWidth（整段标签宽度），
+        // 长标签会顶宽整行把右侧控件挤出内容区；显式归零标签才能收缩并按
+        // elide 截断（360px 面板减去标签列后控件区只剩约 240px）
+        Layout.minimumWidth: 0
         visible: type !== "timezoneList" && type !== "launcherList"
         text: modelData.label ? modelData.label : modelData.key
         font: DTK.fontManager.t6
         color: palette.windowText
         elide: Text.ElideRight
+
+        // 标签被截断时悬停显示全文（被动观察，不影响本行控件交互）
+        ElideTip { anchors.fill: parent }
     }
 
     Switch {
@@ -315,6 +322,8 @@ RowLayout {
 
     TextField {
         Layout.fillWidth: true
+        // 同标签列：显式归零宽度下限，隐式宽才不会成为下限顶出行
+        Layout.minimumWidth: 0
         visible: type === "string" || type === "integer"
         text: host.values[key] !== undefined && host.values[key] !== null
             ? String(host.values[key]) : ""
@@ -413,16 +422,29 @@ RowLayout {
             }
         }
 
-        Button {
-            text: qsTr("Choose image…")
-            icon.name: "document-open"
-            onClicked: host.openImagePicker(key)
-        }
+        // 按钮竖排并各占整行剩余宽度：360px 面板减去标签列 88 与缩略图 48
+        // 后只剩约 184px，两个按钮并排时仅 "Choose image…"（图标 + 文本）
+        // 的隐式宽度就接近 150px，加上 "Clear" 会把按钮区顶出内容区；
+        // 竖排后每个按钮都能拿到整行宽度，图标与文本完整可见。
+        // （Button/IconLabel 未暴露文本 elide，故不用截断而用足额宽度保证可读）
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            spacing: 6
 
-        Button {
-            text: qsTr("Clear")
-            enabled: imageRow.rel.length > 0
-            onClicked: host.clearInstanceImage(key)
+            Button {
+                Layout.fillWidth: true
+                text: qsTr("Choose image…")
+                icon.name: "document-open"
+                onClicked: host.openImagePicker(key)
+            }
+
+            Button {
+                Layout.fillWidth: true
+                text: qsTr("Clear")
+                enabled: imageRow.rel.length > 0
+                onClicked: host.clearInstanceImage(key)
+            }
         }
     }
 
@@ -675,9 +697,14 @@ RowLayout {
 
             Text {
                 Layout.fillWidth: true
+                // 同根标签：显式归零宽度下限，长标签才能收缩 elide 而非顶宽整行
+                Layout.minimumWidth: 0
                 text: modelData.label ? modelData.label : modelData.key
                 font: DTK.fontManager.t6
                 color: palette.windowText
+                elide: Text.ElideRight
+                // 长标签截断时悬停显示全文
+                ElideTip { anchors.fill: parent }
             }
 
             Text {
@@ -692,6 +719,8 @@ RowLayout {
         // 收编提示：配置里还有超出当前容量、放大卡片后恢复的单元
         Text {
             Layout.fillWidth: true
+            // 同上：这句提示文本较长，归零下限后 elide 才真正生效
+            Layout.minimumWidth: 0
             visible: launcherPanel.launcherHiddenCount > 0
             text: qsTr("Hidden: %1 more (restored when the card is enlarged)")
                 .arg(launcherPanel.launcherHiddenCount)
@@ -699,6 +728,8 @@ RowLayout {
             color: palette.windowText
             opacity: 0.6
             elide: Text.ElideRight
+            // 提示语被截断时悬停显示全文
+            ElideTip { anchors.fill: parent }
         }
 
         // 行列表容器：行对象按 orderIndex 绝对定位（y Behavior 滑动），
@@ -841,6 +872,15 @@ RowLayout {
                         Layout.fillWidth: true
                         Layout.preferredHeight: launcherPanel.launcherRowHeight
 
+                        // 行悬停视觉（手型光标）由被动 HoverHandler 承担：
+                        // 旧实现给下面的行 MouseArea 开 hoverEnabled，它会
+                        // 成为命中位置唯一的“悬停叶子”，遮蔽应用名 Text 内
+                        // ElideTip 的 HoverHandler。HH 与 Text 内 ElideTip
+                        // 是祖先链关系，可同时收到悬停；点击仍走 MouseArea。
+                        HoverHandler {
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
                         RowLayout {
                             anchors.fill: parent
                             spacing: 6
@@ -873,13 +913,17 @@ RowLayout {
                                 font: DTK.fontManager.t6
                                 color: palette.windowText
                                 elide: Text.ElideRight
+
+                                // 应用名截断时悬停显示全文
+                                ElideTip { anchors.fill: parent }
                             }
                         }
 
                         MouseArea {
                             anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
+                            // 不开 hoverEnabled：悬停光标由本 Item 上的
+                            // HoverHandler 承担，避免遮蔽 Text 内的 ElideTip
+                            acceptedButtons: Qt.LeftButton
                             onClicked: {
                                 var idx = launcherPanel.orderIndexOf(row.appId)
                                 if (idx >= 0)
@@ -931,9 +975,14 @@ RowLayout {
 
         Text {
             Layout.fillWidth: true
+            // 同上：显式归零宽度下限 + elide，长标签不顶宽整行
+            Layout.minimumWidth: 0
             text: modelData.label ? modelData.label : modelData.key
             font: DTK.fontManager.t6
             color: palette.windowText
+            elide: Text.ElideRight
+            // 标签被截断时悬停显示全文
+            ElideTip { anchors.fill: parent }
         }
 
         Repeater {

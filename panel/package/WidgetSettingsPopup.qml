@@ -545,6 +545,8 @@ PanelPopup {
                 color: palette.windowText
                 opacity: 0.7
                 elide: Text.ElideRight
+                // 组件名截断时悬停显示全文
+                Components.ElideTip { anchors.fill: parent }
             }
 
             Flickable {
@@ -569,13 +571,18 @@ PanelPopup {
                 }
 
                 ScrollBar.vertical: ScrollBar {
+                    id: vScrollBar
                     policy: ScrollBar.AsNeeded
                     anchors.right: parent.right
                 }
 
                 ColumnLayout {
                     id: settingsColumn
-                    width: parent.width
+                    // 叠加式滚动条出现时会遮盖内容右缘：列宽为其让出滚动条宽 + 4px 间隙。
+                    // 无循环绑定：vScrollBar.visible 只取决于 contentHeight 与 height，
+                    // 与本列宽无关。
+                    width: settingsScroll.width
+                        - (vScrollBar.visible ? vScrollBar.width + 4 : 0)
                     spacing: 12
 
                     Text {

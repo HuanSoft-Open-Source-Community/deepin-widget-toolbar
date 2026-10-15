@@ -4,6 +4,7 @@
 
 import QtQuick
 import org.deepin.dtk 1.0
+import "../components" as Components
 
 // 世界时间数字模式的网格视图（从 worldtime 小组件拆分）：
 // 标题 + cols×rows 单元格网格（单位数与指针模式一致，纵向双列）。
@@ -95,6 +96,8 @@ Column {
                     color: root.effectiveTransparent ? root.themeTextColor : root.textColor
                     opacity: 0.8
                     elide: Text.ElideRight
+                    // 地区名截断时悬停显示全文
+                    Components.ElideTip { anchors.fill: parent }
                 }
 
                 Text {
@@ -135,6 +138,8 @@ Column {
                         color: root.effectiveTransparent ? root.themeTextColor : root.textColor
                         opacity: 0.8
                         elide: Text.ElideRight
+                        // 窄格地区名截断时悬停显示全文
+                        Components.ElideTip { anchors.fill: parent }
                     }
                 }
             }
