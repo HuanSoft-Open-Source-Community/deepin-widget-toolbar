@@ -50,11 +50,15 @@ PanelPopup {
     height: 520
 
     onPopupVisibleChanged: {
-        // 本弹窗隐藏时同收其子级（色卡/三级应用选择），避免残留在桌面
+        // 本弹窗隐藏时同收其子级（色卡/三级应用选择），避免残留在桌面。
+        // 注意：这里绝不能关 imageDialog——它是独立窗口的
+        // QtQuick.Dialogs.FileDialog，弹出后本 PanelPopup 的 popupWindow 立即
+        // 失焦，dde-shell 的 PanelPopup 随之失焦自关闭 → popupVisible 变 false
+        // → 本处理器会把刚打开的对话框立刻关掉（表现为"文件对话框打不开"）。
+        // FileDialog 由用户自行确认/取消关闭，无需随设置面板收尾。
         if (!popupVisible) {
             colorDialog.close()
             launcherPicker.close()
-            imageDialog.close()
         }
     }
 
@@ -415,6 +419,29 @@ PanelPopup {
             return
         if (previous.length > 0 && previous !== relative)
             WidgetHost.removeInstanceImage(control.instanceId, previous)
+        // 防呆：只回写图片路径、不切取图模式时，卡片（如 photoframe 的
+        // sourceMode 仍是 bing*/url）evaluate 仍走网络取图 → 失败后显示
+        // "网络不可用"，所选本地图片不显示。故按 schema 查找含 "local"
+        // 选项的 enum 设置项（photoframe 即 sourceMode），当前值非 "local"
+        // 时先切到 "local" 再写图片路径——先切模式后写路径，卡片两次
+        // onWidgetConfigChanged 重评估都落在本地分支，全程不触发网络取图。
+        // 纯 schema 驱动，不硬编码卡片/键名。
+        for (var i = 0; i < control.schema.length; ++i) {
+            var item = control.schema[i]
+            if (item.type !== "enum")
+                continue
+            var options = item.options ? item.options : []
+            var hasLocal = false
+            for (var j = 0; j < options.length; ++j) {
+                if (String(options[j].value) === "local") {
+                    hasLocal = true
+                    break
+                }
+            }
+            if (!hasLocal || control.values[item.key] === "local")
+                continue
+            control.commit(item.key, "local")
+        }
         control.commit(key, relative)
     }
 
@@ -471,21 +498,26 @@ PanelPopup {
         }
     }
 
-    // 图片选择对话框（image 行）：过滤宿主支持的图片格式，确认后经
-    // WidgetHost 由宿主把沙箱外的来源文件复制进实例数据目录
-    FileDialog {
-        id: imageDialog
-        title: qsTr("Choose an image")
-        nameFilters: [qsTr("Images") + " (*.png *.jpg *.jpeg *.bmp *.webp)"]
-        onAccepted: control.commitPickedImage(selectedFile)
-    }
-
-
     Rectangle {
         id: contentCard
         anchors.fill: parent
         radius: DTK.platformTheme.windowRadius
         color: "transparent"
+
+        // 图片选择对话框（image 行）：过滤宿主支持的图片格式，确认后经
+        // WidgetHost 由宿主把沙箱外的来源文件复制进实例数据目录。
+        // 必须作为内容卡片的子项：PanelPopup 的 default property 只接受可见
+        // Item，直接挂根下会报 "Cannot assign object to list property popupContent"
+        // 并使 WidgetSettingsPopup 类型整体不可用（面板无法加载）。
+        FileDialog {
+            id: imageDialog
+            title: qsTr("Choose an image")
+            // 窗口级模态：独立窗口弹出期间屏蔽宿主窗口的交互，避免焦点在
+            // 对话框与设置面板之间来回切换导致对话框被意外收起
+            modality: Qt.WindowModal
+            nameFilters: [qsTr("Images") + " (*.png *.jpg *.jpeg *.bmp *.webp)"]
+            onAccepted: control.commitPickedImage(selectedFile)
+        }
 
         Connections {
             target: Panel.widgetManager
