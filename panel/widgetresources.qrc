@@ -15,6 +15,7 @@
         <file alias="components/ControlsBar.qml">package/widgets/components/ControlsBar.qml</file>
         <file alias="components/CoverArt.qml">package/widgets/components/CoverArt.qml</file>
         <file alias="components/ElideTip.qml">package/widgets/components/ElideTip.qml</file>
+        <file alias="components/locklogic.js">package/widgets/components/locklogic.js</file>
         <file alias="components/qmldir">package/widgets/components/qmldir</file>
         <file alias="clock/main.qml">package/widgets/clock/main.qml</file>
         <file alias="clock/manifest.json">package/widgets/clock/manifest.json</file>

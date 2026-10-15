@@ -1,7 +1,7 @@
-# 小组件接口规范（v1.10）
+# 小组件接口规范（v1.11）
 
 > 本文档定义 deepin-widget-toolbar 面板（宿主）与小组件之间的开放接口契约。
-> 当前宿主接口版本：1.10；兼容 1.0~1.10 小组件（声明更高次版本的组件仍会加载，但宿主会告警）。
+> 当前宿主接口版本：1.11；兼容 1.0~1.11 小组件（声明更高次版本的组件仍会加载，但宿主会告警）。
 
 ## 1. 架构
 
@@ -54,6 +54,7 @@
 | `default` | 任意 | 默认值 |
 | `options` | array | `enum`/`color` 的候选项，元素含 `value`、`label`、`label[locale]`；`font` 的候选由宿主从 `Qt.fontFamilies()` 生成；`timezoneList` 的候选由宿主从 `Timezones` 生成；`player` 的候选由宿主从 `MediaPlayers.players` 生成 |
 | `min` / `max` / `step` | number | `slider`（1.10 新增）的取值范围与步长；缺省时宿主按 `min=0`、`max=100`、`step=1` 处理 |
+| `lockWhen` | object | 值联动声明（1.11 新增）：`{ "key": 源键, "is": 触发值, "as": 锁定值 }`，声明"源项值等于触发值时，本项（须为 `enum`）被强制为 `as`"。详见下方联动说明 |
 
 配置键以 `_` 开头者为**内部键**（如应用快捷启动器的首启预置标记）：宿主设置面板自动跳过这类行，小组件可经 `WidgetHost.saveConfig` 或设置弹窗回写；其余规则与普通键一致。
 
@@ -95,7 +96,20 @@
 宿主设置面板将该行渲染为 DTK 滑块（Slider）与数值框（SpinBox）双向联动：拖动滑块或
 修改数值框都会回写同一配置键。
 
-内置组件示例：clock 允许 `1×1 / 2×2 / 4×2 / 4×4` 并声明 `clockMode` 配置；lyrics 声明 `lyricsFont` 与 `lyricsColor`；applauncher（应用快捷启动器）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格）并声明 `launchers`（launcherList，默认空，新实例由组件自行预置浏览器/终端/文本编辑器/邮箱四个默认程序）、`immersiveMode`、`showLabels`/`labelColor`/`unitBackgroundColor`/`backgroundColor`/`transparentBackground` 等配置；worldtime（世界时间）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格：指针模式为单行四块方形表盘，数字模式为单行四列、隐去标题、格内时间与地区名上下排列）；photoframe（相框）默认 `2×2`，允许 `2×2 / 4×2 / 4×4`，声明图片来源（Bing 每日/随机/往日、自定义 https 网址、本地图片）与相框样式/颜色/宽度等配置，并带 `refresh`（刷新）右键动作。
+`lockWhen` 声明式值联动（1.11 新增）：设置项可声明 `{ "key": 源键, "is": 触发值, "as": 锁定值 }`，
+宿主设置面板的通用引擎按不变式"源值等于触发值 ⇒ 本项值等于 `as`"联动，规则为：源值**进入**触发值
+时把本项强制为 `as`（记忆此前值）；源值**离开**触发值时把本项恢复为记忆值——记忆缺失或非法（不在候选
+内/恰为锁定值）一律保底回退：本项 `default`，`default` 也退化则 `options` 首个非锁定值（宽度已有值，
+边框必须有可见样式）；锁定期间
+用户把本项手动改为其它值时，源回退其进入触发值前的记忆值（无记忆回退源的 `default`）；用户手动把本项
+设为 `as` 时，源同步置为触发值，并双向记忆两键的调整前值（升源恢复本项样式、改本项回退源值）。联动记忆以 `_lk_<键>` 内部键持久化于实例配置（面板不展示，重启后恢复/回退语义仍
+成立）。声明仅由宿主面板解释，纯 schema 驱动不含键名；非法声明（`as` 不在 `options`、`is` 与源类型不
+符等）被跳过并告警。联动记忆键 `_lk_<目标键>` 与 `_lk_<源键>` **必须在 settings 中声明为内部键**
+（`saveInstanceConfig`/`instanceConfig` 按 schema 键白名单读写；`_` 前缀使面板不渲染该行，与
+`_launchersSeeded` 同机制），未声明则记忆仅在面板会话内有效、重启后丢失。内置相框以此实现"边框宽度
+归零锁定样式为无边框、宽度回升恢复、改样式回退宽度"。
+
+内置组件示例：clock 允许 `1×1 / 2×2 / 4×2 / 4×4` 并声明 `clockMode` 配置；lyrics 声明 `lyricsFont` 与 `lyricsColor`；applauncher（应用快捷启动器）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格）并声明 `launchers`（launcherList，默认空，新实例由组件自行预置浏览器/终端/文本编辑器/邮箱四个默认程序）、`immersiveMode`、`showLabels`/`labelColor`/`unitBackgroundColor`/`backgroundColor`/`transparentBackground` 等配置；worldtime（世界时间）允许 `1×1 / 2×2 / 4×1 / 4×2 / 4×4`（`4×1` 为横向长条规格：指针模式为单行四块方形表盘，数字模式为单行四列、隐去标题、格内时间与地区名上下排列）；photoframe（相框）默认 `2×2`，允许 `2×2 / 4×2 / 4×4`，声明图片来源（Bing 每日/随机/往日、自定义 https 网址、本地图片）与相框样式/颜色/宽度、间距 `dashGap`（默认 4）与点划长度 `dashLen`（默认 0）两个虚线图案滑块等配置（两滑块范围均为 0–24：`dashGap` 是虚线类线型的基准缝宽，各线型在其上叠加自身固有偏移以保持相对疏密，归零可令点划粘连；`dashLen` 是在段长随边框宽度线性变化的基线之上为每段点划追加的加长量；取默认值 4/0 时，任意边框宽度下的图案与纯自动缩放模型逐像素一致；仅对虚线/点线/点划线/长虚线/密集点线五种 Canvas 线型有意义，实线/双线/无边框不受影响），并带 `refresh`（刷新）右键动作。
 
 ## 4. 布局模型
 
@@ -394,9 +408,9 @@
 
 ## 9. 版本兼容策略
 
-- 小组件声明 `apiVersion`；宿主加载时先校验主版本：非 `1` 则拒绝加载并告警（不静默失败）；次版本高于宿主实现（当前 `1.10`）时照常加载，但会打一条明确告警，便于定位"组件功能不全"。宿主版本常量见 `panel/widgettypes.h` 的 `WidgetTypes::kApiMinorVersion`，须与本文档保持一致。
+- 小组件声明 `apiVersion`；宿主加载时先校验主版本：非 `1` 则拒绝加载并告警（不静默失败）；次版本高于宿主实现（当前 `1.11`）时照常加载，但会打一条明确告警，便于定位"组件功能不全"。宿主版本常量见 `panel/widgettypes.h` 的 `WidgetTypes::kApiMinorVersion`，须与本文档保持一致。
 - 宿主新增接口走次版本递增，不破坏既有小组件（1.0 小组件仍可加载）。
-- 当前宿主实现：`apiVersion = "1.10"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型；1.5 新增 `AudioVisualizer` 系统音频频谱代理；1.6 新增 `WidgetHost.activateWindow` 键盘焦点请求；1.7 新增 `DesktopApps` 桌面程序代理与 `launcherList` 设置类型（三级应用选择面板、`_` 前缀内部键，及内置应用快捷启动器与 `4×1` 长条规格）；1.8 新增 `Network` 网络能力代理、`image` 设置类型与 manifest `actions` 右键动作；1.9 新增 manifest `requiresNetwork` 声明与添加面板首次网络服务同意门控；1.10 新增 settings `slider` 类型（`min`/`max`/`step`，设置行渲染为滑块+数值框））。
+- 当前宿主实现：`apiVersion = "1.11"`（1.1 新增 `Lyrics`；1.2 新增 `sizes`、`settings`、`widgetConfig` 及 GPU/NPU/磁盘 IO 监控；1.3 新增 `SystemInfo.updateMonitor` / `releaseMonitor` 多客户端监控；1.4 新增 `MediaPlayers` / `MediaPlayer` 与 `player` 设置类型；1.5 新增 `AudioVisualizer` 系统音频频谱代理；1.6 新增 `WidgetHost.activateWindow` 键盘焦点请求；1.7 新增 `DesktopApps` 桌面程序代理与 `launcherList` 设置类型（三级应用选择面板、`_` 前缀内部键，及内置应用快捷启动器与 `4×1` 长条规格）；1.8 新增 `Network` 网络能力代理、`image` 设置类型与 manifest `actions` 右键动作；1.9 新增 manifest `requiresNetwork` 声明与添加面板首次网络服务同意门控；1.10 新增 settings `slider` 类型（`min`/`max`/`step`，设置行渲染为滑块+数值框）；1.11 新增 settings `lockWhen` 声明式值联动（源触发值锁定目标 enum 值、恢复记忆、反向回退，经 `_lk_*` 内部键持久化））。
 
 ## 10. 生命周期（当前范围）
 
