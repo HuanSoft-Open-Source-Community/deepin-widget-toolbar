@@ -35,7 +35,12 @@ Q_DECLARE_LOGGING_CATEGORY(panelAvoidLog)
 //   标题前缀：dde-shell/panelpopup（托盘快捷面板宿主窗，任何尺寸皆可能避让）
 //             dde-shell/paneltooltip（托盘展开小卡与悬停提示共用宿主窗，
 //               映射尺寸达小卡阈值才可能避让，悬停 tooltip 不触发）
+//             org.deepin.ds.launchpad（启动台 v25+：dde-launchpad 以 dde-shell
+//               dock 插件实现，实机实测全屏框标题 org.deepin.ds.launchpad.fullscreen）
 //   类名精确：dde-control-center / dde-clipboard
+//             dde-launcher（v20 系旧平台的独立应用启动台，本机系未装、判据留作兼容）
+//   WM_CLASS res_name 精确：dde-shell/launchpad（启动台 scope 写 res_name 的同款
+//             实测身份，与标题前缀判据互为保险）
 // 以上任一命中后仍需与本侧栏矩形叠合（见下方"几何叠合判定"）才真正避让。
 // 本面板自身窗口（org.deepin.ds.widgettoolbar / dde-shell/widgettoolbar*）
 // 永不匹配，防自触发。新映射窗口一律 qCDebug 记录，未列面板据日志补集。

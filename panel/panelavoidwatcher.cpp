@@ -676,6 +676,17 @@ bool PanelAvoidWatcher::identityTarget(const WinInfo &info) const
     if (name.startsWith(QLatin1String("dde-shell/panelpopup"))
         || name.startsWith(QLatin1String("dde-shell/paneltooltip")))
         return true;
+    // 启动台（v25+ 形态）：由 dde-launchpad 以 dde-shell dock 插件
+    // org.deepin.ds.dock.launcherapplet 实现，非独立应用。实机取证（X11，
+    // 2026-10-23）：全屏框 WM_NAME=org.deepin.ds.launchpad.fullscreen、
+    // WM_CLASS res_name=dde-shell/launchpad（与 panelpopup 同款 scope 写名
+    // 机制）、1920×1080 满屏。两条各据实测身份命中，无尺寸门槛；windowed
+    // 形态同前缀自然覆盖，避让与否皆由几何叠合判定裁决。
+    if (name.startsWith(QLatin1String("org.deepin.ds.launchpad")))
+        return true;
+    if (info.resName.compare(QLatin1String("dde-shell/launchpad"),
+                             Qt::CaseInsensitive) == 0)
+        return true;
 
     if (info.className.compare(QLatin1String("dde-control-center"),
                                Qt::CaseInsensitive) == 0
@@ -685,6 +696,14 @@ bool PanelAvoidWatcher::identityTarget(const WinInfo &info) const
     if (info.className.compare(QLatin1String("dde-clipboard"),
                                Qt::CaseInsensitive) == 0
         || info.resName.compare(QLatin1String("dde-clipboard"),
+                                Qt::CaseInsensitive) == 0)
+        return true;
+    // dde-launcher：v20 系旧平台的独立应用启动台（本机 v25+ 未安装，判据保留
+    // 兼容）；独立应用类名判据，无尺寸门槛（isTarget 走兜底分支），身份命中
+    // 后仍须与本面板矩形几何叠合才真正避让。
+    if (info.className.compare(QLatin1String("dde-launcher"),
+                               Qt::CaseInsensitive) == 0
+        || info.resName.compare(QLatin1String("dde-launcher"),
                                 Qt::CaseInsensitive) == 0)
         return true;
     return false;
