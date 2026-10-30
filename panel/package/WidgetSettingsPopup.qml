@@ -68,7 +68,38 @@ PanelPopup {
         }
     }
 
+    // 换实例/重开会话前清理上一张卡遗留的编辑目标与子弹窗。
+    // 这些状态若跨实例残留，色卡/应用选择/选图会把旧 key 的提交写进新
+    // 实例的配置，造成跨卡写坏配置；滚动位置与 lockWhen 告警缓存同理。
+    function resetSessionState() {
+        colorDialog.close()
+        launcherPicker.close()
+        imageDialog.close()
+
+        control.editingColorKey = ""
+        control.editingDialKey = ""
+        control.editingDialIndex = -1
+        control.editingDialField = ""
+        control.editingLauncherKey = ""
+        control.editingLauncherIndex = -1
+        control.editingImageKey = ""
+
+        control.lockWarned = ({})
+        colorDialog.avoidOffsetX = 0
+        launcherPicker.avoidOffsetX = 0
+
+        settingsScroll.interactive = true
+    }
+
+    // 打开/切换某个实例的配置面板。
+    // 注意：dde-shell 的 PanelPopup.open() 在 popup 已可见时是“关闭”开关
+    //（2.0.52 frame/qml/PanelPopup.qml: if (popup.visible) { close(); return }），
+    // 已打开时再调 open() 会把面板直接关掉。因此可见时只原地换内容并重新
+    // 激活共享弹窗窗口，绝不调用 open()；只有原本不可见时才走 open()。
     function openFor(instance) {
+        var wasVisible = control.popupVisible
+        control.resetSessionState()
+
         control.instanceId = instance
         control.widgetId = Panel.widgetManager.instanceWidgetId(instance)
         control.schema = Panel.widgetManager.widgetSettingsSchema(control.widgetId)
@@ -94,8 +125,20 @@ PanelPopup {
             control.playerOptions = []
         control.rebuildVisibleSchema()
         control.launcherEditSession++
-        settingsScroll.interactive = true   // 复位上一会话可能的拖拽滚动锁
-        control.open()
+        // 新实例从顶部开始，避免沿用上一张卡的滚动位置
+        settingsScroll.contentY = 0
+        settingsScroll.contentX = 0
+
+        if (wasVisible) {
+            // 面板已显示：内容已原地切换，重新激活共享弹窗窗口以处理
+            // 上下文菜单/外部信号抢走焦点的情况；PanelPopup 的
+            // grabInactive 逻辑会配合避免把窗口误判为失焦关闭
+            if (control.popupWindow
+                    && typeof control.popupWindow.requestActivate === "function")
+                control.popupWindow.requestActivate()
+        } else {
+            control.open()
+        }
     }
 
     function needsTimezones() {
