@@ -68,9 +68,40 @@ Item {
         }
         return "solid"
     }
-    // 默认预设随明/暗主题切换（用户自定义颜色仍优先生效）
-    readonly property color frameColor: Components.ColorUtils.themedColor(
-        widgetConfig ? widgetConfig.frameColor : null, "#FFFFFFFF", "#FF2B2B2B")
+    // 默认预设随明/暗主题切换（用户自定义颜色仍优先生效）；
+    // 走 Canvas 低频相位：虚线边框由 dashFrame 重绘，流光时约 7.5fps。
+    // owner 流光时按画框中线 x 采样空间相位（单框居中、offset 恒定随整卡跑马），
+    // 非 owner 的 @flow: 由 Site 入口回退浅色缺省（渲染层兜底）
+    readonly property color frameColor: Components.ColorUtils.themedCanvasSiteColor(
+        widgetConfig, "dials", "frameColor",
+        widgetConfig ? widgetConfig.frameColor : null,
+        "#FFFFFFFF", "#FF2B2B2B",
+        root.width / 2, root.width)
+    // ── 流光时钟引用计数 ────────────────────────────────────────────────
+    // 本组件根对象是普通 Item（不走 WidgetCard），需自行持有共享流光时钟，
+    // 否则 frameColor 为 @flow: 时无引用计数持有者，时钟不推进、边框流光静止。
+    readonly property bool frameIsFlow: Components.ColorUtils.isFlow(
+        widgetConfig ? widgetConfig.frameColor : null)
+    // 渲染层 owner 门控：frameColor 为整卡唯一流光 owner 时才以彩虹渲染；
+    // frameFlowBase 为内嵌原色（供 dashFrame 逐段采样），静态色不读相位
+    readonly property bool frameFlowOwner: Components.ColorUtils.flowSiteIsOwner(
+        widgetConfig, "dials", "frameColor")
+        && Components.ColorUtils.isFlow(
+            widgetConfig ? widgetConfig.frameColor : null)
+    readonly property string frameFlowBase: Components.ColorUtils.flowBase(
+        widgetConfig ? widgetConfig.frameColor : null, "#FFFFFFFF")
+    // 私有实现细节：本组件是否已持有共享时钟（避免重复 acquire/release）
+    property bool flowAcquired: false
+    function syncFlowRef() {
+        if (frameIsFlow && !flowAcquired) {
+            flowAcquired = true
+            Components.ColorUtils.acquireFlow()
+        } else if (!frameIsFlow && flowAcquired) {
+            flowAcquired = false
+            Components.ColorUtils.releaseFlow()
+        }
+    }
+    onFrameIsFlowChanged: syncFlowRef()
     readonly property int frameWidth: {
         var v = widgetConfig ? Number(widgetConfig.frameWidth) : NaN
         if (!isFinite(v))
@@ -514,8 +545,13 @@ Item {
     // dataDir/instanceId 由宿主 Binding 注入，注入完成后首次评估
     onWorkDirChanged: Qt.callLater(function () { root.evaluate(false) })
     Component.onCompleted: {
+        root.syncFlowRef()
         if (root.workDir.length > 0)
             root.evaluate(false)
+    }
+    Component.onDestruction: {
+        if (root.flowAcquired)
+            Components.ColorUtils.releaseFlow()
     }
     // 配置面板保存后宿主刷新 widgetConfig → 重新评估缓存并按需取图
     onWidgetConfigChanged: root.evaluate(false)
@@ -713,11 +749,12 @@ Item {
         }
     }
 
-    // 实线相框：Rectangle 边框画在自身 bounds 内，相片内缩 frameWidth 后
-    // 恰好贴边框内缘；仅 solid 绘制（其余线型交给 Canvas，避免实线盖住虚线）
+    // 实线相框（静态色）：Rectangle 边框画在自身 bounds 内，相片内缩 frameWidth
+    // 后恰好贴边框内缘。owner 流光时改由下方 Canvas 用横向渐变绘制（单色
+    // Rectangle 画不出空间彩虹），静态色仍保留这条零 Canvas 开销的路径
     Rectangle {
         anchors.fill: parent
-        visible: root.frameStyle === "solid"
+        visible: root.frameStyle === "solid" && !root.frameFlowOwner
         color: "transparent"
         border.color: root.frameColor
         border.width: root.frameWidth
@@ -725,11 +762,13 @@ Item {
     }
 
     // 虚线/点线/点划线/双线相框：Rectangle 不支持 lineDash，Canvas 自绘圆角
-    // 描边；路径整体内缩 frameWidth/2，让描边恰好占满边框厚度不越界
+    // 描边；路径整体内缩 frameWidth/2，让描边恰好占满边框厚度不越界。
+    // 实线在 owner 流光时也走这里（静态实线仍由上方 Rectangle 绘制）
     Canvas {
         id: dashFrame
         anchors.fill: parent
-        visible: root.frameVisible && root.frameStyle !== "solid"
+        visible: root.frameVisible
+            && (root.frameStyle !== "solid" || root.frameFlowOwner)
         z: 1
 
         onVisibleChanged: requestPaint()
@@ -744,6 +783,8 @@ Item {
             function onFrameRadiusEffChanged() { dashFrame.requestPaint() }
             function onDashGapChanged() { dashFrame.requestPaint() }
             function onDashLenChanged() { dashFrame.requestPaint() }
+            // owner 切换会改变实线的绘制载体（Rectangle ↔ Canvas），确保重绘
+            function onFrameFlowOwnerChanged() { dashFrame.requestPaint() }
         }
 
         onPaint: {
@@ -753,10 +794,31 @@ Item {
             ctx.reset()
             // reset() 不重置 lineDash：每帧显式清空，避免上一帧图案残留
             ctx.setLineDash([])
-            if (!root.frameVisible || root.frameStyle === "solid"
-                    || root.frameWidth <= 0 || width <= 0 || height <= 0)
+            if (!root.frameVisible || root.frameWidth <= 0
+                    || width <= 0 || height <= 0)
                 return
-            ctx.strokeStyle = root.frameColor
+            // 静态实线由 Rectangle 绘制；Canvas 在可见性切换的过渡帧也可能被调用
+            if (root.frameStyle === "solid" && !root.frameFlowOwner)
+                return
+            // 本帧只判一次 owner/phase/dark：owner 流光时整框用横向线性渐变
+            // 描边——9 个 stop 均按自身 x 经 flowColorAt 采样（span 0.6），
+            // lineDash 分出的各线段随其覆盖 x 取到对应空间色相，等效逐段采样；
+            // 非 owner/静态色保持单色路径，不读相位。重绘仍由 frameColor 的
+            // 低频相位变化（onFrameColorChanged → requestPaint）驱动，≤10fps
+            if (root.frameFlowOwner) {
+                var grad = ctx.createLinearGradient(0, 0, width, 0)
+                var phase = Components.ColorUtils.flowCanvasPhase
+                var dark = Components.ColorUtils.dark
+                for (var s = 0; s <= 8; s++) {
+                    grad.addColorStop(s / 8, Components.ColorUtils.flowColorAt(
+                        root.frameFlowBase, phase,
+                        Components.ColorUtils.spaceOffset(width * s / 8, width),
+                        dark))
+                }
+                ctx.strokeStyle = grad
+            } else {
+                ctx.strokeStyle = root.frameColor
+            }
             ctx.lineJoin = "round"
 
             // 双线：两条同心细线，各占边框厚度 1/3，分别贴内外缘
@@ -771,6 +833,21 @@ Item {
                                        root.frameRadiusEff - o)
                     ctx.stroke()
                 }
+                return
+            }
+
+            // 实线（owner 流光）：几何与 Rectangle 边框完全同口径——路径内缩
+            // frameWidth/2、线宽 frameWidth、外缘圆角 frameRadiusEff，描边后
+            // 外缘恰为 frameRadiusEff、内缘恰为 frameRadiusEff - frameWidth
+            if (root.frameStyle === "solid") {
+                var solidInset = root.frameWidth / 2
+                ctx.lineWidth = root.frameWidth
+                ctx.lineCap = "butt"
+                ctx.setLineDash([])
+                root.roundRectPath(ctx, solidInset, solidInset,
+                                   width - 2 * solidInset, height - 2 * solidInset,
+                                   root.frameRadiusEff - solidInset)
+                ctx.stroke()
                 return
             }
 

@@ -20,10 +20,21 @@ Components.WidgetCard {
     widgetConfig: ({})
     instanceId: ""
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
-    backgroundColor: Components.ColorUtils.themedOpaqueColor(
-        widgetConfig && widgetConfig.backgroundColor, "#C8E6C9", "#24352a")
-    property color barColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.barColor, root.highlightColor)
+    backgroundColor: Components.ColorUtils.themedOpaqueSiteColor(
+        widgetConfig, "dials", "backgroundColor",
+        widgetConfig && widgetConfig.backgroundColor, "#C8E6C9", "#24352a",
+        root.width / 2, root.width)
+    property color barColor: Components.ColorUtils.resolveSiteColor(
+        widgetConfig, "dials", "barColor",
+        widgetConfig && widgetConfig.barColor, root.highlightColor,
+        root.width / 2, root.width)
+    // Canvas 绘制专用：流光走低速相位（~7.5fps），避免整块画布随 15fps
+    // 主相位刷新；非流光取值与 barColor 完全一致（静态色不依赖相位）。
+    // owner 流光时此色仅作低频重绘驱动，逐柱实际取色在 onPaint 内按柱 x 采样
+    readonly property color barCanvasColor: Components.ColorUtils.canvasSiteColor(
+        widgetConfig, "dials", "barColor",
+        widgetConfig && widgetConfig.barColor, root.highlightColor,
+        root.width / 2, root.width)
     property int amplitude: {
         var value = widgetConfig ? Number(widgetConfig.amplitude) : NaN
         if (!isFinite(value) || value <= 0)
@@ -103,6 +114,9 @@ Components.WidgetCard {
     onPanelVisibleChanged: root.syncCapture()
     onInstanceIdChanged: root.syncCapture()
     onBarColorChanged: spectrumCanvas.requestPaint()
+    // onPaint 内读 flowCanvasPhase 不建立绑定依赖，靠 barCanvasColor
+    // 的属性变化事件驱动重绘（流光时约 7.5fps）
+    onBarCanvasColorChanged: spectrumCanvas.requestPaint()
     onAmplitudeChanged: spectrumCanvas.requestPaint()
     onShowPeaksChanged: spectrumCanvas.requestPaint()
     onPaletteChanged: spectrumCanvas.requestPaint()
@@ -181,7 +195,18 @@ Components.WidgetCard {
             var maxBarH = Math.max(1, activeH - 2)
             // 倒影压缩比：倒影区高度 / 活动区高度（1/3 倒影→0.5，1/2 倒影→1.0）
             var reflectScale = root.reflectRatio / (1 - root.reflectRatio)
-            var color = root.barColor
+            var color = root.barCanvasColor
+            // 本帧只判一次 owner/相位/明暗：barColor 为整卡唯一流光 owner 时
+            // 逐柱按柱中心 x 经 spaceOffset 采样（替换 i * 0.03 手工错峰）；
+            // 非 owner/静态色路径不读相位、不注册相位绑定
+            var barValue = widgetConfig ? widgetConfig.barColor : null
+            var flow = Components.ColorUtils.isFlow(barValue)
+                && Components.ColorUtils.flowSiteIsOwner(
+                    widgetConfig, "dials", "barColor")
+            var flowBaseColor = flow
+                ? Components.ColorUtils.flowBase(barValue, "#4d8cff") : ""
+            var flowPhase = flow ? Components.ColorUtils.flowCanvasPhase : 0
+            var flowDark = Components.ColorUtils.dark
             var col = 0
 
             // 倒影渐变：镜像线（活动区底）较强 → 画布底完全淡出（透明近似模糊）
@@ -195,14 +220,31 @@ Components.WidgetCard {
             if (idle) {
                 ctx.fillStyle = Qt.rgba(color.r, color.g, color.b, 0.55)
                 for (var bi = 0; bi < n; bi++) {
+                    if (flow) {
+                        var idleBarColor = Components.ColorUtils.flowColorAt(
+                            flowBaseColor, flowPhase,
+                            Components.ColorUtils.spaceOffset(
+                                bi * (barW + gap) + barW / 2, w), flowDark)
+                        ctx.fillStyle = Qt.rgba(idleBarColor.r, idleBarColor.g,
+                                                idleBarColor.b, 0.55)
+                    }
                     var wave = 0.5 + 0.5 * Math.sin(now * 0.6 + bi * 0.45)
                     var bh = Math.max(1, maxBarH * (0.04 + 0.10 * wave))
                     ctx.fillRect(bi * (barW + gap), baseY - bh, barW, bh)
                     root.barPeaks[bi] = 0
                 }
-                // 倒影：同款呼吸波形镜像到基线下方，渐变淡出
+                // 倒影：同款呼吸波形镜像到基线下方，渐变淡出；
+                // 流光时逐柱取色（柱体极矮，实色与渐变观感一致，保持快路径）
                 ctx.fillStyle = refGrad
                 for (var ri = 0; ri < n; ri++) {
+                    if (flow) {
+                        var idleRefColor = Components.ColorUtils.flowColorAt(
+                            flowBaseColor, flowPhase,
+                            Components.ColorUtils.spaceOffset(
+                                ri * (barW + gap) + barW / 2, w), flowDark)
+                        ctx.fillStyle = Qt.rgba(idleRefColor.r, idleRefColor.g,
+                                                idleRefColor.b, 0.35)
+                    }
                     var rw = 0.5 + 0.5 * Math.sin(now * 0.6 + ri * 0.45)
                     var rbh = Math.max(1, maxBarH * (0.04 + 0.10 * rw)) * reflectScale
                     if (rbh >= 1)
@@ -227,10 +269,19 @@ Components.WidgetCard {
                 var x = col * (barW + gap)
                 var y = baseY - barH
 
+                // 流光：本柱按柱中心 x 采样空间相位（横向彩虹），非流光直接用静态色
+                var barFillColor = color
+                if (flow) {
+                    barFillColor = Components.ColorUtils.flowColorAt(
+                        flowBaseColor, flowPhase,
+                        Components.ColorUtils.spaceOffset(x + barW / 2, w), flowDark)
+                }
+
                 // 柱体：底部实色 → 顶部半透明的垂直渐变
                 var grad = ctx.createLinearGradient(0, y, 0, baseY)
-                grad.addColorStop(0, Qt.rgba(color.r, color.g, color.b, 0.45))
-                grad.addColorStop(1, color)
+                grad.addColorStop(0, Qt.rgba(barFillColor.r, barFillColor.g,
+                                             barFillColor.b, 0.45))
+                grad.addColorStop(1, barFillColor)
                 ctx.fillStyle = grad
                 root.roundedBar(ctx, x, y, barW, barH, Math.min(4, barW * 0.4))
                 ctx.fill()
@@ -238,7 +289,16 @@ Components.WidgetCard {
                 // 倒影：活动区底线的镜像，高度按反射区比例压缩，渐变淡出
                 var rbh = barH * reflectScale
                 if (rbh >= 1) {
-                    ctx.fillStyle = refGrad
+                    if (flow) {
+                        var flowRefGrad = ctx.createLinearGradient(0, baseY, 0, h)
+                        flowRefGrad.addColorStop(0, Qt.rgba(barFillColor.r,
+                            barFillColor.g, barFillColor.b, 0.35))
+                        flowRefGrad.addColorStop(1, Qt.rgba(barFillColor.r,
+                            barFillColor.g, barFillColor.b, 0))
+                        ctx.fillStyle = flowRefGrad
+                    } else {
+                        ctx.fillStyle = refGrad
+                    }
                     root.roundedBar(ctx, x, baseY, barW, rbh, Math.min(4, barW * 0.4))
                     ctx.fill()
                 }
@@ -255,7 +315,8 @@ Components.WidgetCard {
                     root.barPeaks[i] = prev
                     var capH = maxBarH * prev / 100.0
                     if (capH >= 1) {
-                        ctx.fillStyle = Qt.rgba(color.r, color.g, color.b, 0.85)
+                        ctx.fillStyle = Qt.rgba(barFillColor.r, barFillColor.g,
+                                                barFillColor.b, 0.85)
                         ctx.fillRect(x + 1, baseY - capH - 2, barW - 2, 2)
                     }
                 } else {

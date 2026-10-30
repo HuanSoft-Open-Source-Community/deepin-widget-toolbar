@@ -25,10 +25,21 @@ Components.WidgetCard {
     property bool showControls: widgetConfig && widgetConfig.showControls !== undefined
         ? widgetConfig.showControls : true
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
-    backgroundColor: Components.ColorUtils.themedOpaqueColor(
-        widgetConfig && widgetConfig.backgroundColor, "#00bcd4", "#10535c")
-    textColor: Components.ColorUtils.themedColor(
-        widgetConfig && widgetConfig.textColor, "#1a1a1a", "#e8e8e8")
+    // 取色统一走 ColorUtils Site 入口：整卡唯一 owner 互斥兜底 + 横向空间渐变
+    // 采样（背景与居中文字为整卡级元素，x 传卡片中心 width/2；
+    // 宽布局右侧文字列由各 Text 按自身 x 采样）
+    backgroundColor: Components.ColorUtils.themedOpaqueSiteColor(
+        widgetConfig, "dials", "backgroundColor",
+        widgetConfig && widgetConfig.backgroundColor, "#00bcd4", "#10535c",
+        root.width / 2, root.width)
+    textColor: Components.ColorUtils.themedSiteColor(
+        widgetConfig, "dials", "textColor",
+        widgetConfig && widgetConfig.textColor, "#1a1a1a", "#e8e8e8",
+        root.width / 2, root.width)
+    // textColor 为整卡唯一流光 owner：居中单块曲名/歌手启用 FlowText 段内彩虹
+    readonly property bool textColorIsFlow: Components.ColorUtils.flowSiteIsOwner(
+        widgetConfig, "dials", "textColor")
+        && Components.ColorUtils.isFlow(widgetConfig && widgetConfig.textColor)
 
     MediaPlayer {
         id: player
@@ -220,7 +231,13 @@ Components.WidgetCard {
                 text: player.title.length > 0 ? player.title : qsTr("Unknown title")
                 font.pixelSize: root.titlePixelSize
                 font.weight: Font.DemiBold
-                color: root.textColor
+                // 非居中单块文字：按自身 x（封面列右缘起的文字列中心）采样，
+                // 与全卡横向彩虹口径连续（封面隐藏时 parent.x 自动前移）
+                color: Components.ColorUtils.themedSiteColor(
+                    root.widgetConfig, "dials", "textColor",
+                    root.widgetConfig && root.widgetConfig.textColor,
+                    "#1a1a1a", "#e8e8e8",
+                    root.margin + parent.x + x + width / 2, root.width)
                 elide: Text.ElideRight
                 maximumLineCount: 1
                 wrapMode: Text.Wrap
@@ -233,7 +250,11 @@ Components.WidgetCard {
                 Layout.fillWidth: true
                 text: player.artist.length > 0 ? player.artist : qsTr("Unknown artist")
                 font.pixelSize: root.artistPixelSize
-                color: root.textColor
+                color: Components.ColorUtils.themedSiteColor(
+                    root.widgetConfig, "dials", "textColor",
+                    root.widgetConfig && root.widgetConfig.textColor,
+                    "#1a1a1a", "#e8e8e8",
+                    root.margin + parent.x + x + width / 2, root.width)
                 opacity: 0.65
                 elide: Text.ElideRight
                 maximumLineCount: 1
@@ -290,7 +311,9 @@ Components.WidgetCard {
             coverSize: root.coverSize
         }
 
-        Text {
+        // 居中单块主文字：textColor site 为整卡唯一流光 owner 时启用 FlowText
+        // 段内彩虹；非 owner 降级为普通 Text（color 走中心 x 的 Site 采样）
+        Components.FlowText {
             anchors.horizontalCenter: parent.horizontalCenter
             width: root.width - root.margin * 2
             text: player.title.length > 0 ? player.title : qsTr("Unknown title")
@@ -302,11 +325,22 @@ Components.WidgetCard {
             maximumLineCount: 2
             wrapMode: Text.Wrap
             lineHeight: 1.15
+            flowGradient: root.textColorIsFlow
+            flowBaseColor: Components.ColorUtils.flowBase(
+                root.widgetConfig && root.widgetConfig.textColor,
+                Components.ColorUtils.dark ? "#e8e8e8" : "#1a1a1a")
+            // 相位读取按 owner 门控：非流光路径不注册 flowPhase 依赖（性能红线）
+            flowPhaseValue: flowGradient ? Components.ColorUtils.flowPhase : 0
+            flowDark: Components.ColorUtils.dark
+            // 元素左缘/宽度换算空间相位（内容容器距卡片 margin，元素铺满容器宽），
+            // 与全卡 0.6 span 口径连续
+            flowOffset: Components.ColorUtils.spaceOffset(root.margin + x, root.width)
+            flowSpan: Components.ColorUtils.spaceOffset(width, root.width)
             // 曲名截断时悬停显示全文
             Components.ElideTip { anchors.fill: parent }
         }
 
-        Text {
+        Components.FlowText {
             anchors.horizontalCenter: parent.horizontalCenter
             width: root.width - root.margin * 2
             text: player.artist.length > 0 ? player.artist : qsTr("Unknown artist")
@@ -316,6 +350,14 @@ Components.WidgetCard {
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight
             maximumLineCount: 1
+            flowGradient: root.textColorIsFlow
+            flowBaseColor: Components.ColorUtils.flowBase(
+                root.widgetConfig && root.widgetConfig.textColor,
+                Components.ColorUtils.dark ? "#e8e8e8" : "#1a1a1a")
+            flowPhaseValue: flowGradient ? Components.ColorUtils.flowPhase : 0
+            flowDark: Components.ColorUtils.dark
+            flowOffset: Components.ColorUtils.spaceOffset(root.margin + x, root.width)
+            flowSpan: Components.ColorUtils.spaceOffset(width, root.width)
             // 艺术家截断时悬停显示全文
             Components.ElideTip { anchors.fill: parent }
         }

@@ -32,19 +32,35 @@ Components.WidgetCard {
     property string legacyNotePath: dataDir.length > 0 && instanceId.length > 0
         ? dataDir + "/" + instanceId + ".txt" : ""
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
-    // 卡片底色跟随内容背景色，让内容自定义色延伸到整个便签卡片
+    // 卡片底色跟随内容背景色，让内容自定义色延伸到整个便签卡片；
+    // 便签的底色配置键不是 backgroundColor，需显式告诉 WidgetCard，
+    // 流光 owner 时才会铺整卡 FlowFill（见下方内容区矩形的让位逻辑）
+    backgroundSiteKey: "contentBackgroundColor"
     backgroundColor: root.contentBackgroundColor
-    // 默认预设随明/暗主题切换（用户自定义颜色仍优先生效）
-    textColor: Components.ColorUtils.themedColor(
-        widgetConfig && widgetConfig.textColor, "#3d2b00", "#ede3be")
-    property color titleBackgroundColor: Components.ColorUtils.themedColor(
-        widgetConfig && widgetConfig.titleBackgroundColor, "#c8a500", "#6d5c05")
-    property color titleTextColor: Components.ColorUtils.themedColor(
-        widgetConfig && widgetConfig.titleTextColor, "#1a1a00", "#f4eecb")
-    property color contentBackgroundColor: Components.ColorUtils.themedColor(
-        widgetConfig && widgetConfig.contentBackgroundColor, "#fff8d6", "#2a2618")
-    property color lineColor: Components.ColorUtils.themedColor(
-        widgetConfig && widgetConfig.lineColor, "#cccccc", "#4a4636")
+    // 默认预设随明/暗主题切换（用户自定义颜色仍优先生效）；
+    // Site 入口承载整卡互斥兜底与按元素 x 的空间相位（span 缺省 0.6）
+    textColor: Components.ColorUtils.themedSiteColor(
+        widgetConfig, "dials", "textColor",
+        widgetConfig && widgetConfig.textColor, "#3d2b00", "#ede3be",
+        root.width / 2, root.width)
+    property color titleBackgroundColor: Components.ColorUtils.themedSiteColor(
+        widgetConfig, "dials", "titleBackgroundColor",
+        widgetConfig && widgetConfig.titleBackgroundColor, "#c8a500", "#6d5c05",
+        root.width / 2, root.width)
+    property color titleTextColor: Components.ColorUtils.themedSiteColor(
+        widgetConfig, "dials", "titleTextColor",
+        widgetConfig && widgetConfig.titleTextColor, "#1a1a00", "#f4eecb",
+        root.width / 2, root.width)
+    property color contentBackgroundColor: Components.ColorUtils.themedSiteColor(
+        widgetConfig, "dials", "contentBackgroundColor",
+        widgetConfig && widgetConfig.contentBackgroundColor, "#fff8d6", "#2a2618",
+        root.width / 2, root.width)
+    // 行底线由 Canvas 绘制：流光走低频相位（themedCanvasSiteColor），
+    // 并由 onLineColorChanged 显式触发重绘（Canvas 的 onPaint 读取属性不建立绑定依赖）
+    property color lineColor: Components.ColorUtils.themedCanvasSiteColor(
+        widgetConfig, "dials", "lineColor",
+        widgetConfig && widgetConfig.lineColor, "#cccccc", "#4a4636",
+        root.width / 2, root.width)
     // 待办模式开关（实例设置，缺省关闭）
     property bool todoMode: widgetConfig && widgetConfig.todoMode === true
     // 自动换行开关（实例设置，缺省开启）：开启时文字在卡片宽度内换行；
@@ -217,6 +233,10 @@ Components.WidgetCard {
         Qt.callLater(root.rebuildLineTopsIfGeometryChanged)
     }
     onDoneFlagsChanged: if (strikeCanvas) strikeCanvas.requestPaint()
+    // Canvas onPaint 读取 root.lineColor / root.dotColor 不建立绑定依赖：
+    // 流光相位变化只改这两个属性，必须在这里显式请求重绘
+    onLineColorChanged: if (lineCanvas) lineCanvas.requestPaint()
+    onDotColorChanged: if (strikeCanvas) strikeCanvas.requestPaint()
 
     // dataDir/instanceId 由宿主 Binding 注入，xmlPath 就绪后加载/迁移一次
     onXmlPathChanged: {
@@ -440,11 +460,13 @@ Components.WidgetCard {
             width: parent.width
             height: parent.height - root.titleBarHeight - content.spacing
 
-            // 内容底色：仅非透明模式显示（固定于可视区，不随内容滚动）
+            // 内容底色：仅非透明模式显示（固定于可视区，不随内容滚动）。
+            // 底色为流光 owner 时整卡由 WidgetCard 的 FlowFill 绘制，本矩形
+            // 必须让位，否则会在内容区盖成一块单色、看不到横向彩虹。
             Rectangle {
                 anchors.fill: parent
                 radius: DTK.platformTheme.windowRadius
-                visible: !root.effectiveTransparent
+                visible: !root.effectiveTransparent && !root.backgroundIsFlow
                 color: root.contentBackgroundColor
             }
 
@@ -581,9 +603,40 @@ Components.WidgetCard {
                             if (root.effectiveTransparent)
                                 return
                             ctx.reset()
-                            ctx.strokeStyle = root.lineColor
                             ctx.globalAlpha = 0.7
                             ctx.lineWidth = 1
+                            // 本帧只判一次 owner/相位/明暗：lineColor 为整卡唯一
+                            // 流光 owner 时底线改用水平线性渐变描边（7 个 stop 按
+                            // 画布 x 采样全卡空间相位，行内呈段内彩虹）；非 owner/
+                            // 静态色路径保持单色、不读相位。重绘仍由注入色的低频
+                            // 变化经 onLineColorChanged → requestPaint() 驱动（≤10fps）
+                            var lineValue = root.widgetConfig
+                                ? root.widgetConfig.lineColor : null
+                            var lineFlow = Components.ColorUtils.isFlow(lineValue)
+                                && Components.ColorUtils.flowSiteIsOwner(
+                                    root.widgetConfig, "dials", "lineColor")
+                            if (lineFlow) {
+                                var gx0 = root.todoMode
+                                    ? Math.max(2, noteArea.leftPadding) : 2
+                                var gx1 = width - 4
+                                var grad = ctx.createLinearGradient(gx0, 0, gx1, 0)
+                                var stopCount = 7
+                                var base = Components.ColorUtils.flowBase(
+                                    lineValue, "#cccccc")
+                                var phase = Components.ColorUtils.flowCanvasPhase
+                                var flowDark = Components.ColorUtils.dark
+                                for (var s = 0; s < stopCount; s++) {
+                                    var stopT = s / (stopCount - 1)
+                                    var stopX = gx0 + (gx1 - gx0) * stopT
+                                    grad.addColorStop(stopT, Components.ColorUtils.flowColorAt(
+                                        base, phase,
+                                        Components.ColorUtils.spaceOffset(stopX, width),
+                                        flowDark))
+                                }
+                                ctx.strokeStyle = grad
+                            } else {
+                                ctx.strokeStyle = root.lineColor
+                            }
 
                             // 待办模式从圆点列右侧起笔，避免线穿过圆点下方；
                             // 经典模式保持原有 x=2 起点不变
@@ -649,9 +702,40 @@ Components.WidgetCard {
                             ctx.reset()
                             if (!root.todoMode)
                                 return
-                            ctx.strokeStyle = root.dotColor
                             ctx.globalAlpha = 0.8
                             ctx.lineWidth = 1
+                            // 删除线颜色跟圆点列（dotColor）：透明模式为主题文字色
+                            // （豁免分支不接入流光）；配色模式跟 textColor——textColor
+                            // 为整卡唯一流光 owner 时同样改用水平线性渐变描边（stop
+                            // 按画布 x 采样低频相位），否则保持静态单色；重绘仍由既有
+                            // onDotColorChanged → requestPaint() 驱动
+                            var textValue = root.widgetConfig
+                                ? root.widgetConfig.textColor : null
+                            var strikeFlow = !root.effectiveTransparent
+                                && Components.ColorUtils.isFlow(textValue)
+                                && Components.ColorUtils.flowSiteIsOwner(
+                                    root.widgetConfig, "dials", "textColor")
+                            if (strikeFlow) {
+                                var gx0 = noteArea.leftPadding
+                                var gx1 = width - 4
+                                var grad = ctx.createLinearGradient(gx0, 0, gx1, 0)
+                                var stopCount = 7
+                                var base = Components.ColorUtils.flowBase(
+                                    textValue, "#3d2b00")
+                                var phase = Components.ColorUtils.flowCanvasPhase
+                                var flowDark = Components.ColorUtils.dark
+                                for (var s = 0; s < stopCount; s++) {
+                                    var stopT = s / (stopCount - 1)
+                                    var stopX = gx0 + (gx1 - gx0) * stopT
+                                    grad.addColorStop(stopT, Components.ColorUtils.flowColorAt(
+                                        base, phase,
+                                        Components.ColorUtils.spaceOffset(stopX, width),
+                                        flowDark))
+                                }
+                                ctx.strokeStyle = grad
+                            } else {
+                                ctx.strokeStyle = root.dotColor
+                            }
                             for (var i = 0; i < root.lineTops.length; i++) {
                                 if (!root.isDone(i))
                                     continue

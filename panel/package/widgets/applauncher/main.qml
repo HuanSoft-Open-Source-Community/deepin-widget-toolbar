@@ -50,12 +50,16 @@ Components.WidgetCard {
     property bool showLabels: root.cfg.showLabels !== undefined
         ? root.cfg.showLabels : true
     transparentBackground: root.cfg.transparentBackground === true
-    backgroundColor: Components.ColorUtils.themedOpaqueColor(
-        root.cfg.backgroundColor, "#660066", "#2b0f2b")
-    property color labelColor: Components.ColorUtils.resolveColor(
-        root.cfg.labelColor, "#ffffff")
-    property color unitColor: Components.ColorUtils.resolveColor(
-        root.cfg.unitBackgroundColor, "#ffffff")
+    // WidgetCard 的卡底流光裁决/引用计数默认读宿主注入的 widgetConfig；
+    // 本卡取色真相源是直读的 root.cfg，需把同一来源注入，二者才能一致
+    flowConfig: root.cfg
+    // 取色统一走 ColorUtils Site 入口：整卡唯一 owner 互斥兜底 + 横向空间渐变
+    // 采样（背景为整卡级元素，x 传卡片中心 width/2）；配置真相源是 root.cfg。
+    // 标签/单元方块色由单元委托按各单元自身 x 逐单元采样（横向彩虹）。
+    backgroundColor: Components.ColorUtils.themedOpaqueSiteColor(
+        root.cfg, "dials", "backgroundColor",
+        root.cfg.backgroundColor, "#660066", "#2b0f2b",
+        root.width / 2, root.width)
 
     function reloadConfig() {
         if (root.instanceId.length === 0)
@@ -281,6 +285,16 @@ Components.WidgetCard {
         delegate: Item {
             required property int index
 
+            // 本单元相对卡片左缘的中心x（内容容器距卡片 margin，网格 x 为
+            // 容器坐标）：逐单元按自身 x 采样，1/4/8/16 布局均形成横向彩虹
+            readonly property real unitCenterX: root.margin + x + root.unitSide / 2
+            readonly property color unitFillColor: Components.ColorUtils.resolveSiteColor(
+                root.cfg, "dials", "unitBackgroundColor",
+                root.cfg.unitBackgroundColor, "#ffffff", unitCenterX, root.width)
+            readonly property color unitLabelColor: Components.ColorUtils.resolveSiteColor(
+                root.cfg, "dials", "labelColor",
+                root.cfg.labelColor, "#ffffff", unitCenterX, root.width)
+
             visible: index < root.cellsUsed
             x: root.xOrigin + (index % root.unitCols) * (root.unitSide + root.gapX)
             y: root.yOrigin + Math.floor(index / root.unitCols)
@@ -297,7 +311,7 @@ Components.WidgetCard {
                 visible: index < root.visibleApps
                     && !root.immersiveMode && !root.effectiveTransparent
                 radius: DTK.platformTheme.windowRadius
-                color: root.unitColor
+                color: unitFillColor
                 scale: (root.pressedUnit === index) ? 0.94 : 1.0
                 Behavior on scale {
                     NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
@@ -347,7 +361,7 @@ Components.WidgetCard {
                 elide: Text.ElideRight
                 font.pixelSize: root.labelPixel
                 color: root.effectiveTransparent
-                    ? root.themeTextColor : root.labelColor
+                    ? root.themeTextColor : unitLabelColor
                 opacity: 0.9
 
                 // 启动器名截断时悬停显示全文
@@ -372,7 +386,7 @@ Components.WidgetCard {
                         height: root.plusStroke
                         radius: Math.max(1, root.plusStroke / 2)
                         color: root.effectiveTransparent
-                            ? root.themeTextColor : root.labelColor
+                            ? root.themeTextColor : unitLabelColor
                         antialiasing: true
                     }
 
@@ -383,7 +397,7 @@ Components.WidgetCard {
                         height: root.plusSize
                         radius: Math.max(1, root.plusStroke / 2)
                         color: root.effectiveTransparent
-                            ? root.themeTextColor : root.labelColor
+                            ? root.themeTextColor : unitLabelColor
                         antialiasing: true
                     }
                 }
