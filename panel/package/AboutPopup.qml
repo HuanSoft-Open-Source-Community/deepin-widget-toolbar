@@ -91,7 +91,7 @@ PanelPopup {
             Text {
                 Layout.fillWidth: true
                 text: qsTr("Website") + ": "
-                    + "<a href=\"https://huansoft.kxwl.ltd/\">huansoft.kxwl.ltd</a>"
+                    + "<a href=\"https://huansoft.org.cn/\">huansoft.org.cn</a>"
                 font: DTK.fontManager.t6
                 color: palette.link
                 wrapMode: Text.Wrap
