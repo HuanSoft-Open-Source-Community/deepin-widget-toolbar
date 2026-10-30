@@ -4,6 +4,8 @@
         <file alias="components/WidgetCard.qml">package/widgets/components/WidgetCard.qml</file>
         <file alias="components/AnalogClock.qml">package/widgets/components/AnalogClock.qml</file>
         <file alias="components/ColorUtils.qml">package/widgets/components/ColorUtils.qml</file>
+        <file alias="components/FlowFill.qml">package/widgets/components/FlowFill.qml</file>
+        <file alias="components/FlowText.qml">package/widgets/components/FlowText.qml</file>
         <file alias="components/WidgetHostItem.qml">package/widgets/components/WidgetHostItem.qml</file>
         <file alias="components/DockMarginHelper.qml">package/widgets/components/DockMarginHelper.qml</file>
         <file alias="components/SettingsRow.qml">package/widgets/components/SettingsRow.qml</file>

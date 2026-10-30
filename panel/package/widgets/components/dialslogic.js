@@ -13,6 +13,18 @@ function resolveColor(value, fallback) {
     return fallback
 }
 
+// 表盘子色位的确定性枚举顺序（单一事实源）：与 ColorUtils.flowOwnerKey 的
+// 展开顺序、SettingsRow 色点提示顺序保持一致。任何新增/调整必须三处同步。
+function dialFieldOrder() {
+    return ["dialBackground", "dialColor", "hourMinuteColor", "secondColor"]
+}
+
+// 表盘子色位路径：与 ColorUtils.flowSiteKeyOf 同一格式
+//（普通键 = 键名；表盘子色位 = "<dialsKey>.<index>.<field>"）
+function dialSitePath(dialsKey, index, field) {
+    return (dialsKey || "dials") + "." + index + "." + field
+}
+
 // 配置中 key 对应的表盘数组；非数组（缺失/旧数据）一律回退空数组，
 // 防止数值被 Repeater 当成重复次数实例化大量委托
 function dialList(values, key) {
@@ -111,7 +123,10 @@ function setDialZone(usedZones, values, key, index, zone) {
     return list
 }
 
-// 单块表盘的字段色值；未设置时回退到对应全局配置
+// 单块表盘的字段色值；未设置时回退到对应全局配置。
+// 流光值（@flow: 前缀）原样返回，交由调用方的 ColorUtils.resolveColor 解析：
+// 这里若提前按纯色校验，@flow: 会被当成非法值吞成兜底色，调用方就再也
+// 看不到流光语义。纯色与非法值的行为保持不变。
 function dialColorValue(values, list, index, field) {
     var dial = index < list.length ? list[index] : null
     var value = dial ? dial[field] : undefined
@@ -124,6 +139,8 @@ function dialColorValue(values, list, index, field) {
         fallback = values.secondHandColor || "#ff4d4f"
     else if (field === "dialBackground")
         fallback = values.dialBackgroundColor || "#ffffff"
+    if (typeof value === "string" && value.indexOf("@flow:") === 0)
+        return value
     return resolveColor(value, fallback)
 }
 

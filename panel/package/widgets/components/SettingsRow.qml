@@ -141,6 +141,11 @@ RowLayout {
             ? String(host.values[key]) : ""
 
         function isKnownOption(value) {
+            // 流光值（@flow:#...）不是任何预设色块：按"自定义值"处理，
+            // 选中环落到右侧 "+" 按钮。显式短路，避免将来预设里出现
+            // 形似流光的值时被误判为已知项
+            if (ColorUtils.isFlow(value))
+                return false
             for (var i = 0; i < options.length; ++i) {
                 if (String(options[i].value) === String(value))
                     return true
@@ -241,6 +246,14 @@ RowLayout {
                 property bool isCustomButton: true
                 property string colorValue: ""
 
+                // 当前行值是流光时：隐藏 "+"，改画铺满内圆的迷你流光色块。
+                // 相位来自 ColorUtils 的共享时钟（由使用方统一驱动），
+                // 这里不创建 Timer；纯色状态下外观与改动前完全一致
+                readonly property bool flowSelected:
+                    ColorUtils.isFlow(colorSelector.selectedValue)
+                readonly property string flowBase:
+                    ColorUtils.flowBase(colorSelector.selectedValue, "#4d8cff")
+
                 width: 24
                 height: 24
                 radius: 12
@@ -259,9 +272,40 @@ RowLayout {
 
                 Text {
                     anchors.centerIn: parent
+                    visible: !customColorButton.flowSelected
                     text: "+"
                     font.pixelSize: 13
                     color: palette.windowText
+                }
+
+                // 迷你流光色块：3 个横向渐变停靠点，各自带一点相位差，
+                // 让 24px 的小圆里也能看出颜色在流动
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    radius: 11
+                    visible: customColorButton.flowSelected
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop {
+                            position: 0.0
+                            color: ColorUtils.flowColorAt(
+                                customColorButton.flowBase,
+                                ColorUtils.flowPhase, 0.0, ColorUtils.dark)
+                        }
+                        GradientStop {
+                            position: 0.5
+                            color: ColorUtils.flowColorAt(
+                                customColorButton.flowBase,
+                                ColorUtils.flowPhase, 0.14, ColorUtils.dark)
+                        }
+                        GradientStop {
+                            position: 1.0
+                            color: ColorUtils.flowColorAt(
+                                customColorButton.flowBase,
+                                ColorUtils.flowPhase, 0.28, ColorUtils.dark)
+                        }
+                    }
                 }
 
                 MouseArea {
@@ -973,6 +1017,23 @@ RowLayout {
         onOrderListChanged: launcherPanel.syncRows()
     }
 
+    // 表盘色点的兜底色：与 dialslogic.dialColorValue 的 fallback 语义保持一致
+    //（dialBackground 取全局表盘底色，其余取对应全局字段色）；
+    // 全局值本身若是流光/非法色，则取其内嵌原色，最终兜底白色
+    function dialFallback(field) {
+        var value = ""
+        if (field === "dialBackground")
+            value = host.values.dialBackgroundColor || "#ffffff"
+        else if (field === "dialColor")
+            value = host.values.dialColor || "#000000"
+        else if (field === "hourMinuteColor")
+            value = host.values.hourMinuteHandColor || "#000000"
+        else
+            value = host.values.secondHandColor || "#ff4d4f"
+        return ColorUtils.isValidColor(value)
+            ? value : ColorUtils.flowBase(value, "#ffffff")
+    }
+
     ColumnLayout {
         Layout.fillWidth: true
         visible: type === "timezoneList"
@@ -998,6 +1059,7 @@ RowLayout {
             // 保证模型始终是数组或空数组。
             model: host.dialList(key)
             delegate: RowLayout {
+                id: dialRow
                 required property int index
 
                 Layout.fillWidth: true
@@ -1029,11 +1091,19 @@ RowLayout {
                         ]
                         delegate: Rectangle {
                             required property var modelData
+                            required property int index
 
                             width: 14
                             height: 14
                             radius: 7
-                            color: host.dialColorValue(key, index, modelData.field)
+                            // dialColorValue 对流光值原样返回 @flow: 字符串，
+                            // 直接赋给 color 会得到非法色（黑块），统一经
+                            // resolveColor 解析；相位 = 表盘序号 × 0.06 +
+                            // 字段序号 × 0.02，同盘 4 点与不同盘之间错开成彩虹波
+                            color: ColorUtils.resolveColor(
+                                host.dialColorValue(key, index, modelData.field),
+                                root.dialFallback(modelData.field),
+                                dialRow.index * 0.06 + index * 0.02)
                             border.width: 1
                             border.color: ColorUtils.hairline
 
