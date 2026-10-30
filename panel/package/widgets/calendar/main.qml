@@ -40,25 +40,44 @@ Components.WidgetCard {
         ? widgetConfig.highlightToday : true
     property int gridSpacing: 1
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
-    // 默认预设随明/暗主题切换（用户自定义颜色仍优先生效）
-    backgroundColor: Components.ColorUtils.themedOpaqueColor(
-        widgetConfig && widgetConfig.backgroundColor, "#ffffff", "#1f1f1f")
-    textColor: Components.ColorUtils.themedColor(
-        widgetConfig && widgetConfig.textColor, "#222222", "#e8e8e8")
-    property color titleBackgroundColor: Components.ColorUtils.themedColor(
-        widgetConfig && widgetConfig.titleBackgroundColor, "#e64545", "#8c2f2f")
-    property color titleTextColor: Components.ColorUtils.themedColor(
-        widgetConfig && widgetConfig.titleTextColor, "#ffffff", "#f2f2f2")
-    property color weekdayBackgroundColor: Components.ColorUtils.themedColor(
-        widgetConfig && widgetConfig.weekdayBackgroundColor, "#ffc0cb", "#3a2a2e")
-    property color weekdayTextColor: Components.ColorUtils.themedColor(
-        widgetConfig && widgetConfig.weekdayTextColor, "#8a3a3a", "#e2a7af")
-    highlightColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.highlightColor, "#e64545")
-    highlightedTextColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.highlightedTextColor, "#ffffff")
-    property color gridColor: Components.ColorUtils.themedColor(
-        widgetConfig && widgetConfig.gridColor, "#cccccc", "#3a3a3a")
+    // 取色统一走 ColorUtils Site 入口：整卡唯一 owner 互斥兜底 + 横向空间渐变采样
+    //（整宽条带 x 传卡片中心；日期格/星期文字为重复元素，在委托内按列 x 逐格采样）
+    backgroundColor: Components.ColorUtils.themedOpaqueSiteColor(
+        widgetConfig, "dials", "backgroundColor",
+        widgetConfig && widgetConfig.backgroundColor, "#ffffff", "#1f1f1f",
+        root.width / 2, root.width)
+    textColor: Components.ColorUtils.themedSiteColor(
+        widgetConfig, "dials", "textColor",
+        widgetConfig && widgetConfig.textColor, "#222222", "#e8e8e8",
+        root.width / 2, root.width)
+    property color titleBackgroundColor: Components.ColorUtils.themedSiteColor(
+        widgetConfig, "dials", "titleBackgroundColor",
+        widgetConfig && widgetConfig.titleBackgroundColor, "#e64545", "#8c2f2f",
+        root.width / 2, root.width)
+    property color titleTextColor: Components.ColorUtils.themedSiteColor(
+        widgetConfig, "dials", "titleTextColor",
+        widgetConfig && widgetConfig.titleTextColor, "#ffffff", "#f2f2f2",
+        root.width / 2, root.width)
+    property color weekdayBackgroundColor: Components.ColorUtils.themedSiteColor(
+        widgetConfig, "dials", "weekdayBackgroundColor",
+        widgetConfig && widgetConfig.weekdayBackgroundColor, "#ffc0cb", "#3a2a2e",
+        root.width / 2, root.width)
+    highlightColor: Components.ColorUtils.resolveSiteColor(
+        widgetConfig, "dials", "highlightColor",
+        widgetConfig && widgetConfig.highlightColor, "#e64545",
+        root.width / 2, root.width)
+    highlightedTextColor: Components.ColorUtils.resolveSiteColor(
+        widgetConfig, "dials", "highlightedTextColor",
+        widgetConfig && widgetConfig.highlightedTextColor, "#ffffff",
+        root.width / 2, root.width)
+    property color gridColor: Components.ColorUtils.themedSiteColor(
+        widgetConfig, "dials", "gridColor",
+        widgetConfig && widgetConfig.gridColor, "#cccccc", "#3a3a3a",
+        root.width / 2, root.width)
+    // 标题文字 site 是否为整卡唯一流光 owner（标题 FlowText 门控）
+    readonly property bool titleTextColorIsFlow: Components.ColorUtils.flowSiteIsOwner(
+        widgetConfig, "dials", "titleTextColor")
+        && Components.ColorUtils.isFlow(widgetConfig && widgetConfig.titleTextColor)
     // 用实数除法让 7 列 + 6px 间距精确填满内容区，
     // 避免 Math.floor 取整后右侧露出网格底色竖线。
     property real cellWidth: Math.max(12,
@@ -70,6 +89,21 @@ Components.WidgetCard {
     property int titlePixelSize: Math.max(10, Math.min(24, Math.round(content.width * 0.045)))
     property int weekdayPixelSize: Math.max(8, Math.min(16, Math.round(content.width * 0.032)))
     property int dayPixelSize: Math.max(8, Math.min(18, Math.round(content.width * 0.038)))
+    // 网格单元中心相对卡片的 x：内容区左缘（margin）+ 列位置 ×（格宽 + 间距）+ 半格宽。
+    // 日期格与星期文字都在委托内按此 x 逐格采样，形成 7 列横向彩虹
+    function cellCenterX(index) {
+        return root.margin + (index % 7) * (root.cellWidth + root.gridSpacing)
+            + root.cellWidth / 2
+    }
+    // 日期格非高亮底色：与卡片底色同一 Site 入口，但按本列中心 x 采样，
+    // 流光 owner 时 7 列各取一段色相形成横向彩虹。非流光/非 owner 时
+    // 与 root.backgroundColor（卡片中心采样）返回同一颜色，静态外观不变。
+    function cellBackgroundColor(index) {
+        return Components.ColorUtils.themedOpaqueSiteColor(
+            root.widgetConfig, "dials", "backgroundColor",
+            root.widgetConfig && root.widgetConfig.backgroundColor,
+            "#ffffff", "#1f1f1f", root.cellCenterX(index), root.width)
+    }
 
     Column {
         id: content
@@ -84,11 +118,23 @@ Components.WidgetCard {
             visible: !root.effectiveTransparent
             color: root.titleBackgroundColor
 
-            Text {
+            // 标题文字（居中单块）：site 为整卡唯一流光 owner 时启用 FlowText
+            // 段内彩虹；非 owner / 静态色走普通 color 渲染，零额外开销
+            Components.FlowText {
                 anchors.centerIn: parent
                 text: Qt.formatDate(root.current, qsTr("yyyy MMMM"))
                 font.pixelSize: root.titlePixelSize
                 color: root.titleTextColor
+                flowGradient: root.titleTextColorIsFlow
+                flowBaseColor: Components.ColorUtils.flowBase(
+                    root.widgetConfig && root.widgetConfig.titleTextColor, "#ffffff")
+                // 相位读取按 owner 门控：非流光路径不注册 flowPhase 依赖（性能红线）
+                flowPhaseValue: flowGradient ? Components.ColorUtils.flowPhase : 0
+                flowDark: Components.ColorUtils.dark
+                // 居中单块：左缘卡片x = 内容区左缘(margin) + (内容区宽 - 文本宽)/2
+                flowOffset: Components.ColorUtils.spaceOffset(
+                    root.margin + (parent.width - implicitWidth) / 2, root.width)
+                flowSpan: Components.ColorUtils.spaceOffset(implicitWidth, root.width)
             }
         }
 
@@ -119,7 +165,11 @@ Components.WidgetCard {
                         horizontalAlignment: Text.AlignHCenter
                         text: modelData
                         font.pixelSize: root.weekdayPixelSize
-                        color: root.weekdayTextColor
+                        // 7 列重复文字按列 x 采样，与日期格同一横向彩虹口径
+                        color: Components.ColorUtils.themedSiteColor(
+                            root.widgetConfig, "dials", "weekdayTextColor",
+                            root.widgetConfig && root.widgetConfig.weekdayTextColor,
+                            "#8a3a3a", "#e2a7af", root.cellCenterX(index), root.width)
                     }
                 }
             }
@@ -165,21 +215,35 @@ Components.WidgetCard {
                     delegate: Rectangle {
                         width: root.cellWidth
                         height: root.cellHeight
+                        // 今日高亮底按列 x 逐格采样（7 列横向彩虹）；透明模式保持透出
                         color: root.highlightToday
                             && modelData === root.current.getDate()
                             && root.month === root.current.getMonth()
-                            ? root.highlightColor
-                            : (root.effectiveTransparent ? "transparent" : root.backgroundColor)
+                            ? Components.ColorUtils.resolveSiteColor(
+                                root.widgetConfig, "dials", "highlightColor",
+                                root.widgetConfig && root.widgetConfig.highlightColor,
+                                "#e64545", root.cellCenterX(index), root.width)
+                            : (root.effectiveTransparent
+                                ? "transparent" : root.cellBackgroundColor(index))
 
                         Text {
                             anchors.centerIn: parent
                             text: modelData > 0 ? modelData : ""
                             font.pixelSize: root.dayPixelSize
+                            // 日期文字按列 x 逐格采样；透明模式主题色分支不接流光
                             color: root.highlightToday
                                 && modelData === root.current.getDate()
                                 && root.month === root.current.getMonth()
-                                ? root.highlightedTextColor
-                                : (root.effectiveTransparent ? root.themeTextColor : root.textColor)
+                                ? Components.ColorUtils.resolveSiteColor(
+                                    root.widgetConfig, "dials", "highlightedTextColor",
+                                    root.widgetConfig && root.widgetConfig.highlightedTextColor,
+                                    "#ffffff", root.cellCenterX(index), root.width)
+                                : (root.effectiveTransparent ? root.themeTextColor
+                                    : Components.ColorUtils.themedSiteColor(
+                                        root.widgetConfig, "dials", "textColor",
+                                        root.widgetConfig && root.widgetConfig.textColor,
+                                        "#222222", "#e8e8e8",
+                                        root.cellCenterX(index), root.width))
                         }
                     }
                 }

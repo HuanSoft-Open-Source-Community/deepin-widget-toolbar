@@ -27,7 +27,13 @@ Column {
     property int layoutSpacing: 6
     property bool highlightLocal: false
     property real localOffset: 0
-    property color textColor: palette.windowText
+    // 整卡互斥与空间采样参考（由 main.qml 注入）：cardConfig=实例配置；
+    // textColorValue=未经解析的原始 textColor 配置值（可能含 @flow: 前缀）；
+    // cardWidth=卡片宽；cardOffsetX=内容区相对卡片左缘的 x 偏移
+    property var cardConfig: null
+    property var textColorValue
+    property real cardWidth: 0
+    property real cardOffsetX: 0
     // 透明模式（由调用方传入 WidgetCard 的 effectiveTransparent/themeTextColor）
     property bool effectiveTransparent: false
     property color themeTextColor: palette.windowText
@@ -40,7 +46,12 @@ Column {
         visible: root.titleText.length > 0
         text: root.titleText
         font.pixelSize: root.titlePixelSize
-        color: root.effectiveTransparent ? root.themeTextColor : root.textColor
+        // textColor 为整卡唯一流光 owner 时按自身 x 采样横向彩虹；
+        // 透明模式保持主题自适应色分支、不接流光（消费端规则 5）
+        color: root.effectiveTransparent ? root.themeTextColor
+            : Components.ColorUtils.resolveSiteColor(root.cardConfig, "dials",
+                "textColor", root.textColorValue, "#ffffff",
+                root.cardOffsetX + titleItem.x + titleItem.width / 2, root.cardWidth)
     }
 
     Grid {
@@ -67,6 +78,7 @@ Column {
         Repeater {
             model: root.zoneInfos.slice(0, root.cols * root.rows)
             delegate: Item {
+                id: cell
                 required property var modelData
                 required property int index
 
@@ -84,6 +96,7 @@ Column {
 
                 // 宽格：地区名（左，elide）+ 时间（右）并排
                 Text {
+                    id: wideName
                     visible: !root.verticalCells
                     anchors {
                         left: parent.left
@@ -93,7 +106,13 @@ Column {
                     width: parent.width / 2 - 4
                     text: modelData.name
                     font.pixelSize: cellsGrid.cityPixelSize
-                    color: root.effectiveTransparent ? root.themeTextColor : root.textColor
+                    // textColor site 为 owner 时按自身水平中心 x 采样（宽格
+                    // 左右两块文字随列位置形成横向彩虹）；透明分支不接流光
+                    color: root.effectiveTransparent ? root.themeTextColor
+                        : Components.ColorUtils.resolveSiteColor(root.cardConfig,
+                            "dials", "textColor", root.textColorValue, "#ffffff",
+                            root.cardOffsetX + cell.x + wideName.x
+                                + wideName.width / 2, root.cardWidth)
                     opacity: 0.8
                     elide: Text.ElideRight
                     // 地区名截断时悬停显示全文
@@ -101,6 +120,7 @@ Column {
                 }
 
                 Text {
+                    id: wideTime
                     visible: !root.verticalCells
                     anchors {
                         right: parent.right
@@ -111,7 +131,11 @@ Column {
                     horizontalAlignment: Text.AlignRight
                     text: index < root.times.length ? root.times[index] : "--:--"
                     font.pixelSize: cellsGrid.cityPixelSize
-                    color: root.effectiveTransparent ? root.themeTextColor : root.textColor
+                    color: root.effectiveTransparent ? root.themeTextColor
+                        : Components.ColorUtils.resolveSiteColor(root.cardConfig,
+                            "dials", "textColor", root.textColorValue, "#ffffff",
+                            root.cardOffsetX + cell.x + wideTime.x
+                                + wideTime.width / 2, root.cardWidth)
                 }
 
                 // 窄格（1×1/2×2）：上下排列——时间居中在上（大）、
@@ -127,7 +151,12 @@ Column {
                         horizontalAlignment: Text.AlignHCenter
                         text: index < root.times.length ? root.times[index] : "--:--"
                         font.pixelSize: cellsGrid.compactTimePixelSize
-                        color: root.effectiveTransparent ? root.themeTextColor : root.textColor
+                        // 窄格整块文字居中，按单元格中心 x 采样
+                        color: root.effectiveTransparent ? root.themeTextColor
+                            : Components.ColorUtils.resolveSiteColor(root.cardConfig,
+                                "dials", "textColor", root.textColorValue, "#ffffff",
+                                root.cardOffsetX + cell.x + cell.width / 2,
+                                root.cardWidth)
                     }
 
                     Text {
@@ -135,7 +164,11 @@ Column {
                         horizontalAlignment: Text.AlignHCenter
                         text: modelData.name
                         font.pixelSize: cellsGrid.compactNamePixelSize
-                        color: root.effectiveTransparent ? root.themeTextColor : root.textColor
+                        color: root.effectiveTransparent ? root.themeTextColor
+                            : Components.ColorUtils.resolveSiteColor(root.cardConfig,
+                                "dials", "textColor", root.textColorValue, "#ffffff",
+                                root.cardOffsetX + cell.x + cell.width / 2,
+                                root.cardWidth)
                         opacity: 0.8
                         elide: Text.ElideRight
                         // 窄格地区名截断时悬停显示全文

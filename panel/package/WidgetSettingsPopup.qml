@@ -14,6 +14,11 @@ import "widgets/components" as Components
 import "widgets/components/dialslogic.js" as DialsLogic
 import "widgets/components/locklogic.js" as LockLogic
 
+// 注意：本文件位于 widgets/components 目录之外，ColorUtils 是该目录 qmldir
+// 注册的 QML 单例，只能经 Components 命名空间访问。写成未限定的 ColorUtils
+// 会在运行时成为未定义标识符，openFor() 在 control.open() 之前抛错，表现为
+// 卡片设置面板完全打不开。
+
 // 单个小组件实例的配置面板：复用 PanelPopup/PopupHeader，
 // 根据 WidgetManager 返回的 settings schema 动态生成控件并即时保存。
 PanelPopup {
@@ -68,6 +73,14 @@ PanelPopup {
         control.widgetId = Panel.widgetManager.instanceWidgetId(instance)
         control.schema = Panel.widgetManager.widgetSettingsSchema(control.widgetId)
         control.values = Panel.widgetManager.instanceConfig(instance)
+        // 脏配置收敛：历史产生的"一卡多流光"配置在打开设置面板时按确定性
+        // 顺序保留第一处流光部位，其余 @flow: 值回退为该键未自定义时的浅色
+        // 缺省值并落盘，保证渲染层兜底裁决与持久化配置一致
+        var converged = control.convergeFlowConfig()
+        if (converged !== null) {
+            control.values = converged
+            Panel.widgetManager.saveInstanceConfig(control.instanceId, converged)
+        }
         if (control.needsTimezones()) {
             control.zoneOptions = Timezones.zoneOptions()
             control.usedZones = WidgetHost.usedZones(control.instanceId)
@@ -175,7 +188,100 @@ PanelPopup {
         control.visibleSchema = result
     }
 
+    // 颜色键的浅色缺省值：优先取 schema 中该键的 default（未自定义时的浅色）；
+    // schema 缺失时回退空串，由调用方再兜底
+    function flowLightDefault(key) {
+        for (var i = 0; i < control.schema.length; ++i) {
+            var item = control.schema[i]
+            if (item.key === key && item.default !== undefined && item.default !== null)
+                return String(item.default)
+        }
+        return ""
+    }
+
+    // 表盘子色位未自定义时的浅色缺省：对应全局字段的 schema 缺省
+    //（字段→全局键映射与 dialslogic fallback 表、SettingsRow 提示顺序一致）
+    function flowSiteFallback(site) {
+        if (site.indexOf("dials.") !== 0)
+            return control.flowLightDefault(site)
+        var parts = String(site).split(".")
+        if (parts.length !== 3)
+            return ""
+        var field = parts[2]
+        if (field === "dialBackground")
+            return control.flowLightDefault("dialBackgroundColor")
+        if (field === "dialColor")
+            return control.flowLightDefault("dialColor")
+        if (field === "hourMinuteColor")
+            return control.flowLightDefault("hourMinuteHandColor")
+        if (field === "secondColor")
+            return control.flowLightDefault("secondHandColor")
+        return ""
+    }
+
+    // 脏配置收敛：把此刻配置里除确定 owner 外的其余流光值回退为浅色缺省值。
+    // 返回收敛后的新 values（无变化返回 null，由调用方决定是否落盘）
+    function convergeFlowConfig() {
+        var owner = Components.ColorUtils.flowOwnerKey(control.values, "dials")
+        if (owner.length === 0)
+            return null
+        var next = {}
+        for (var k in control.values)
+            next[k] = control.values[k]
+        var changed = false
+        // 普通键：按字母序展开，非 owner 的流光值回退浅色缺省
+        var keys = []
+        for (var kk in next)
+            keys.push(String(kk))
+        keys.sort()
+        for (var i = 0; i < keys.length; ++i) {
+            var key = keys[i]
+            if (key === "dials" || key === owner)
+                continue
+            if (!Components.ColorUtils.isFlow(next[key]))
+                continue
+            var fb = control.flowLightDefault(key)
+            next[key] = fb.length > 0 ? fb : Components.ColorUtils.flowBase(next[key], "#4d8cff")
+            changed = true
+        }
+        // 表盘子色位：按下标升序 + 固定字段序展开，非 owner 的流光值回退。
+        // 只处理数组型 dials：字符串/数字等非对象值带有 length，误按数组重写
+        // 会把第三方组件的同名配置键破坏成空对象数组
+        var list = next["dials"]
+        if (list && typeof list === "object" && typeof list.length === "number") {
+            var order = DialsLogic.dialFieldOrder()
+            var newList = []
+            for (var d = 0; d < list.length; ++d) {
+                var dial = list[d]
+                var nd = {}
+                if (dial && typeof dial === "object") {
+                    for (var f in dial)
+                        nd[f] = dial[f]
+                }
+                for (var j = 0; j < order.length; ++j) {
+                    var field = order[j]
+                    var site = DialsLogic.dialSitePath("dials", d, field)
+                    if (site === owner || !Components.ColorUtils.isFlow(nd[field]))
+                        continue
+                    var sfb = control.flowSiteFallback(site)
+                    nd[field] = sfb.length > 0
+                        ? sfb : Components.ColorUtils.flowBase(nd[field], "#ffffff")
+                    changed = true
+                }
+                newList.push(nd)
+            }
+            next["dials"] = newList
+        }
+        return changed ? next : null
+    }
+
     function commit(key, value) {
+        // 整卡唯一互斥的最终拦截（兜底）：其他部位已被彩虹占用后，本部位
+        // 的流光提交被拒绝、保持原值（不落盘）。非流光值（含退出流光、
+        // 普通颜色/数值）不受影响——flowGranted 只在提交流光值时裁决。
+        if (Components.ColorUtils.isFlow(value)
+            && !Components.ColorUtils.flowGranted(control.values, "dials", key))
+            return
         // 重新赋值整个 values 对象，保证依赖 control.values 的绑定（如
         // timezoneList 的行模型）在保存后重新求值
         var prev = control.values
@@ -220,7 +326,10 @@ PanelPopup {
         control.editingColorKey = key
         control.editingDialKey = ""
         colorDialog.avoidOffsetX = launcherPicker.visible ? launcherPicker.width + 8 : 0
-        colorDialog.openFor(String(colorText))
+        // 注入整卡互斥授权：仅当整卡尚无流光部位（或流光 owner 正是本部位）
+        // 时才能进入流光预览
+        colorDialog.openFor(String(colorText),
+            Components.ColorUtils.flowGranted(control.values, "dials", String(key)))
     }
 
     function openDialColor(key, index, field, colorText) {
@@ -229,7 +338,9 @@ PanelPopup {
         control.editingDialIndex = index
         control.editingDialField = field
         colorDialog.avoidOffsetX = launcherPicker.visible ? launcherPicker.width + 8 : 0
-        colorDialog.openFor(String(colorText))
+        colorDialog.openFor(String(colorText),
+            Components.ColorUtils.flowGranted(control.values, String(key),
+                DialsLogic.dialSitePath(String(key), index, String(field))))
     }
 
     function dialList(key) {
@@ -272,6 +383,12 @@ PanelPopup {
     }
 
     function commitDialColor(key, index, field, value) {
+        // 整卡唯一互斥：表盘子色位的流光提交同样需授权（整卡已有其它部位
+        // 占用流光则拒绝、保持原色）。部位路径为 dials.<index>.<field>
+        if (Components.ColorUtils.isFlow(String(value))
+            && !Components.ColorUtils.flowGranted(control.values, String(key),
+                DialsLogic.dialSitePath(String(key), index, String(field))))
+            return
         var list = DialsLogic.commitDialColor(control.values, key, index, field, value)
         if (list)
             control.commit(key, list)

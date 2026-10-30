@@ -33,6 +33,34 @@ Item {
     property bool preloadTime: true
     property bool active: true
 
+    // ── 流光逐图元采样接口（clock / worldtime 接线用）────────────────────
+    // 空间参考：卡片宽与本表盘中心相对卡片的 x。Canvas 内把图元的画布局部 x
+    // 换算到卡片坐标后按 ColorUtils.spaceOffset(x, flowWidthRef) 取色；
+    // flowWidthRef<=0 时 offset 恒 0（退化为整盘单色跑马，不误采样）。
+    property real flowWidthRef: 0
+    property real flowCenterX: 0
+    // 流光元数据：仅当"该部位是整卡唯一 owner 且值为 @flow:"时由调用方置
+    // owner=true（判定入口：ColorUtils.flowSiteIsOwner(config,"dials",site)
+    // && ColorUtils.isFlow(value)）：
+    //   {
+    //     face: { owner: bool, base: string }, // 表盘面底色（dialBackgroundColor 键）
+    //     dial: { owner: bool, base: string }  // 圆环与刻度（dialColor 键）
+    //   }
+    // base 为 ColorUtils.flowBase(原始值, 浅色缺省)。owner=false 或 null 时
+    // 面/刻度沿用 faceBackgroundColor/dialColor 单色路径，行为与改造前一致；
+    // 重绘仍由调用方注入色的低频变化（canvasSiteColor → flowCanvasPhase）
+    // 经既有 on*ColorChanged 驱动，≤10fps。指针（场景图矩形）色由调用方
+    // 经 resolveSiteColor owner 门控解析后注入，本组件不做逐图元采样。
+    property var flowMeta: null
+
+    // Canvas 内逐图元流光取色：localX 为图元在画布内的 x；低频画布相位，
+    // 一帧内所有图元共用同一 phase/dark，仅按各自 x 偏移色相。
+    function flowColorAtLocal(base, localX, canvasWidth) {
+        var xInCard = root.flowCenterX + (localX - canvasWidth / 2)
+        return ColorUtils.flowColorAt(base, ColorUtils.flowCanvasPhase,
+            ColorUtils.spaceOffset(xInCard, root.flowWidthRef), ColorUtils.dark)
+    }
+
     property var epochMs: 0
     property real hourAngle: 0
     property real minuteAngle: 0
@@ -73,8 +101,9 @@ Item {
     onFaceBackgroundColorChanged: dialCanvas.requestPaint()
     onTransparentFaceChanged: dialCanvas.requestPaint()
     onDialColorChanged: dialCanvas.requestPaint()
-    onHourMinuteHandColorChanged: dialCanvas.requestPaint()
-    onSecondHandColorChanged: dialCanvas.requestPaint()
+    onFlowMetaChanged: dialCanvas.requestPaint()
+    // 指针颜色由 Rectangle 直接绑定场景图，不需要重绘 Canvas；
+    // 若在此处 requestPaint，流光指针会按 15fps 反复重绘整块表盘。
     Component.onCompleted: root.tick()
 
     Connections {
@@ -128,17 +157,31 @@ Item {
                 var radius = root.radius
                 var tickCount = radius < 28 ? 4 : 12
 
-                // 表盘底色（透明表盘不绘制，露出卡片/背景）
+                // 本帧只判一次 owner 流光；owner 时逐图元按自身 x 采样彩虹，
+                // 非 owner / 静态色路径与改造前完全一致（只读注入的单色）
+                var meta = root.flowMeta
+                var faceFlow = !!(meta && meta.face && meta.face.owner && meta.face.base)
+                var dialFlow = !!(meta && meta.dial && meta.dial.owner && meta.dial.base)
+
+                // 表盘底色（透明表盘不绘制，露出卡片/背景）；
+                // 圆盘为单图元，owner 时按盘中心 x 取色
                 if (!root.transparentFace) {
-                    ctx.fillStyle = root.faceBackgroundColor
+                    ctx.fillStyle = faceFlow
+                        ? root.flowColorAtLocal(meta.face.base, centerX, width)
+                        : root.faceBackgroundColor
                     ctx.beginPath()
                     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
                     ctx.fill()
                 }
 
                 ctx.lineCap = "round"
-                ctx.strokeStyle = root.dialColor
-                ctx.fillStyle = root.dialColor
+                // 圆环是单图元：owner 时按盘中心 x；刻度在下方逐图元取色
+                ctx.strokeStyle = dialFlow
+                    ? root.flowColorAtLocal(meta.dial.base, centerX, width)
+                    : root.dialColor
+                ctx.fillStyle = dialFlow
+                    ? root.flowColorAtLocal(meta.dial.base, centerX, width)
+                    : root.dialColor
 
                 ctx.lineWidth = Math.max(1, radius * 0.04)
                 ctx.beginPath()
@@ -153,6 +196,11 @@ Item {
                     ctx.lineWidth = isMajor
                         ? Math.max(1.5, radius * 0.05)
                         : Math.max(1, radius * 0.03)
+                    // 逐刻度按自身 x（内外中点）换算到卡片坐标采样，形成横向彩虹
+                    ctx.strokeStyle = dialFlow
+                        ? root.flowColorAtLocal(meta.dial.base,
+                            centerX + Math.cos(angle) * (inner + outer) / 2, width)
+                        : root.dialColor
                     ctx.beginPath()
                     ctx.moveTo(centerX + Math.cos(angle) * inner,
                                centerY + Math.sin(angle) * inner)

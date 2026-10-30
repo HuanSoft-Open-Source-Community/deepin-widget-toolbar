@@ -33,30 +33,27 @@ Components.WidgetCard {
     property int refreshInterval: widgetConfig && widgetConfig.refreshInterval
         ? Math.max(1000, Number(widgetConfig.refreshInterval)) : 5000
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
-    backgroundColor: Components.ColorUtils.themedOpaqueColor(
-        widgetConfig && widgetConfig.backgroundColor, "#ff8b5cf6", "#ff3a2f56")
+    // 取色统一走 ColorUtils Site 入口：整卡唯一 owner 互斥兜底 + 横向空间
+    // 渐变采样（背景/标题/空态提示为整卡级元素，x 传卡片中心 width/2）
+    backgroundColor: Components.ColorUtils.themedOpaqueSiteColor(
+        widgetConfig, "dials", "backgroundColor",
+        widgetConfig && widgetConfig.backgroundColor, "#ff8b5cf6", "#ff3a2f56",
+        root.width / 2, root.width)
     // 透明模式（实例透明开关或面板级卡片透明模式）下文字切主题自适应色，
-    // 与 clock/calendar/todo/worldtime 保持一致；内容色（轨道/进度条）保留配置值。
+    // 与 clock/calendar/todo/worldtime 保持一致；该分支不接入流光采样。
+    // 指标行内标签/数值/进度条色不在此处取值，由 MetricBar 按各行自身 x 采样。
     textColor: root.effectiveTransparent
         ? root.themeTextColor
-        : Components.ColorUtils.resolveColor(
-            widgetConfig && widgetConfig.textColor, "#ffffff")
+        : Components.ColorUtils.resolveSiteColor(
+            widgetConfig, "dials", "textColor",
+            widgetConfig && widgetConfig.textColor, "#ffffff",
+            root.width / 2, root.width)
     property color titleTextColor: root.effectiveTransparent
         ? root.themeTextColor
-        : Components.ColorUtils.resolveColor(
-            widgetConfig && widgetConfig.titleTextColor, "#ffffff")
-    property color labelTextColor: root.effectiveTransparent
-        ? root.themeTextColor
-        : Components.ColorUtils.resolveColor(
-            widgetConfig && widgetConfig.labelTextColor, "#ffffff")
-    property color valueTextColor: root.effectiveTransparent
-        ? root.themeTextColor
-        : Components.ColorUtils.resolveColor(
-            widgetConfig && widgetConfig.valueTextColor, "#ffffff")
-    property color barTrackColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.barTrackColor, "#ffffff")
-    property color barColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.barColor, "#4d8cff")
+        : Components.ColorUtils.resolveSiteColor(
+            widgetConfig, "dials", "titleTextColor",
+            widgetConfig && widgetConfig.titleTextColor, "#ffffff",
+            root.width / 2, root.width)
 
     // 双列对宽（4×2）与大（4×4）生效；中号（2×2）固定单列。
     property bool dualColumn: hostCols >= 4
@@ -172,6 +169,16 @@ Components.WidgetCard {
         required property string metricId
         required property string label
 
+        // 本行相对卡片左缘的几何（内容容器距卡片 margin，网格内 x 为容器坐标）：
+        // 行左缘/行宽与轨道区左缘/宽度，供流光逐行按自身 x 采样（横向彩虹）
+        readonly property real rowCardX: root.margin + x
+        readonly property real rowWidth: width
+        readonly property real trackCardX: rowCardX + root.metricLabelWidth
+            + root.metricSpacing
+        readonly property real trackWidth: Math.max(0,
+            rowWidth - root.metricLabelWidth - root.metricValueWidth
+                - 2 * root.metricSpacing)
+
         Text {
             id: labelText
             anchors.left: parent.left
@@ -179,7 +186,13 @@ Components.WidgetCard {
             width: root.metricLabelWidth
             text: label
             font: DTK.fontManager.t7
-            color: root.labelTextColor
+            // 透明模式分支不接入流光采样（消费端接线规则 5）
+            color: root.effectiveTransparent
+                ? root.themeTextColor
+                : Components.ColorUtils.resolveSiteColor(
+                    root.widgetConfig, "dials", "labelTextColor",
+                    root.widgetConfig && root.widgetConfig.labelTextColor,
+                    "#ffffff", rowCardX + root.metricLabelWidth / 2, root.width)
             opacity: 0.7
             elide: Text.ElideRight
             // 指标名截断时悬停显示全文
@@ -194,7 +207,13 @@ Components.WidgetCard {
             horizontalAlignment: Text.AlignRight
             text: root.metricText(metricId)
             font: DTK.fontManager.t7
-            color: root.valueTextColor
+            color: root.effectiveTransparent
+                ? root.themeTextColor
+                : Components.ColorUtils.resolveSiteColor(
+                    root.widgetConfig, "dials", "valueTextColor",
+                    root.widgetConfig && root.widgetConfig.valueTextColor,
+                    "#ffffff",
+                    rowCardX + rowWidth - root.metricValueWidth / 2, root.width)
             opacity: root.metricAvailable(metricId) ? 1.0 : 0.5
         }
 
@@ -211,7 +230,10 @@ Components.WidgetCard {
             Rectangle {
                 anchors.fill: parent
                 radius: root.barHeight / 2
-                color: root.barTrackColor
+                color: Components.ColorUtils.resolveSiteColor(
+                    root.widgetConfig, "dials", "barTrackColor",
+                    root.widgetConfig && root.widgetConfig.barTrackColor,
+                    "#ffffff", trackCardX + trackWidth / 2, root.width)
                 opacity: 0.15
             }
 
@@ -222,7 +244,12 @@ Components.WidgetCard {
                 anchors.bottom: parent.bottom
                 width: Math.max(0, parent.width * root.metricUsage(metricId))
                 radius: root.barHeight / 2
-                color: root.barColor
+                // 按进度条自身 x（填充段中心）采样：进度变化时色彩沿轨道横向流动
+                color: Components.ColorUtils.resolveSiteColor(
+                    root.widgetConfig, "dials", "barColor",
+                    root.widgetConfig && root.widgetConfig.barColor, "#4d8cff",
+                    trackCardX + Math.max(0, trackWidth * root.metricUsage(metricId)) / 2,
+                    root.width)
             }
         }
     }

@@ -17,20 +17,47 @@ Components.WidgetCard {
     property bool preloadTime: widgetConfig && widgetConfig.preloadTime !== undefined
         ? widgetConfig.preloadTime : true
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
-    backgroundColor: Components.ColorUtils.opaqueColor(
-        widgetConfig && widgetConfig.backgroundColor, "#000000")
-    textColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.textColor, "#ffffff")
-    property color dialBackgroundColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.dialBackgroundColor, "#ffffff")
-    property color dialColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.dialColor, "#000000")
-    property color hourMinuteHandColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.hourMinuteHandColor, "#000000")
-    property color secondHandColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.secondHandColor, "#ff4d4f")
-    highlightColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.highlightColor, "#4d8cff")
+    // 取色统一走 ColorUtils Site 入口：整卡唯一 owner 互斥兜底 +
+    // 横向空间渐变采样（本卡元素均居中，x 传卡片中心 width/2，
+    // offset 恒定、随整卡共享相位跑马）
+    backgroundColor: Components.ColorUtils.opaqueSiteColor(
+        widgetConfig, "dials", "backgroundColor",
+        widgetConfig && widgetConfig.backgroundColor, "#000000",
+        root.width / 2, root.width)
+    textColor: Components.ColorUtils.resolveSiteColor(
+        widgetConfig, "dials", "textColor",
+        widgetConfig && widgetConfig.textColor, "#ffffff",
+        root.width / 2, root.width)
+    // textColor 为整卡唯一流光 owner：数字模式时间/日期文字启用 FlowText
+    // 段内彩虹（owner 判定统一入口，见 spec「消费端接线规则」3）
+    readonly property bool textColorIsFlow: Components.ColorUtils.flowSiteIsOwner(
+        widgetConfig, "dials", "textColor")
+        && Components.ColorUtils.isFlow(widgetConfig && widgetConfig.textColor)
+    // 表盘 Canvas 用色走低频相位（约 7.5fps），避免整块画布按 15fps 无谓重绘；
+    // owner 流光时盘内刻度/底色由 AnalogClock 按 flowMeta 原始 base 逐图元采样，
+    // 这里注入的解析色仅作为非 owner 单色与低频重绘驱动
+    property color dialBackgroundColor: Components.ColorUtils.canvasSiteColor(
+        widgetConfig, "dials", "dialBackgroundColor",
+        widgetConfig && widgetConfig.dialBackgroundColor, "#ffffff",
+        root.width / 2, root.width)
+    property color dialColor: Components.ColorUtils.canvasSiteColor(
+        widgetConfig, "dials", "dialColor",
+        widgetConfig && widgetConfig.dialColor, "#000000",
+        root.width / 2, root.width)
+    // 指针是场景图矩形，可跟随 15fps 主相位；owner 门控取色，
+    // 非 owner 的 @flow: 由 Site 入口回退浅色缺省（不再手工错峰 offset）
+    property color hourMinuteHandColor: Components.ColorUtils.resolveSiteColor(
+        widgetConfig, "dials", "hourMinuteHandColor",
+        widgetConfig && widgetConfig.hourMinuteHandColor, "#000000",
+        root.width / 2, root.width)
+    property color secondHandColor: Components.ColorUtils.resolveSiteColor(
+        widgetConfig, "dials", "secondHandColor",
+        widgetConfig && widgetConfig.secondHandColor, "#ff4d4f",
+        root.width / 2, root.width)
+    highlightColor: Components.ColorUtils.resolveSiteColor(
+        widgetConfig, "dials", "highlightColor",
+        widgetConfig && widgetConfig.highlightColor, "#4d8cff",
+        root.width / 2, root.width)
     property bool panelVisible: Panel.visible
     property int contentWidth: Math.max(1, width - margin * 2)
     property int contentHeight: Math.max(1, height - margin * 2)
@@ -51,20 +78,42 @@ Components.WidgetCard {
         anchors.centerIn: parent
         spacing: 6
 
-        Text {
+        // 数字时间/日期：textColor site 为整卡唯一 owner 时启用 FlowText
+        // 段内彩虹；透明模式分支保持主题自适应色、不接流光（消费端规则 5）
+        Components.FlowText {
             id: timeText
             anchors.horizontalCenter: parent.horizontalCenter
             font.pixelSize: root.timePixelSize
             color: root.effectiveTransparent ? root.themeTextColor : palette.windowText
+            flowGradient: root.textColorIsFlow && !root.effectiveTransparent
+            flowBaseColor: Components.ColorUtils.flowBase(
+                root.widgetConfig && root.widgetConfig.textColor, "#ffffff")
+            // 相位读取按 owner 门控：非流光路径不注册 flowPhase 依赖（性能红线）
+            flowPhaseValue: flowGradient ? Components.ColorUtils.flowPhase : 0
+            flowDark: Components.ColorUtils.dark
+            // 左缘/宽度换算卡片坐标口径：Column 居中于内容容器，
+            // 左缘卡片x = margin + (内容宽 - 自身隐式宽)/2
+            flowOffset: Components.ColorUtils.spaceOffset(
+                root.margin + (root.contentWidth - implicitWidth) / 2, root.width)
+            flowSpan: Components.ColorUtils.spaceOffset(implicitWidth, root.width)
         }
 
-        Text {
+        Components.FlowText {
             id: dateText
             anchors.horizontalCenter: parent.horizontalCenter
             visible: !root.compact
             font.pixelSize: root.datePixelSize
             color: root.effectiveTransparent ? root.themeTextColor : palette.windowText
             opacity: 0.7
+            flowGradient: root.textColorIsFlow && !root.effectiveTransparent
+            flowBaseColor: Components.ColorUtils.flowBase(
+                root.widgetConfig && root.widgetConfig.textColor, "#ffffff")
+            // 相位读取按 owner 门控：非流光路径不注册 flowPhase 依赖（性能红线）
+            flowPhaseValue: flowGradient ? Components.ColorUtils.flowPhase : 0
+            flowDark: Components.ColorUtils.dark
+            flowOffset: Components.ColorUtils.spaceOffset(
+                root.margin + (root.contentWidth - implicitWidth) / 2, root.width)
+            flowSpan: Components.ColorUtils.spaceOffset(implicitWidth, root.width)
         }
     }
 
@@ -82,6 +131,29 @@ Components.WidgetCard {
         hourMinuteHandColor: root.hourMinuteHandColor
         secondHandColor: root.secondHandColor
         textColor: root.textColor
+        // 流光逐图元采样：面/刻度 site 为 owner 时置 owner=true 并传原始
+        // base 色，由 AnalogClock 在 Canvas 内按各刻度自身 x 描彩虹
+        flowMeta: ({
+            face: {
+                owner: Components.ColorUtils.flowSiteIsOwner(
+                        root.widgetConfig, "dials", "dialBackgroundColor")
+                    && Components.ColorUtils.isFlow(
+                        root.widgetConfig && root.widgetConfig.dialBackgroundColor),
+                base: Components.ColorUtils.flowBase(
+                    root.widgetConfig && root.widgetConfig.dialBackgroundColor, "#ffffff")
+            },
+            dial: {
+                owner: Components.ColorUtils.flowSiteIsOwner(
+                        root.widgetConfig, "dials", "dialColor")
+                    && Components.ColorUtils.isFlow(
+                        root.widgetConfig && root.widgetConfig.dialColor),
+                base: Components.ColorUtils.flowBase(
+                    root.widgetConfig && root.widgetConfig.dialColor, "#000000")
+            }
+        })
+        // 空间参考：表盘居中于内容容器，中心卡片x = margin + 内容宽/2
+        flowWidthRef: root.width
+        flowCenterX: root.margin + root.contentWidth / 2
         preloadTime: root.preloadTime
         active: root.analogMode && root.panelVisible
     }

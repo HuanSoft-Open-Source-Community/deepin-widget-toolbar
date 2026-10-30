@@ -33,20 +33,37 @@ Components.WidgetCard {
     property bool preloadTime: widgetConfig && widgetConfig.preloadTime !== undefined
         ? widgetConfig.preloadTime : true
     transparentBackground: widgetConfig && widgetConfig.transparentBackground === true
-    backgroundColor: Components.ColorUtils.opaqueColor(
-        widgetConfig && widgetConfig.backgroundColor, "#000000")
-    textColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.textColor, "#ffffff")
-    property color dialBackgroundColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.dialBackgroundColor, "#ffffff")
-    property color dialColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.dialColor, "#000000")
-    property color hourMinuteHandColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.hourMinuteHandColor, "#000000")
-    property color secondHandColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.secondHandColor, "#ff4d4f")
-    highlightColor: Components.ColorUtils.resolveColor(
-        widgetConfig && widgetConfig.highlightColor, "#4d8cff")
+    // 取色统一走 ColorUtils Site 入口：整卡唯一 owner 互斥兜底 + 空间渐变采样。
+    // 全局键无单一宿主元素，x 取卡片中心（offset 恒定、随整卡共享相位跑马）；
+    // 表盘 Canvas 用色走低频相位入口，指针等场景图元走高频入口（与 clock 卡一致）
+    backgroundColor: Components.ColorUtils.opaqueSiteColor(
+        widgetConfig, "dials", "backgroundColor",
+        widgetConfig && widgetConfig.backgroundColor, "#000000",
+        root.width / 2, root.width)
+    textColor: Components.ColorUtils.resolveSiteColor(
+        widgetConfig, "dials", "textColor",
+        widgetConfig && widgetConfig.textColor, "#ffffff",
+        root.width / 2, root.width)
+    property color dialBackgroundColor: Components.ColorUtils.canvasSiteColor(
+        widgetConfig, "dials", "dialBackgroundColor",
+        widgetConfig && widgetConfig.dialBackgroundColor, "#ffffff",
+        root.width / 2, root.width)
+    property color dialColor: Components.ColorUtils.canvasSiteColor(
+        widgetConfig, "dials", "dialColor",
+        widgetConfig && widgetConfig.dialColor, "#000000",
+        root.width / 2, root.width)
+    property color hourMinuteHandColor: Components.ColorUtils.resolveSiteColor(
+        widgetConfig, "dials", "hourMinuteHandColor",
+        widgetConfig && widgetConfig.hourMinuteHandColor, "#000000",
+        root.width / 2, root.width)
+    property color secondHandColor: Components.ColorUtils.resolveSiteColor(
+        widgetConfig, "dials", "secondHandColor",
+        widgetConfig && widgetConfig.secondHandColor, "#ff4d4f",
+        root.width / 2, root.width)
+    highlightColor: Components.ColorUtils.resolveSiteColor(
+        widgetConfig, "dials", "highlightColor",
+        widgetConfig && widgetConfig.highlightColor, "#4d8cff",
+        root.width / 2, root.width)
     property bool panelVisible: Panel.visible
     property bool showLabels: widgetConfig && widgetConfig.showLabels !== undefined
         ? widgetConfig.showLabels : true
@@ -173,18 +190,16 @@ Components.WidgetCard {
 
         var infos = []
         for (var j = 0; j < list.length; j++) {
+            // 子色保留原始配置字符串：流光值（@flow:）若在此提前解析会被冻结为
+            // 当时的快照，交由表盘委托按需解析才能持续流动
             infos.push({
                 "zone": list[j].zone,
                 "name": root.zoneName(list[j].zone),
                 "offset": root.zoneOffset(list[j].zone),
-                "dialBackground": Components.ColorUtils.resolveColor(
-                    list[j].dialBackground, root.dialBackgroundColor),
-                "dialColor": Components.ColorUtils.resolveColor(
-                    list[j].dialColor, root.dialColor),
-                "hourMinuteColor": Components.ColorUtils.resolveColor(
-                    list[j].hourMinuteColor, root.hourMinuteHandColor),
-                "secondColor": Components.ColorUtils.resolveColor(
-                    list[j].secondColor, root.secondHandColor)
+                "dialBackground": list[j].dialBackground,
+                "dialColor": list[j].dialColor,
+                "hourMinuteColor": list[j].hourMinuteColor,
+                "secondColor": list[j].secondColor
             })
         }
         root.zoneInfos = infos
@@ -323,7 +338,12 @@ Components.WidgetCard {
         verticalCells: root.digitalVerticalCells
         highlightLocal: root.highlightLocal
         localOffset: root.localOffset
-        textColor: root.textColor
+        // 文字逐行按自身 x 空间采样：注入实例配置、原始 textColor 配置值
+        // （可能含 @flow: 前缀，未经解析）与卡片几何（内容区相对卡片左缘偏移）
+        cardConfig: root.widgetConfig
+        textColorValue: root.widgetConfig && root.widgetConfig.textColor
+        cardWidth: root.width
+        cardOffsetX: root.margin
         effectiveTransparent: root.effectiveTransparent
         themeTextColor: root.themeTextColor
     }
@@ -344,6 +364,17 @@ Components.WidgetCard {
         themeTextColor: root.themeTextColor
         preloadTime: root.preloadTime
         active: root.panelVisible
+        // 表盘 4 子色位以 dials.<i>.<field> 路径参与整卡互斥：注入实例配置
+        // 与卡片几何（cardWidth=卡片宽；cardOffsetX=内容区相对卡片左缘偏移，
+        // 委托内表盘中心 x 需加该偏移换算到卡片坐标，与 FlowFill 同口径）
+        cardConfig: root.widgetConfig
+        cardWidth: root.width
+        cardOffsetX: root.margin
+        // 单表盘未配置子色时的兜底（root 属性已是解析后的 color）
+        fallbackDialBackground: root.dialBackgroundColor
+        fallbackDialColor: root.dialColor
+        fallbackHourMinute: root.hourMinuteHandColor
+        fallbackSecond: root.secondHandColor
     }
 
     Timer {

@@ -658,6 +658,14 @@ Window {
         root.screen = Qt.binding(function () { return getDockScreen() })
     }
 
+    // 面板不可见时挂起流光共享时钟（引用计数仍保留，重新显示即恢复）。
+    // 不加 when：杜绝隐藏期间绑定失效导致值回滚。
+    Binding {
+        target: Components.ColorUtils
+        property: "flowSuspended"
+        value: !root.visible
+    }
+
     StyledBehindWindowBlur {
         InsideBoxBorder {
             anchors.fill: parent
